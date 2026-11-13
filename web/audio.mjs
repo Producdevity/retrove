@@ -1,4 +1,5 @@
 import { read32, write32 } from './memory.mjs';
+import {AudioMetrics} from '../src/runtime/diagnostics/audio-metrics.ts';
 
 const fourcc = s => [...s].reduce((n,ch) => n*256 + ch.charCodeAt(0),0);
 const RIOC = fourcc('rioc'), LPCM = fourcc('lpcm');
@@ -33,6 +34,7 @@ function parseStream(bytes) {
 
 export function audioImports(cpu,heap,callGuest,getAudioContext) {
   const units = new Map();
+  const metrics = new AudioMetrics();
   const listeners = new Map();
   const session = {ready:false, active:true, rate:44100, duration:1024/44100, category:fourcc('solo'), mix:0, duck:0};
   let next = 1, rendering = false, context, observedContext, interrupted = false;
@@ -286,6 +288,6 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     if(routeListening)globalThis.navigator?.mediaDevices?.removeEventListener?.('devicechange',onRoute);
     for(const u of units.values())release(u);units.clear();listeners.clear();
   }
-  return {funcs,pump,pumpSession,close,setSessionActive,
-    snapshot:()=>({context:context?.state,active:session.active,units:[...units.values()].map(u=>({started:u.started,rate:u.format.rate,channels:u.format.channels,frames:u.frames,samples:u.samples,peak:u.peak,underruns:u.underruns,queuedSources:u.sources.size}))})};
+  return {funcs:metrics.track(funcs),pump,pumpSession,close,setSessionActive,
+    snapshot:()=>({context:context?.state,ready:session.ready,active:session.active,api:metrics.snapshot(),units:[...units.values()].map(u=>({started:u.started,rate:u.format.rate,channels:u.format.channels,frames:u.frames,samples:u.samples,peak:u.peak,underruns:u.underruns,queuedSources:u.sources.size}))})};
 }
