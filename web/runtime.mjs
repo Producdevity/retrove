@@ -127,7 +127,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     milestone('Read executable', {path: label(ipa.executablePath)});
     signal?.throwIfAborted();
     let bytes = await ipa.readExecutable();
-    bytes = await prepareApplication(ipa, bytes, diagnostic);
+    const prepared = await prepareApplication(ipa, bytes, diagnostic);
+    bytes = prepared.bytes;
     signal?.throwIfAborted();
     milestone('Parse ARM Mach-O', {executableBytes: bytes.length});
     image = parseMachO(bytes);
@@ -212,6 +213,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
       return hostGate(b, fn);
     });
+    prepared.install?.({cpu, heap, gate:(name,fn)=>hostGate({name,library:"Retrove"},fn)});
     const startup = prepareStartup(memory, STACK_TOP, '/' + ipa.executablePath);
     const baseSP = startup.rawStack - 32;
     const unsupported = [...new Set([...stubs.values()].filter(s => !s.fn).map(s => s.binding.name).concat([...deferred.keys()]))].sort();
