@@ -1,3 +1,4 @@
+import { DiagnosticOperation, observed } from "../diagnostics/operations";
 import { ArchiveKind, type ArchiveReference } from "../domain/application";
 import type { ArchiveRepository } from "../library/contracts";
 import type { LibraryDatabase } from "./library-database";
@@ -13,8 +14,10 @@ export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
 
   private async directory(): Promise<FileSystemDirectoryHandle | undefined> {
     if (!this.storage.getDirectory) return undefined;
-    const root = await this.storage.getDirectory();
-    return root.getDirectoryHandle(ARCHIVE_DIRECTORY, { create: true });
+    return observed(DiagnosticOperation.FileStorage, async () => {
+      const root = await this.storage.getDirectory();
+      return root.getDirectoryHandle(ARCHIVE_DIRECTORY, { create: true });
+    });
   }
 
   async write(
@@ -32,20 +35,26 @@ export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
     }
     let completed = 0;
     try {
-      const handle = await directory.getFileHandle(key, { create: true });
-      const destination = await handle.createWritable();
-      await file
-        .stream()
-        .pipeThrough(
-          new TransformStream<Uint8Array, Uint8Array>({
-            transform(chunk, controller) {
-              completed += chunk.byteLength;
-              progress(completed);
-              controller.enqueue(chunk);
-            },
-          }),
-        )
-        .pipeTo(destination, { signal });
+      const handle = await observed(DiagnosticOperation.CreateArchive, () =>
+        directory.getFileHandle(key, { create: true }),
+      );
+      const destination = await observed(DiagnosticOperation.WritableArchive, () =>
+        handle.createWritable(),
+      );
+      await observed(DiagnosticOperation.WriteArchive, () =>
+        file
+          .stream()
+          .pipeThrough(
+            new TransformStream<Uint8Array, Uint8Array>({
+              transform(chunk, controller) {
+                completed += chunk.byteLength;
+                progress(completed);
+                controller.enqueue(chunk);
+              },
+            }),
+          )
+          .pipeTo(destination, { signal }),
+      );
       if (completed !== file.size) throw new Error("The imported archive was incomplete.");
       return { kind: ArchiveKind.FileSystem, key };
     } catch (error) {

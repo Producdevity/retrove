@@ -11,9 +11,21 @@ import { connectImport } from "./import";
 import { connectNavigation } from "./navigation";
 import { connectSettings } from "./settings";
 
+import { libraryJournal } from "../../diagnostics/journal";
+import { DiagnosticOperation, failedOperation, observed } from "../../diagnostics/operations";
+libraryJournal.record(DiagnosticOperation.Session, {
+  build: String(import.meta.env.VITE_RETROVE_REVISION),
+  browser: navigator.userAgent,
+  secure: isSecureContext,
+  standalone: matchMedia("(display-mode: standalone)").matches,
+});
 const error = element("error", HTMLParagraphElement);
 const failure = (cause: unknown): void => {
-  error.textContent = errorMessage(cause);
+  libraryJournal.record(DiagnosticOperation.Interface, {}, cause);
+  error.textContent = failedOperation(cause, DiagnosticOperation.FileStorage)
+    ? "Local file storage could not be opened. Try a regular Safari tab if you opened Retrove in private browsing or inside another app. Debug logs contain the exact failure."
+    : errorMessage(cause);
+  element("error-logs", HTMLButtonElement).hidden = false;
   error.hidden = false;
 };
 const { library, recover } = browserLibrary(failure);
@@ -29,10 +41,12 @@ const launch = (app: InstalledApplication): void => {
 };
 const storage = connectSettings(failure);
 const refresh = async (): Promise<void> => {
-  await recover().catch(failure);
-  apps = (await library.list()).sort((left, right) => left.name.localeCompare(right.name));
+  await observed(DiagnosticOperation.Maintenance, recover).catch(failure);
+  apps = (await observed(DiagnosticOperation.Refresh, () => library.list())).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
   render();
-  await storage();
+  await observed(DiagnosticOperation.Settings, storage);
 };
 const details = appDetails(library, launch, refresh, failure);
 function render(): void {
@@ -51,6 +65,8 @@ connectNavigation(connectActivity());
 connectImport(library, refresh, failure);
 void refresh().catch(failure);
 
-void registerOfflineShell((message) => {
-  element("install-help", HTMLParagraphElement).textContent = message;
-}).catch(failure);
+void observed(DiagnosticOperation.Offline, () =>
+  registerOfflineShell((message) => {
+    element("install-help", HTMLParagraphElement).textContent = message;
+  }),
+).catch(failure);

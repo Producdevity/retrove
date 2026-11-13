@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { defineConfig } from "vite-plus";
 import { runtimeVendors } from "./src/build/runtime-vendor-plugin";
 import { offlineAssets } from "./src/build/offline-plugin";
@@ -8,6 +9,11 @@ const FUNCTION_LINE_LIMIT = 80;
 const TEST_WORKERS = 2;
 
 export default defineConfig({
+  define: {
+    "import.meta.env.VITE_RETROVE_REVISION": JSON.stringify(
+      execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim(),
+    ),
+  },
   plugins: [runtimeVendors(), offlineAssets()],
   server: { host: "127.0.0.1", port: DEVELOPMENT_PORT, strictPort: true },
   build: {

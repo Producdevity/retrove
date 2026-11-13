@@ -1,3 +1,4 @@
+import { connectCopy } from "../diagnostics/clipboard";
 import { DiagnosticRecorder } from "../../web/diagnostics.mjs";
 import type { Diagnostic } from "../../web/ipa.mjs";
 import { isRecord } from "../domain/validation";
@@ -33,6 +34,12 @@ export class SessionReport {
     private readonly onProgress: (value: Progress) => void,
     private readonly onMessage: Diagnostic,
   ) {
+    connectCopy(
+      element("copy-log", HTMLButtonElement),
+      this.log,
+      element("copy-status", HTMLParagraphElement),
+      () => this.store(),
+    );
     element("diagnostics", HTMLButtonElement).addEventListener("click", () => this.show());
     element("save-log", HTMLButtonElement).addEventListener("click", () => {
       this.store();
@@ -41,7 +48,7 @@ export class SessionReport {
   }
   start(name: string): void {
     this.recorder.start(name, {
-      build: "retrove-0.1.0",
+      build: `retrove-${import.meta.env.VITE_RETROVE_REVISION}`,
       browser: navigator.userAgent,
       viewport: [innerWidth, innerHeight],
     });

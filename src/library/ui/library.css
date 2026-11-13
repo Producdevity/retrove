@@ -518,3 +518,25 @@ dialog::backdrop {
     transition: none !important;
   }
 }
+
+.log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+#report {
+  width: 100%;
+  min-height: 55dvh;
+  resize: vertical;
+  padding: 1rem;
+  border: 1px solid #dce1eb;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: inherit;
+  font:
+    0.8rem/1.5 ui-monospace,
+    monospace;
+}
+#error-logs {
+  margin: 0 0 1rem;
+}

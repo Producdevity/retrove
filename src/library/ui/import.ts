@@ -1,6 +1,8 @@
 import type { ApplicationLibrary } from "../service";
 import { ImportPhase } from "../contracts";
 import { element } from "../../ui/dom";
+import { libraryJournal } from "../../diagnostics/journal";
+import { DiagnosticOperation } from "../../diagnostics/operations";
 const messages = {
   [ImportPhase.Inspecting]: "Reading app information",
   [ImportPhase.Storing]: "Keeping this app on your device",
@@ -24,12 +26,31 @@ export function connectImport(
     importing = true;
     status.hidden = false;
     for (const input of inputs) input.disabled = true;
+    element("error", HTMLParagraphElement).hidden = true;
+    element("error-logs", HTMLButtonElement).hidden = true;
+    let phase: ImportPhase = ImportPhase.Inspecting;
+    let completedBytes = 0;
+    libraryJournal.record(DiagnosticOperation.Import, { state: "started", bytes: file.size });
     try {
       await library.import(file, new AbortController().signal, (progress) => {
+        if (phase !== progress.phase)
+          libraryJournal.record(DiagnosticOperation.ImportProgress, {
+            phase: progress.phase,
+            bytes: progress.completedBytes,
+          });
+        phase = progress.phase;
+        completedBytes = progress.completedBytes;
         message.textContent = messages[progress.phase];
         indicator.value = progress.totalBytes ? progress.completedBytes / progress.totalBytes : 0;
       });
       await refresh();
+    } catch (error) {
+      libraryJournal.record(
+        DiagnosticOperation.Import,
+        { state: "failed", phase, completedBytes, totalBytes: file.size },
+        error,
+      );
+      throw error;
     } finally {
       importing = false;
       status.hidden = true;

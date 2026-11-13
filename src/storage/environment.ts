@@ -1,3 +1,4 @@
+import { DiagnosticOperation, observed } from "../diagnostics/operations";
 import type { ApplicationId } from "../domain/application";
 import type { LibraryEnvironment } from "../library/contracts";
 import { withApplicationSession } from "../runtime/session-lock";
@@ -18,7 +19,9 @@ export function browserLibraryEnvironment(
     exclusive,
     mutateArchive: (id, operation) => withApplicationSession(id, () => exclusive(id, operation)),
     async ensureCapacity(bytes: number): Promise<void> {
-      const { quota, usage } = await navigator.storage.estimate();
+      const { quota, usage } = await observed(DiagnosticOperation.Capacity, () =>
+        navigator.storage.estimate(),
+      );
       if (
         quota !== undefined &&
         usage !== undefined &&

@@ -1,3 +1,4 @@
+import { DiagnosticOperation, observed } from "../../../diagnostics/operations";
 import { openIPA } from "../../../../web/ipa.mjs";
 import { parseMachO } from "../../../../web/macho.mjs";
 import { Platform, type ApplicationMetadata } from "../../../domain/application";
@@ -9,9 +10,11 @@ export async function inspectIpa(
   signal: AbortSignal,
   report: (error: unknown) => void,
 ): Promise<ApplicationMetadata> {
-  const ipa = await openIPA(file);
+  const ipa = await observed(DiagnosticOperation.InspectPackage, () => openIPA(file));
   signal.throwIfAborted();
-  parseMachO(await ipa.readExecutable());
+  await observed(DiagnosticOperation.InspectExecutable, async () =>
+    parseMachO(await ipa.readExecutable()),
+  );
   signal.throwIfAborted();
   const info = ipa.info;
   const bundleId = requiredString(info.CFBundleIdentifier, "bundle identifier");

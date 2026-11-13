@@ -1,5 +1,7 @@
 import { element } from "../ui/dom";
 import { download } from "../ui/download";
+import { libraryJournal } from "./journal";
+import { connectCopy } from "./clipboard";
 export const LAST_REPORT_KEY = "retrove.last-report";
 export function readLastReport(): string | null {
   try {
@@ -12,18 +14,24 @@ export function saveLastReport(value: string): void {
   localStorage.setItem(LAST_REPORT_KEY, value);
 }
 export function connectActivity(): () => void {
-  const report = element("report", HTMLPreElement);
+  const report = element("report", HTMLTextAreaElement);
   const status = element("report-status", HTMLParagraphElement);
   const exportButton = element("export-log", HTMLButtonElement);
   const refresh = (): void => {
-    const text = readLastReport();
-    report.textContent = text ?? "";
-    status.textContent = text ? "Last runtime report. Kept on this device." : "No sessions yet.";
-    exportButton.disabled = !text;
+    report.value = [
+      "Retrove debug logs",
+      `Build: ${import.meta.env.VITE_RETROVE_REVISION}`,
+      libraryJournal.text(),
+      readLastReport(),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    status.textContent = "Logs stay on this device. Copy or download them to share.";
   };
+  connectCopy(element("copy-log", HTMLButtonElement), report, status, refresh);
   exportButton.addEventListener("click", () => {
-    const text = readLastReport();
-    if (text) download(new Blob([text], { type: "text/plain" }), "retrove-report.txt");
+    refresh();
+    download(new Blob([report.value], { type: "text/plain" }), "retrove-report.txt");
   });
   return refresh;
 }

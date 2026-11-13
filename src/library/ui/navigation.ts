@@ -3,6 +3,12 @@ const Page = { Library: "library", Activity: "activity", Settings: "settings" } 
 export function connectNavigation(activity: () => void): void {
   const pages = Object.values(Page).map((id) => element(id, HTMLElement));
   const buttons = [...document.querySelectorAll("button[data-page]")];
+  element("error-logs", HTMLButtonElement).addEventListener("click", () => {
+    const logs = buttons.find(
+      (button) => button instanceof HTMLButtonElement && button.dataset.page === Page.Activity,
+    );
+    if (logs instanceof HTMLButtonElement) logs.click();
+  });
   for (const button of buttons) {
     if (!(button instanceof HTMLButtonElement)) continue;
     button.addEventListener("click", () => {

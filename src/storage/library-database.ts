@@ -1,3 +1,4 @@
+import { DiagnosticOperation, OperationError } from "../diagnostics/operations";
 import {
   ArchiveKind,
   type ApplicationId,
@@ -33,7 +34,7 @@ export class LibraryDatabase implements LibraryRepository {
       })
       .catch((error: unknown) => {
         this.connection = undefined;
-        throw error;
+        throw new OperationError(DiagnosticOperation.Database, error);
       });
     return this.connection;
   }

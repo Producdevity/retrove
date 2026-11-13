@@ -20,7 +20,7 @@
           <button class="nav-item active" data-page="library">
             <span aria-hidden="true">▦</span> Apps</button
           ><button class="nav-item" data-page="activity">
-            <span aria-hidden="true">◷</span> Activity</button
+            <span aria-hidden="true">◷</span> Logs</button
           ><button class="nav-item" data-page="settings">
             <span aria-hidden="true">⚙</span> Settings
           </button>
@@ -57,6 +57,7 @@
             <span></span><progress max="1" value="0"></progress>
           </div>
           <p id="error" role="alert" hidden></p>
+          <button id="error-logs" hidden>View debug logs</button>
           <div id="apps" class="apps"></div>
           <div id="empty" class="empty">
             <div class="empty-icon" aria-hidden="true">
@@ -80,14 +81,16 @@
         <section id="activity" class="page" hidden>
           <header class="page-header">
             <div>
-              <h1>Activity</h1>
-              <p>Local reports from your last session</p>
+              <h1>Debug logs</h1>
+              <p>Import, storage and runtime diagnostics</p>
             </div>
-            <button id="export-log">Export report</button>
+            <div class="log-actions">
+              <button id="copy-log">Copy logs</button><button id="export-log">Download logs</button>
+            </div>
           </header>
           <div class="report-panel">
-            <p id="report-status">No sessions yet.</p>
-            <pre id="report"></pre>
+            <p id="report-status" role="status">No sessions yet.</p>
+            <textarea id="report" readonly aria-label="Debug logs" spellcheck="false"></textarea>
           </div>
         </section>
         <section id="settings" class="page" hidden>
