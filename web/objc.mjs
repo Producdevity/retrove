@@ -522,7 +522,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData});
   const cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
     retain,release:releaseFromHost,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
-  fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,property:foundationObjects.property,dataFrom:createData});
+  fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,getDispatch:()=>dispatchService});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])

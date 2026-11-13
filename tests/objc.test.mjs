@@ -9,7 +9,7 @@ async function fixture(t, call = () => {}, files = new Map(), options = {}) {
   t.onTestFinished(() => cpu.close());
   const heap = new Heap(cpu);
   const ipa = { info: {CFBundleIdentifier: 'com.test.fixture'}, bundlePath: 'Payload/Test.app', has: p => files.has(p), read: async p => files.get(p) };
-  const objc = objcImports(cpu, heap, ipa, () => ({}), call, undefined, undefined, options);
+  const objc = objcImports(cpu, heap, ipa, () => ({}), call, undefined, undefined, typeof options==='function'?options(cpu,heap):options);
   const write = (p, v) => write32(cpu, p, v), read = p => read32(cpu, p);
   const f = (name, ...args) => objc.funcs[name](i => args[i] || 0);
   const sel = name => f('_sel_registerName', heap.string(name));
@@ -346,4 +346,31 @@ test('UIButton preserves title state and forwards actions to the guest without r
   await x.send(button,'release');
   assert.equal(x.heap.live.has(title),false);
   assert.equal(x.heap.live.has(target),true);
+});
+
+test('NSURL backup exclusion checks file existence and reports unsupported resources', async t => {
+  const paths = [];
+  const x = await fixture(t,undefined,undefined,(cpu,heap)=>{
+    const errno=heap.zero(4);
+    return {sys:{funcs:{___error:()=>errno,_stat:arg=>{
+      const path=readString(cpu,arg(0));paths.push(path);
+      if(path==='/Documents/a b.dat') {cpu.write(arg(1)+4,Uint8Array.of(0xa4,0x81));return 0;}
+      write32(cpu,errno,2);return -1;
+    }}}};
+  });
+  const string = value => x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(value));
+  const yes=await x.send(x.cls('NSNumber'),'numberWithBool:',1), no=await x.send(x.cls('NSNumber'),'numberWithBool:',0);
+  const key=await string('NSURLIsExcludedFromBackupKey');
+  const url=await x.send(x.cls('NSURL'),'fileURLWithPath:',await string('/Documents/a b.dat'));
+  const error=x.heap.zero(4);x.write(error,0x1234);
+  assert.equal(await x.send(url,'setResourceValue:forKey:error:',yes,key,error),1);
+  assert.equal(x.read(error),0x1234);
+  assert.deepEqual(paths,['/Documents/a b.dat']);
+  assert.equal(await x.send(url,'setResourceValue:forKey:error:',no,key,error),0);
+  assert.equal(await x.send(x.read(error),'code'),3328);
+  assert.equal(await x.send(url,'setResourceValue:forKey:error:',yes,await string('UnknownKey'),error),0);
+  assert.equal(await x.send(x.read(error),'code'),3328);
+  const missing=await x.send(x.cls('NSURL'),'fileURLWithPath:',await string('/Documents/missing'));
+  assert.equal(await x.send(missing,'setResourceValue:forKey:error:',yes,key,error),0);
+  assert.equal(await x.send(x.read(error),'code'),4);
 });

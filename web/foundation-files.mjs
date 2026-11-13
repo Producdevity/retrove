@@ -1,8 +1,9 @@
+import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
 import {parsePlist} from './plist.mjs';
 import {readString} from './memory.mjs';
 
 // NSFileManager and libc share one filesystem, including current directory and saves.
-export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,property,dataFrom}) {
+export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom}) {
   const invoke=(name,...args)=>sys.funcs[name](i=>args[i]??0);
   hostClass('NSFileManager','NSObject');
   hostClass('NSError','NSObject',16);
@@ -33,6 +34,9 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
       return ok?type:0;
     } finally {heap.free(scratch);}
   }
+  installUrlResources({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,send,
+    stat:async path=>await stat(utf8(path),0)?0:read(invoke('___error')),
+    error:(code,domain)=>{const value=alloc(names.get('NSError'));write(value+4,code);const name=retain(string(domain));write(value+8,name);return autorelease(value);}});
   const dirs=new Map([[5,'/Library'],[9,'/Documents'],[13,'/Library/Caches'],[14,'/Library/Application Support']]);
   method('NSFileManager',false,'URLsForDirectory:inDomains:',async(_,a)=>{
     const path=dirs.get(a(0));const urls=(a(1)&1)&&path?[await send(names.get('NSURL'),'fileURLWithPath:',[string(path)])]:[];
