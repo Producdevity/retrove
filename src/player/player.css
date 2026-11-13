@@ -1,0 +1,221 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button,
+a {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  color: #dce2f9;
+  background: #ffffff16;
+  border-radius: 9px;
+  padding: 9px 13px;
+}
+a {
+  color: #becbff;
+  text-decoration: none;
+}
+[hidden] {
+  display: none !important;
+}
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px max(18px, env(safe-area-inset-right)) 12px max(18px, env(safe-area-inset-left));
+  height: 60px;
+  background: #11151e;
+  position: relative;
+  z-index: 50;
+}
+#title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: #bdc4d5;
+}
+#stage {
+  height: calc(100dvh - 60px);
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: #000;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+#display {
+  position: relative;
+  display: grid;
+  align-items: center;
+  width: min(100%, calc((100dvh - 60px)*var(--aspect, 1.775)));
+  aspect-ratio: var(--aspect, 1.775);
+  max-height: 100%;
+  touch-action: none;
+  overflow: hidden;
+}
+#display > * {
+  touch-action: none;
+}
+#display > canvas,
+#display > video {
+  grid-area: 1/1;
+  width: 100%;
+  height: auto;
+  background: #000;
+}
+#display > video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: #000b;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  pointer-events: none;
+}
+#loading button {
+  pointer-events: auto;
+}
+#loading h1 {
+  font-size: 16px;
+  font-weight: 500;
+  max-width: 60ch;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+#detail {
+  color: #8390ad;
+  font-size: 12px;
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #313b50;
+  border-top-color: #b9c8ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+body.playing #loading {
+  display: none;
+}
+body.failed .spinner {
+  display: none;
+}
+body.immersive #toolbar {
+  display: none;
+}
+body.immersive #stage {
+  height: 100dvh;
+}
+body.immersive #display {
+  width: min(100%, calc(100dvh*var(--aspect, 1.775)));
+}
+#show-toolbar {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 100;
+  background: #0006;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 18px;
+  opacity: 0.65;
+}
+dialog {
+  background: #f5f6fa;
+  color: #202735;
+  border: 0;
+  border-radius: 18px;
+  width: min(800px, calc(100% - 28px));
+  padding: 22px;
+}
+dialog::backdrop {
+  background: #0009;
+}
+dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+dialog h2 {
+  font-size: 18px;
+}
+dialog button {
+  background: #e4e9f7;
+  color: #4259c3;
+}
+dialog p {
+  color: #707b90;
+  font-size: 13px;
+}
+#log {
+  resize: vertical;
+  width: 100%;
+  height: 55dvh;
+  border: 1px solid #d5dce8;
+  border-radius: 9px;
+  padding: 12px;
+  font:
+    11px/1.5 ui-monospace,
+    monospace;
+  color: #39445b;
+  background: #fff;
+  margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+  #toolbar {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  #toolbar button,
+  #toolbar a {
+    font-size: 12px;
+    padding: 8px;
+  }
+  #title {
+    font-size: 12px;
+  }
+}
+#resume-media {
+  position: fixed;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: #202735;
+}

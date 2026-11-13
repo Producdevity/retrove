@@ -6,7 +6,6 @@
     <meta name="theme-color" content="#000000" />
     <title>Retrove Player</title>
     <link rel="manifest" href="/app.webmanifest" />
-    <link rel="stylesheet" href="/app/player.css" />
   </head>
   <body>
     <header id="toolbar">
@@ -20,10 +19,10 @@
         <span class="spinner"></span>
         <h1 id="status">Opening app</h1>
         <p id="detail">Preparing the runtime</p>
-        <button id="start" hidden>Start app</button
-        ><button id="resume-media" hidden>Enable playback</button>
+        <button id="start" hidden>Start app</button>
       </div>
     </main>
+    <button id="resume-media" hidden>Enable playback</button>
     <button id="show-toolbar" aria-label="Show player controls" hidden>•••</button>
     <dialog id="report-dialog">
       <header>
@@ -34,6 +33,6 @@
       <textarea id="log" readonly aria-label="Runtime report"></textarea
       ><button id="save-log">Save report</button>
     </dialog>
-    <script type="module" src="/app/player.mjs"></script>
+    <script type="module" src="/src/player/main.ts"></script>
   </body>
 </html>

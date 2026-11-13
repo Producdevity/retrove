@@ -1,4 +1,6 @@
 import { defineConfig } from "vite-plus";
+import { runtimeVendors } from "./src/build/runtime-vendor-plugin";
+import { offlineAssets } from "./src/build/offline-plugin";
 
 const DEVELOPMENT_PORT = 8088;
 const SOURCE_LINE_LIMIT = 300;
@@ -6,8 +8,21 @@ const FUNCTION_LINE_LIMIT = 80;
 const TEST_WORKERS = 2;
 
 export default defineConfig({
+  plugins: [runtimeVendors(), offlineAssets()],
   server: { host: "127.0.0.1", port: DEVELOPMENT_PORT, strictPort: true },
-  build: { rolldownOptions: { input: { library: "index.html", player: "player.html" } } },
+  build: {
+    rolldownOptions: {
+      input: {
+        library: "index.html",
+        player: "player.html",
+        "service-worker": "src/pwa/worker.ts",
+      },
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name === "service-worker" ? "sw.js" : "assets/[name]-[hash].js",
+      },
+    },
+  },
   fmt: {
     ignorePatterns: [
       "web/**",
