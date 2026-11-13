@@ -1,0 +1,39 @@
+.save-actions {
+  margin-top: 24px;
+  border-top: 1px solid #e2e6ef;
+  padding-top: 18px;
+}
+.save-actions h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.save-actions fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 16px 0 0;
+  min-width: 0;
+}
+.save-actions button {
+  font-size: 13px;
+  min-height: 44px;
+}
+.save-preview {
+  flex-basis: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  background: #f5f6fa;
+  border-radius: 10px;
+}
+.save-preview button {
+  margin: 8px 6px 0 0;
+}
+#details-content .save-preview p,
+#details-content .save-status {
+  color: #596479;
+}
+.save-status:empty {
+  display: none;
+}
