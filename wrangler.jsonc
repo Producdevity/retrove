@@ -2,6 +2,10 @@
   "name": "retrove",
   "account_id": "bbc023e366a9a37dee21f83f3a502dc9",
   "compatibility_date": "2026-11-13",
-  "assets": { "directory": "./dist" },
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "none",
+    "not_found_handling": "single-page-application",
+  },
   "workers_dev": true,
 }
