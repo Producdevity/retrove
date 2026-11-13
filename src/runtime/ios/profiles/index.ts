@@ -3,6 +3,7 @@ import { prepareBioShockConfig } from "../../../../web/bioshock-config.mjs";
 import profile from "./bioshock.json";
 import { patchExecutable } from "./patches";
 import { installBioShockKernels } from "./bioshock/kernels";
+import { prepareBioShockDct36 } from "./bioshock/audio/dct36";
 interface PreparedApplication {
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly install?: typeof installBioShockKernels;
@@ -26,5 +27,12 @@ export async function prepareApplication(
     patchWords: profile.groups.reduce((total, group) => total + group.words.length, 0),
   });
   await prepareBioShockConfig(ipa, diagnostic);
-  return { bytes, install: installBioShockKernels };
+  return {
+    bytes,
+    install: (host) => {
+      const installDct = prepareBioShockDct36(host.cpu);
+      installBioShockKernels(host);
+      installDct(host);
+    },
+  };
 }

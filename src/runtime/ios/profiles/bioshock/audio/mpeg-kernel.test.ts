@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../../web/cpu.mjs";
+import { createCPU } from "../../../../../../web/cpu.mjs";
 import { installBioShockAudioKernel, MpegEntry } from "./mpeg-kernel";
 async function fixture() {
   const cpu = await createCPU({ budget: "blocks" }),

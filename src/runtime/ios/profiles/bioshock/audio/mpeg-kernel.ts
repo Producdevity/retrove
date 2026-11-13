@@ -1,5 +1,5 @@
-import type { GuestCPU } from "../../../../../web/cpu.mjs";
-import type { KernelHost } from "./kernels";
+import type { GuestCPU } from "../../../../../../web/cpu.mjs";
+import type { KernelHost } from "../kernels";
 import { MpegSynthesisLayout, synthesizeMpeg } from "./mpeg-synthesis";
 
 const WORD_BYTES = 4;

@@ -1,4 +1,4 @@
-import { runFast } from "../../../cpu/run-fast";
+import { runFast } from "../../../../cpu/run-fast";
 
 const FLOAT_BYTES = 4;
 const SAMPLE_BYTES = 2;
