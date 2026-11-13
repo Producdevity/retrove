@@ -16,4 +16,6 @@ Use the installed Vite+ CLI with pnpm:
 
 The library keeps original archives locally; guest saves and settings have separate storage. Game executables and assets are never included in Git or deployment files. Browser storage can be removed by the browser or user; portable save backup and full lifecycle verification remain part of the implementation work.
 
+The ARM libc helpers keep small memory copies and common string operations inside the emulator. Their assembly source and generated artifact live in `src/runtime/ios/libc/`. To regenerate the artifact with an installed LLVM toolchain, run `RETROVE_LLVM_BIN=/path/to/llvm/bin vp exec node src/build/compile-guest-libc.ts`, then `vp check` and `vp test`. The build tool rejects unresolved relocations and removes its temporary files.
+
 See `NOTICE.md` for source provenance.
