@@ -1,15 +1,15 @@
-import {test} from 'vite-plus/test';
+import {test, vi} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import { createCPU } from '../web/cpu.mjs';
 import { Heap, read32, readString, write32 } from '../web/memory.mjs';
 import { objcImports } from '../web/objc.mjs';
 
-async function fixture(t, call = () => {}, files = new Map()) {
+async function fixture(t, call = () => {}, files = new Map(), options = {}) {
   const cpu = await createCPU();
   t.onTestFinished(() => cpu.close());
   const heap = new Heap(cpu);
   const ipa = { info: {CFBundleIdentifier: 'com.test.fixture'}, bundlePath: 'Payload/Test.app', has: p => files.has(p), read: async p => files.get(p) };
-  const objc = objcImports(cpu, heap, ipa, () => ({}), call);
+  const objc = objcImports(cpu, heap, ipa, () => ({}), call, undefined, undefined, options);
   const write = (p, v) => write32(cpu, p, v), read = p => read32(cpu, p);
   const f = (name, ...args) => objc.funcs[name](i => args[i] || 0);
   const sel = name => f('_sel_registerName', heap.string(name));
@@ -252,4 +252,98 @@ test('NSScanner retains its source, scans device identifiers, and preserves fail
   assert.equal(await x.send(scanner, 'isAtEnd'), 1);
   await x.send(scanner, 'release');
   assert.equal(x.heap.live.has(source), false);
+});
+
+test('UILabel copies mutable text, retains fonts and releases its owned objects', async t => {
+  const x = await fixture(t);
+  const pool = x.f('_objc_autoreleasePoolPush');
+  const bits = value => new Uint32Array(Float32Array.of(value).buffer)[0];
+  const label = await x.send(x.cls('UILabel'), 'alloc');
+  await x.send(label, 'initWithFrame:', ...[0,0,120,30].map(bits));
+  assert.equal(await x.send(label, 'isUserInteractionEnabled'), 0);
+  const text = await x.send(x.cls('NSMutableString'), 'stringWithUTF8String:', x.heap.string('Play'));
+  await x.send(label, 'setText:', text);
+  await x.send(text, 'appendString:', await x.send(x.cls('NSString'), 'stringWithUTF8String:', x.heap.string(' changed')));
+  const copy = await x.send(label, 'text');
+  assert.equal(readString(x.cpu, await x.send(copy, 'UTF8String')), 'Play');
+  const font = await x.send(x.cls('UIFont'), 'systemFontOfSize:', bits(18));
+  await x.send(label, 'setFont:', font);
+  await x.f('_objc_autoreleasePoolPop', pool);
+  assert.equal(await x.send(font, 'pointSize'), bits(18));
+  assert.equal(readString(x.cpu, await x.send(copy, 'UTF8String')), 'Play');
+  await x.send(label, 'release');
+  assert.equal(x.heap.live.has(font), false);
+  assert.equal(x.heap.live.has(copy), false);
+  assert.equal(x.heap.live.has(label), false);
+});
+
+test('run loops have per-thread identity and retain mode-specific valid ports', async t => {
+  let thread = 1;
+  const x = await fixture(t, undefined, undefined, {threads:{funcs:{_pthread_self:()=>thread}}});
+  const pool = x.f('_objc_autoreleasePoolPush');
+  const main = await x.send(x.cls('NSRunLoop'), 'mainRunLoop');
+  thread = 2;
+  const loop = await x.send(x.cls('NSRunLoop'), 'currentRunLoop');
+  assert.notEqual(loop, main);
+  assert.equal(x.f('_CFRunLoopGetCurrent'), loop);
+  assert.equal(await x.send(x.cls('NSRunLoop'), 'mainRunLoop'), main);
+  const mode = await x.send(x.cls('NSString'), 'stringWithUTF8String:', x.heap.string('GameMode'));
+  const other = await x.send(x.cls('NSString'), 'stringWithUTF8String:', x.heap.string('OtherMode'));
+  const port = await x.send(x.cls('NSMachPort'), 'port');
+  const past = await x.send(x.cls('NSDate'), 'distantPast');
+  assert.equal(await x.send(loop, 'runMode:beforeDate:', mode, past), 0);
+  await x.send(loop, 'addPort:forMode:', port, mode);
+  await x.send(loop, 'addPort:forMode:', port, mode);
+  assert.equal(await x.send(port, 'retainCount'), 2);
+  assert.equal(await x.send(loop, 'runMode:beforeDate:', mode, past), 1);
+  assert.equal(await x.send(loop, 'runMode:beforeDate:', other, past), 0);
+  await x.send(port, 'invalidate');
+  assert.equal(await x.send(port, 'isValid'), 0);
+  assert.equal(await x.send(port, 'retainCount'), 1);
+  assert.equal(await x.send(loop, 'runMode:beforeDate:', mode, past), 0);
+  thread = 1;
+  await x.f('_objc_autoreleasePoolPop', pool);
+});
+
+test('a port run loop yields until its deadline and exposes the current mode while waiting', async t => {
+  vi.useFakeTimers({toFake:['Date']});
+  t.onTestFinished(()=>vi.useRealTimers());
+  vi.setSystemTime(1000);
+  const x = await fixture(t);
+  const loop = await x.send(x.cls('NSRunLoop'), 'currentRunLoop');
+  const mode = await x.send(x.cls('NSString'), 'stringWithUTF8String:', x.heap.string('GameMode'));
+  const port = await x.send(x.cls('NSMachPort'), 'port');
+  await x.send(loop, 'addPort:forMode:', port, mode);
+  const now = await x.send(x.cls('NSDate'), 'date');
+  const date = await x.send(now, 'dateByAddingTimeInterval:', 0, 0x3ff00000);
+  const blocked = await x.send(loop, 'runMode:beforeDate:', mode, date);
+  assert.equal(blocked.wait(), undefined);
+  assert.equal(readString(x.cpu, await x.send(await x.send(loop,'currentMode'),'UTF8String')), 'GameMode');
+  vi.setSystemTime(2000);
+  assert.equal(blocked.wait(), 1);
+  assert.equal(await x.send(loop, 'currentMode'), 0);
+});
+
+test('UIButton preserves title state and forwards actions to the guest without retaining targets', async t => {
+  const calls = [], x = await fixture(t, (pc,args)=>{calls.push([pc,args]);return 0;});
+  const targetClass = x.instance('ButtonTarget', [['pressed:',0x5100]]);
+  x.install({'__objc_classlist':[targetClass]});
+  const target = await x.send(targetClass,'alloc');
+  const button = await x.send(x.cls('UIButton'),'buttonWithType:',0);
+  const normal = await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('Play'));
+  const selected = await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('Selected'));
+  await x.send(button,'setTitle:forState:',normal,0);
+  await x.send(button,'setTitle:forState:',selected,4);
+  await x.send(button,'setSelected:',1);
+  assert.equal(await x.send(button,'currentTitle'),selected);
+  const title = await x.send(button,'titleLabel');
+  await x.send(button,'layoutSubviews');
+  assert.equal(readString(x.cpu,await x.send(await x.send(title,'text'),'UTF8String')),'Selected');
+  await x.send(button,'addTarget:action:forControlEvents:',target,x.sel('pressed:'),64);
+  assert.equal(await x.send(target,'retainCount'),1);
+  await x.send(button,'sendActionsForControlEvents:',64);
+  assert.deepEqual(calls,[[0x5100,[target,x.sel('pressed:'),button]]]);
+  await x.send(button,'release');
+  assert.equal(x.heap.live.has(title),false);
+  assert.equal(x.heap.live.has(target),true);
 });

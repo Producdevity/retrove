@@ -121,8 +121,7 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
     _CFDictionaryGetValue:a=>dictValue(a(0),a(1)), _CFDictionaryRemoveValue:a=>changeDict(a(0),a(1),0),
     _CFDictionaryAddValue:a=>changeDict(a(0),a(1),a(2)), _CFNumberGetValue:numberValue,
     _CFMakeCollectable:a=>a(0),
-    _CFRunLoopGetCurrent:()=>{const t=threads?.funcs._pthread_self()??1;if(t===1)return getRunLoop();
-      if(!loops.has(t))loops.set(t,alloc(names.get('NSRunLoop')));return loops.get(t);},
+    _CFRunLoopGetCurrent:()=>getRunLoop(),
     _CFStringCreateWithCharacters:a=>a(0)?0:makeUTF16(cpu.read(a(1),a(2)*2)),
     _CFStringAppendCharacters:a=>{
       const p=a(0), count=a(2)*2, old=encoded(text(p),0x14000100);

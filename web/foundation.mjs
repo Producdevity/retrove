@@ -241,6 +241,10 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   const getDouble=(lo,hi)=>{bits.setUint32(0,lo,true);bits.setUint32(4,hi,true);return bits.getFloat64(0,true);};
   function date(t){const p=alloc(names.get('NSDate'));times.set(p,t);return autorelease(p);}
   method('NSDate',true,'date',()=>date(now()));
+  const distantDates = {distantPast:-62135769600,distantFuture:64092211200};
+  for(const [selector,time] of Object.entries(distantDates)) {
+    let value; method('NSDate',true,selector,()=>value??=retain(date(time)));
+  }
   method('NSDate',false,'init',s=>{times.set(s,now());return s;});
   method('NSDate',false,'timeIntervalSince1970',s=>putDouble(times.get(s)));
   method('NSDate',false,'timeIntervalSinceReferenceDate',s=>putDouble(times.get(s)-978307200));

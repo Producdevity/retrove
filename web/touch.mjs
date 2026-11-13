@@ -1,3 +1,6 @@
+import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
+import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
+import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
 import {phoneScreen} from './screen.mjs';
 import {uiImages} from './uikit-images.mjs';
 
@@ -9,7 +12,7 @@ const phases = {pointerdown: [0, 'touchesBegan:withEvent:'], pointermove: [1, 't
   pointerup: [3, 'touchesEnded:withEvent:'], pointercancel: [4, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, read, write, graphics, signal, text, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
+  selector, selectorName, read, write, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
@@ -45,14 +48,15 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds});
+  let textViews;
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p),drawHost:(p,ctx)=>textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children; next.splice(next.indexOf(self),1); }
     v.parent = 0;
   }
   const deallocObject=lookup(names.get('NSObject'),'dealloc');
-  method('UIView',false,'dealloc',async self=>{
+  const deallocateView=async self=>{
     const v=views.get(self);
     if(v) {
       if(window===self)window=0;
@@ -65,7 +69,13 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     imageViews.removeView(self);
     await deallocObject(self);
-  });
+  };
+  method('UIView',false,'dealloc',deallocateView);
+  const uiHost={hostClass,method,structure:method,alloc,destroy,autorelease,retain,release:releaseFromHost,send,text,string,write,read,ipa,document:mediaHost?.ownerDocument,view:data,setFrame,deallocateView};
+  textViews=installLabels(uiHost);
+  const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
+    touchInside:(set,view)=>{const touch=touches.get(items(set)[0]);if(!touch)return false;const [x,y]=convertPoint(touch.point,touch.window,view),[bx,by,w,h]=data(view).bounds;return x>=bx&&y>=by&&x<bx+w&&y<by+h;}};
+  const controls=installControls(controlHost);installButtons(controlHost,controls);
   method('CALayer',false,'dealloc',async self=>{
     const v=views.get(self);
     if(v) {
@@ -445,5 +455,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }

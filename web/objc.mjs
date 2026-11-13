@@ -1,3 +1,4 @@
+import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from './screen.mjs';
 import {coreFoundation} from './corefoundation.mjs';
@@ -253,7 +254,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (!utf8Cache.has(self)) utf8Cache.set(self, heap.string(text(self)));
     return utf8Cache.get(self);
   };
-  method('NSString', true, 'stringWithUTF8String:', (_, a) => a(0) ? string(readString(cpu, a(0))) : 0);
+  method('NSString', true, 'stringWithUTF8String:', (cls, a) => a(0) ? autorelease(makeString(readString(cpu, a(0)),alloc(cls))) : 0);
   function decodeText(bytes,encoding){
     if(encoding===1 && bytes.some(n=>n>127))return null;
     const names={1:'utf-8',4:'utf-8',10:'utf-16le',0x90000100:'utf-16be',0x94000100:'utf-16le'};
@@ -421,7 +422,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   hostClass('UIApplication', 'UIResponder');
   hostClass('CADisplayLink', 'NSObject');
   hostClass('NSRunLoop', 'NSObject');
-  let application = 0, delegate = 0, idleDisabled = false, runLoop = 0;
+  let application = 0, delegate = 0, idleDisabled = false;
+  const runLoops = new Map();
   const displays = new Map();
   // The emulated iOS 7 device has a 60 Hz screen. Modern browsers can
   // deliver RAF at 120 Hz or skip an update when a guest frame runs long.
@@ -458,9 +460,12 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (optional) return 0;
     throw Error('Unimplemented Objective-C method [' + classes.get(cls).name + ' ' + name + ']');
   }
-  function getRunLoop() { return runLoop ||= alloc(names.get('NSRunLoop')); }
-  method('NSRunLoop', true, 'mainRunLoop', getRunLoop);
-  method('NSRunLoop', true, 'currentRunLoop', getRunLoop);
+  function getRunLoop(thread = threads?.funcs._pthread_self() ?? 1) {
+    if(!runLoops.has(thread))runLoops.set(thread,alloc(names.get('NSRunLoop')));
+    return runLoops.get(thread);
+  }
+  method('NSRunLoop', true, 'mainRunLoop', () => getRunLoop(1));
+  method('NSRunLoop', true, 'currentRunLoop', () => getRunLoop());
   method('CADisplayLink', true, 'displayLinkWithTarget:selector:', (_, a) => {
     const target = a(0), action = a(1);
     if (!target || !action) return 0;
@@ -469,7 +474,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return autorelease(self);
   });
   method('CADisplayLink', false, 'addToRunLoop:forMode:', (self, a) => {
-    if (a(0) !== getRunLoop()) throw Error('Unsupported display link run loop');
+    if (a(0) !== getRunLoop(1)) throw Error('Unsupported display link run loop');
     const d = displays.get(self);
     if (!d.scheduled) {
       retain(self);
@@ -478,7 +483,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
   });
   method('CADisplayLink', false, 'removeFromRunLoop:forMode:', (self, a) => {
-    if (a(0) !== getRunLoop()) return;
+    if (a(0) !== getRunLoop(1)) return;
     const d = displays.get(self);
     if (!d.scheduled) return;
     d.scheduled = false;
@@ -508,9 +513,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
   let quartz;
   const input = touchUIKit({getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
-    selector,read,write,graphics,signal,text,ipa,mediaHost,diagnostic});
+    selector,selectorName:p=>readString(cpu,p),read,write,graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
+  installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let dispatchService;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData});

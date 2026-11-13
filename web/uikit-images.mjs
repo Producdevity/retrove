@@ -6,7 +6,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds}) {
+  text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -151,8 +151,9 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       layoutTiming=active(state.layoutAnimation)??layoutTiming;
       if(state.hidden||(alpha<=0&&!opacityTiming))return;
       const image=images.get((state.highlighted&&state.highlightedImage)||state.image), custom=typeof lookup(read(view),'drawRect:')==='number';
+      const hostDrawing=hasHostDrawing?.(view);
       const [bx,by,vw,vh]=state.bounds;
-      if(vw>0&&vh>0&&(image||custom)) {
+      if(vw>0&&vh>0&&(image||custom||hostDrawing)) {
         let node=nodes.get(view);
         if(!node) {
           node=pixelCanvas(1,1);
@@ -177,6 +178,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           ctx.setTransform(px/vw,0,0,py/vh,-bx*px/vw,-by*py/vh);
           if(state.clearsContextBeforeDrawing!==0)ctx.clearRect(bx,by,vw,vh);
           if(image)draw(image,ctx,...imageRect(image,state.contentMode,state.bounds));
+          if(hostDrawing)await drawHost(view,ctx);
           if(custom&&cg())await cg().withContext(ctx,()=>send(view,'drawRect:',state.bounds.map(bits)));
         }
       }

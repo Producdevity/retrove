@@ -31,7 +31,7 @@ export default defineConfig({
     ],
     plugins: ["typescript", "import"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
-    options: { typeAware: true, typeCheck: true },
+    options: { typeAware: true, typeCheck: true, denyWarnings: true },
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
       "typescript/no-explicit-any": "error",
