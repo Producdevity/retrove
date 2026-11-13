@@ -46,6 +46,8 @@ export async function render(kind) {
   }
   equal(call('CheckFramebufferStatus',gl.FRAMEBUFFER),gl.FRAMEBUFFER_COMPLETE);
   const p = call('CreateProgram');
+  equal(call('IsShader',p),0); equal(call('IsProgram',p),1);
+  equal(call('IsShader',0),0); equal(call('IsShader',0xffffffff),0);
   call('AttachShader',p,shader(gl.VERTEX_SHADER,'attribute vec2 pos;void main(){gl_Position=vec4(pos,0.,1.);}'));
   call('AttachShader',p,shader(gl.FRAGMENT_SHADER,'precision mediump float;uniform sampler2D tex;void main(){gl_FragColor=texture2D(tex,vec2(.5));}'));
   call('LinkProgram',p); call('UseProgram',p);

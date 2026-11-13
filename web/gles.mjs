@@ -1,3 +1,4 @@
+import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
 import { read32, readString, write32 } from './memory.mjs';
 import { decodePVRTC } from './pvrtc.mjs';
 
@@ -16,8 +17,7 @@ function signed(value) { return value | 0; }
 
 export function glesImports(cpu, heap, getContext, diagnostic) {
   const api = {};
-  const idToObject = new Map([[0,null]]);
-  const objectToId = new Map([[null,0]]);
+  const objects = new GraphicsObjects();
   const strings = new Map();
   const uniformLocations = new Map();
   const compilerWarnings = new Set();
@@ -28,7 +28,7 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
   let pendingError = 0;
   const setError = code => { pendingError ||= code; };
   const scratch = new DataView(new ArrayBuffer(4));
-  let nextId = 1, nextLocation = 0, array = 0, elements = 0;
+  let nextLocation = 0, array = 0, elements = 0;
   let indexStaging, context;
   let packAlign = 4, unpackAlign = 4;
 
@@ -39,15 +39,8 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
     return context;
   }
   function bind(name, impl) { api['_gl' + name] = impl; }
-  function id(obj) {
-    if (obj == null) return 0;
-    if (!objectToId.has(obj)) { objectToId.set(obj,nextId); idToObject.set(nextId++,obj); }
-    return objectToId.get(obj);
-  }
-  function obj(name) {
-    if (!idToObject.has(name)) throw new Error('Unknown GLES object ' + name);
-    return idToObject.get(name);
-  }
+  const id=(object,kind)=>objects.register(object,kind);
+  const obj=handle=>objects.get(handle);
   function f(word) { scratch.setUint32(0, word, true); return scratch.getFloat32(0,true); }
   function writeNumber(pointer, value, kind) {
     if (kind === 'boolean') { cpu.write(pointer, Uint8Array.of(Number(value) !== 0 ? 1 : 0)); return; }
@@ -135,15 +128,15 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
   }
   for (const kind of ['Buffer','Texture','Framebuffer','Renderbuffer']) {
     bind('Gen' + kind + 's', a => {
-      for (let i=0; i<signed(a(0)); i++) write32(cpu,a(1)+i*4,id(gl()['create'+kind]()));
+      for (let i=0; i<signed(a(0)); i++) write32(cpu,a(1)+i*4,id(gl()['create'+kind](),kind));
     });
     bind('Delete' + kind + 's', a => {
       for (let i=0; i<signed(a(0)); i++) {
         const number = read32(cpu,a(1)+i*4);
-        if (!number || !idToObject.has(number)) continue;
+        if (!objects.is(number,kind)) continue;
         const target = obj(number);
         gl()['delete'+kind](target);
-        objectToId.delete(target); idToObject.delete(number);
+        objects.remove(number);
         if (kind === 'Buffer') {
           bufferData.delete(number);
           if (mapped.has(number)) { heap.free(mapped.get(number)); mapped.delete(number); }
@@ -159,7 +152,7 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
         if (a(0) === ELEMENT_ARRAY_BUFFER) elements = a(1);
       }
     });
-    bind('Is' + kind, a => Number(idToObject.has(a(0)) && gl()['is'+kind](obj(a(0)))));
+    bind('Is' + kind, a => Number(objects.is(a(0),kind) && gl()['is'+kind](obj(a(0)))));
   }
   bind('BufferData', a => {
     const bytes = a(2) ? sourceBuffer(a(2),a(1)) : null;
@@ -203,19 +196,20 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
     if (a(1)!==0x88bd) {setError(0x0500); return;}
     write32(cpu,a(2),mapped.get(boundBuffer(a(0))) ?? 0);
   });
-  bind('CreateShader', a => id(gl().createShader(a(0))));
-  bind('CreateProgram', () => id(gl().createProgram()));
-  for (const name of ['CompileShader','DeleteShader','LinkProgram','UseProgram','DeleteProgram','ValidateProgram','IsShader','IsProgram']) {
+  bind('CreateShader', a => id(gl().createShader(a(0)),'Shader'));
+  bind('CreateProgram', () => id(gl().createProgram(),'Program'));
+  for (const name of ['CompileShader','DeleteShader','LinkProgram','UseProgram','DeleteProgram','ValidateProgram']) {
     const method = name[0].toLowerCase() + name.slice(1);
     bind(name, a => gl()[method](obj(a(0))));
   }
+  for(const kind of ['Shader','Program'])bind('Is'+kind,a=>Number(objects.is(a(0),kind)&&gl()['is'+kind](obj(a(0)))));
   bind('AttachShader', a => gl().attachShader(obj(a(0)),obj(a(1))));
   bind('DetachShader', a => gl().detachShader(obj(a(0)),obj(a(1))));
   bind('BindAttribLocation', a => gl().bindAttribLocation(obj(a(0)),a(1),readString(cpu,a(2))));
   bind('GetAttachedShaders',a => {
     const shaders = (gl().getAttachedShaders(obj(a(0))) || []).slice(0,a(1));
     if (a(2)) write32(cpu,a(2),shaders.length);
-    shaders.forEach((shader,i)=>write32(cpu,a(3)+4*i,id(shader)));
+    shaders.forEach((shader,i)=>write32(cpu,a(3)+4*i,id(shader,'Shader')));
   });
   bind('GetAttribLocation', a => gl().getAttribLocation(obj(a(0)),readString(cpu,a(1))));
   bind('GetUniformLocation', a => {

@@ -72,3 +72,22 @@ test('BioShock derivative directive precedes pixel shader declarations while ret
   assert.equal(extension,'OES_standard_derivatives');
   assert.equal(source,header+block+precision+'void main(){}');
 });
+
+test('GLES object queries return false for other object types, zero and unknown names', () => {
+  const shader={},program={},buffer={};
+  const {cpu,call}=setup({
+    createShader:()=>shader,createProgram:()=>program,createBuffer:()=>buffer,
+    isShader:object=>{assert.equal(object,shader);return true;},
+    isProgram:object=>{assert.equal(object,program);return true;},
+    isBuffer:object=>{assert.equal(object,buffer);return true;},
+    deleteBuffer:object=>assert.equal(object,buffer),
+  });
+  const shaderId=call('CreateShader',0x8b31),programId=call('CreateProgram');
+  call('GenBuffers',1,400);
+  const bufferId=new DataView(cpu.read(400,4).buffer).getUint32(0,true);
+  for(const [name,valid] of [['Shader',shaderId],['Program',programId],['Buffer',bufferId]])
+    for(const handle of [shaderId,programId,bufferId,0,999])
+      assert.equal(call('Is'+name,handle),Number(handle===valid));
+  call('DeleteBuffers',1,400);
+  assert.equal(call('IsBuffer',bufferId),0);
+});
