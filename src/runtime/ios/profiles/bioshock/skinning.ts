@@ -23,20 +23,12 @@ const WEIGHT_COUNT = 4;
 const UV_OFFSET = 24;
 const UV_BYTES = 8;
 const Z_COMPONENT_BYTES = 8;
+const PACKED_Z_OFFSET = 2;
 interface Vector {
   x: number;
   y: number;
   z: number;
 }
-interface Component {
-  readonly key: keyof Vector;
-  readonly offset: number;
-}
-const COMPONENTS: readonly Component[] = [
-  { key: "x", offset: 0 },
-  { key: "y", offset: FLOAT_BYTES },
-  { key: "z", offset: Z_COMPONENT_BYTES },
-];
 function view(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
@@ -48,22 +40,30 @@ function transform(matrices: DataView, bone: number, column: number, vector: Vec
   return f(f(x + y) + z);
 }
 function loadVector(input: DataView, at: number, position: boolean, result: Vector): void {
-  for (const { key, offset } of COMPONENTS) {
-    result[key] = position
-      ? f(input.getFloat32(at + offset, true))
-      : f(f(input.getUint8(at + offset / FLOAT_BYTES) * NORMAL_SCALE) - 1);
+  if (position) {
+    result.x = f(input.getFloat32(at, true));
+    result.y = f(input.getFloat32(at + FLOAT_BYTES, true));
+    result.z = f(input.getFloat32(at + Z_COMPONENT_BYTES, true));
+  } else {
+    result.x = f(f(input.getUint8(at) * NORMAL_SCALE) - 1);
+    result.y = f(f(input.getUint8(at + 1) * NORMAL_SCALE) - 1);
+    result.z = f(f(input.getUint8(at + PACKED_Z_OFFSET) * NORMAL_SCALE) - 1);
   }
 }
+function pack(value: number): number {
+  return unsignedFloatToInteger(f(f(value * PACKED_MIDPOINT) + PACKED_MIDPOINT)) & BYTE_MASK;
+}
 function storeVector(output: DataView, at: number, position: boolean, result: Vector): void {
-  for (const { key, offset } of COMPONENTS) {
-    const value = result[key];
-    if (position) output.setFloat32(at + offset, value, true);
-    else {
-      const packed = f(f(value * PACKED_MIDPOINT) + PACKED_MIDPOINT);
-      output.setUint8(at + offset / FLOAT_BYTES, unsignedFloatToInteger(packed) & BYTE_MASK);
-    }
+  if (position) {
+    output.setFloat32(at, result.x, true);
+    output.setFloat32(at + FLOAT_BYTES, result.y, true);
+    output.setFloat32(at + Z_COMPONENT_BYTES, result.z, true);
+  } else {
+    output.setUint8(at, pack(result.x));
+    output.setUint8(at + 1, pack(result.y));
+    output.setUint8(at + PACKED_Z_OFFSET, pack(result.z));
+    output.setUint8(at + NORMAL_COUNT, 0);
   }
-  if (!position) output.setUint8(at + NORMAL_COUNT, 0);
 }
 function component(
   input: DataView,
@@ -128,8 +128,9 @@ export function skinVertices(
       const position = index === 0;
       const offset = position ? 0 : POSITION_BYTES + (index - 1) * FLOAT_BYTES;
       loadVector(input, at + offset, position, vector);
-      for (const { key, offset: column } of COMPONENTS)
-        result[key] = component(input, at, bones, vector, column, position, weighted);
+      result.x = component(input, at, bones, vector, 0, position, weighted);
+      result.y = component(input, at, bones, vector, FLOAT_BYTES, position, weighted);
+      result.z = component(input, at, bones, vector, Z_COMPONENT_BYTES, position, weighted);
       storeVector(destination, to + offset, position, result);
     }
     output.set(vertices.subarray(at + UV_OFFSET, at + UV_OFFSET + UV_BYTES), to + UV_OFFSET);
