@@ -1,3 +1,4 @@
+import {SymbolIndex} from "../src/runtime/diagnostics/symbol-index.ts";
 const PAGE = 4096;
 const ARM = 12;
 const MAX32 = 0xffffffff;
@@ -255,35 +256,14 @@ function readIndirect(image, sym, dysym) {
   }
 }
 
-// Scan the original nlist only when a diagnostic needs a name. Games can ship
-// hundreds of thousands of symbols; there is no need to retain a JS copy.
 function symbolLookup(image, command) {
   if (!command) return () => undefined;
   const field = at => command.getUint32(at, true);
-  const list = view(sub(image.bytes, field(8), 12 * field(12), 'symbol table'));
+  const list = sub(image.bytes, field(8), 12 * field(12), 'symbol table');
   const names = sub(image.bytes, field(16), field(20), 'string table');
   const sections = image.segments.flatMap(segment => segment.sections);
-  return target => {
-    const address = target - target % 2;
-    const index = sections.findIndex(s => address >= s.address && address < s.address + s.size);
-    if (index < 0) return;
-    let best = -1, nameOffset = 0;
-    for (let p = 0; p < list.byteLength; p += 12) {
-      // Mach-O section ordinals are one-based. Ignore debugging and undefined entries.
-      if (list.getUint8(p + 5) !== index + 1 || (list.getUint8(p + 4) & 0xee) !== 0x0e) continue;
-      const value = list.getUint32(p + 8, true);
-      if (value <= best || value > address || value < sections[index].address) continue;
-      const name = list.getUint32(p, true);
-      if (!name || !names[name]) continue;
-      best = value;
-      nameOffset = name;
-    }
-    if (best < 0) return;
-    const prefix = names.subarray(nameOffset, nameOffset + 513);
-    const end = prefix.indexOf(0);
-    const name = new TextDecoder().decode(prefix.subarray(0, end < 0 ? 512 : end));
-    return {name: end < 0 ? name + '…' : name, offset: address - best};
-  };
+  let index;
+  return target => (index ??= new SymbolIndex(list, names, sections)).lookup(target);
 }
 
 export function parseMachO(input) {
