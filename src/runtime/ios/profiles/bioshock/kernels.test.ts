@@ -1,18 +1,20 @@
 import { expect, test } from "vite-plus/test";
 import { createCPU } from "../../../../../web/cpu.mjs";
 import { ArrayCopyEntry, installBioShockKernels, SkinningEntry } from "./kernels";
+import { MpegEntry } from "./mpeg-kernel";
 import type { KernelHost } from "./kernels";
 async function fixture() {
   const cpu = await createCPU({ budget: "blocks" });
   const frame = 0x10000,
     data = 0x11000,
     fallback = 0x3000,
-    gate = 0x5000;
+    gate = 0x7000;
   for (const [address, size] of [
     [0x89a000, 8192],
     [0x907000, 4096],
+    [0x4ba000, 4096],
     [frame, 8192],
-    [fallback, 8192],
+    [fallback, 12288],
     [gate, 4096],
   ]) {
     if (address === undefined || size === undefined) throw new Error("Invalid test memory.");
@@ -26,6 +28,9 @@ async function fixture() {
   write(ArrayCopyEntry.Address, ArrayCopyEntry.ClearIndex);
   write(ArrayCopyEntry.Address + 4, ArrayCopyEntry.ArrayLoad);
   write(ArrayCopyEntry.Continue, ArrayCopyEntry.EpilogueAddress);
+  write(MpegEntry.Address, MpegEntry.Frame);
+  write(MpegEntry.Address + 4, MpegEntry.SavedRegisters);
+  write(MpegEntry.Epilogue, MpegEntry.ReturnValue);
   write(frame + 8, 0);
   write(frame + 12, data + 512);
   write(frame + 16, data + 1024);

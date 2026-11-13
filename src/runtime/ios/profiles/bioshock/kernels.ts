@@ -1,4 +1,5 @@
 import type { GuestCPU } from "../../../../../web/cpu.mjs";
+import { installBioShockAudioKernel, verifyBioShockAudioKernel } from "./mpeg-kernel";
 import { copyWideArray } from "./array-copy";
 import { requiredBoneBytes, SkinningLayout, skinVertices } from "./skinning";
 
@@ -123,7 +124,9 @@ export function installBioShockKernels(host: KernelHost): void {
     )
       throw new Error(`${kernel.name} instructions do not match the verified profile.`);
   }
+  verifyBioShockAudioKernel(host.cpu);
   for (const kernel of kernels) installKernel(host, kernel);
+  installBioShockAudioKernel(host);
 }
 function installKernel({ cpu, heap, gate }: KernelHost, kernel: Kernel): void {
   const fallback = heap.alloc(PAGE_BYTES, PAGE_BYTES);
