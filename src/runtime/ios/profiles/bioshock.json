@@ -296,6 +296,76 @@
           "replacement": 3925868623
         }
       ]
+    },
+    {
+      "name": "Discarded per-draw graphics error probes",
+      "words": [
+        {
+          "offset": 24750676,
+          "original": 3942993027,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24751000,
+          "original": 3942992946,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24755100,
+          "original": 3942991921,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24762568,
+          "original": 3942990054,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24762876,
+          "original": 3942989977,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24763184,
+          "original": 3942989900,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24763364,
+          "original": 3942989855,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24764748,
+          "original": 3942989509,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24764936,
+          "original": 3942989462,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24767924,
+          "original": 3942988715,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24787440,
+          "original": 3942983836,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24788504,
+          "original": 3942983570,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 24788676,
+          "original": 3926206311,
+          "replacement": 3778019102
+        }
+      ]
     }
   ]
 }
