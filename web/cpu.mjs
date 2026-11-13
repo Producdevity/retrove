@@ -1,5 +1,7 @@
 import {BlockBudget, ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import createUnicorn from './vendor/unicorn-arm.mjs';
+import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
+import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
 
 const PAGE = 4096;
 const COPY_CHUNK = 1 << 20;
@@ -31,6 +33,9 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
   // with typed arrays while preserving Unicorn's normal memory checks.
   const transfer = uc._malloc(COPY_CHUNK);
   if (!transfer) { engine.close(); throw Error('Unable to allocate the guest memory transfer buffer'); }
+  let registerTransfer;
+  try { registerTransfer = new UnicornRegisters(uc, handle); }
+  catch (error) { uc._free(transfer); engine.close(); throw error; }
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
   const hooks = new Set();
   const blocks = budget === ExecutionBudget.Blocks ? new BlockBudget() : undefined;
@@ -41,7 +46,12 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
   let closed = false;
   let mappedBytes = 0, executedMilliseconds = 0;
   let failedWasm = false;
-  const states = new Set();
+  const states = new UnicornContexts({
+    allocate: () => engine.context_alloc(),
+    save: context => engine.context_save(context),
+    restore: context => engine.context_restore(context),
+    free: context => engine.context_free(context),
+  });
   let memoryFault = null;
   const invalidMemory = uc.HOOK_MEM_READ_UNMAPPED | uc.HOOK_MEM_WRITE_UNMAPPED | uc.HOOK_MEM_FETCH_UNMAPPED
     | uc.HOOK_MEM_READ_PROT | uc.HOOK_MEM_WRITE_PROT | uc.HOOK_MEM_FETCH_PROT;
@@ -62,13 +72,13 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
 
   // CP10/CP11 provide scalar VFP and Advanced SIMD. Enable both before
   // switching the CPU from Unicorn's reset state to ARM user mode.
-  const cpacr = engine.reg_read_i32(uc.ARM_REG_C1_C0_2);
-  engine.reg_write_i32(uc.ARM_REG_C1_C0_2, cpacr | (0xf << 20));
-  engine.reg_write_i32(uc.ARM_REG_FPEXC, 1 << 30);
+  const cpacr = registerTransfer.read(uc.ARM_REG_C1_C0_2);
+  registerTransfer.write(uc.ARM_REG_C1_C0_2, cpacr | (0xf << 20));
+  registerTransfer.write(uc.ARM_REG_FPEXC, 1 << 30);
   // Apple's ARMv7 runtime starts scalar floating point in RunFast mode.
-  const fpscr = engine.reg_read_i32(uc.ARM_REG_FPSCR);
-  engine.reg_write_i32(uc.ARM_REG_FPSCR, fpscr | (1 << 24) | (1 << 25));
-  engine.reg_write_i32(uc.ARM_REG_CPSR, 0x10);
+  const fpscr = registerTransfer.read(uc.ARM_REG_FPSCR);
+  registerTransfer.write(uc.ARM_REG_FPSCR, fpscr | (1 << 24) | (1 << 25));
+  registerTransfer.write(uc.ARM_REG_CPSR, 0x10);
 
   const cpu = {
     get budget() { return budget; },
@@ -76,7 +86,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
     get executedMilliseconds() { return executedMilliseconds; },
     // Darwin ARM code reads its thread pointer from TPIDRURO. Unicorn includes
     // this register when saving and restoring a cooperative thread context.
-    set threadPointer(address) { engine.reg_write_i32(uc.ARM_REG_C13_C0_3, address); },
+    set threadPointer(address) { registerTransfer.write(uc.ARM_REG_C13_C0_3, address); },
     map(address, size, permissions = 7) {
       range(address, size, true);
       engine.mem_map(address, size, permissions);
@@ -112,13 +122,13 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
       }
       return bytes;
     },
-    getReg(n) { return engine.reg_read_i32(register(n)) >>> 0; },
-    setReg(n, value) { engine.reg_write_i32(register(n), value >>> 0); },
-    get cpsr() { return engine.reg_read_i32(uc.ARM_REG_CPSR) >>> 0; },
-    set cpsr(value) { engine.reg_write_i32(uc.ARM_REG_CPSR, value >>> 0); },
+    getReg(n) { return registerTransfer.read(register(n)) >>> 0; },
+    setReg(n, value) { registerTransfer.write(register(n), value >>> 0); },
+    get cpsr() { return registerTransfer.read(uc.ARM_REG_CPSR) >>> 0; },
+    set cpsr(value) { registerTransfer.write(uc.ARM_REG_CPSR, value >>> 0); },
     get nextPC() { return (cpu.getReg(15) + ((cpu.cpsr >>> 5) & 1)) >>> 0; },
     // Preserve the low bit when returning from a host call (ARM/Thumb interworking).
-    branch(target) { engine.reg_write_i32(uc.ARM_REG_PC, uint32(target, 'target')); },
+    branch(target) { registerTransfer.write(uc.ARM_REG_PC, uint32(target, 'target')); },
     trap(address, fn) {
       const pc = uint32(address, 'trap address') & ~1;
       return cpu.trapRange(pc >>> 0, pc >>> 0, fn);
@@ -173,34 +183,19 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
       }
       return { reason: cpu.getReg(15) === until ? 'until' : 'budget', pc: cpu.nextPC };
     },
-    saveState() {
-      const state = engine.context_alloc();
-      try {
-        engine.context_save(state);
-        states.add(state);
-        return state;
-      } catch (e) {
-        engine.context_free(state);
-        throw e;
-      }
-    },
-    restoreState(state) {
-      if (!states.has(state)) throw new Error('Unknown CPU state');
-      engine.context_restore(state);
-    },
-    freeState(state) {
-      if (states.delete(state)) engine.context_free(state);
-    },
+    saveState() { return states.save(); },
+    restoreState(state) { states.restore(state); },
+    freeState(state) { states.release(state); },
     close() {
       if (closed) return;
       closed = true;
       // A trap in the Wasm engine itself can leave its internal allocator invalid.
       // Dropping the instance then releases all memory without running guest cleanup.
       if (failedWasm) return;
-      for (const state of states) engine.context_free(state);
-      states.clear();
+      states.close();
       for (const hook of hooks) engine.hook_del(hook);
       hooks.clear();
+      registerTransfer.close();
       uc._free(transfer);
       engine.close();
     },
