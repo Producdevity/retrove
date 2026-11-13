@@ -1,7 +1,8 @@
-import {BlockBudget, ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
+import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import createUnicorn from './vendor/unicorn-arm.mjs';
 import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
 import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
+import {UnicornBudget} from '../src/runtime/cpu/unicorn/budget.ts';
 import {TciTier, TciTierLimit} from '../src/runtime/cpu/tci/tier.ts';
 
 const PAGE = 4096;
@@ -40,10 +41,11 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   catch (error) { uc._free(transfer); engine.close(); throw error; }
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
   const hooks = new Set();
-  const blocks = budget === ExecutionBudget.Blocks ? new BlockBudget() : undefined;
-  if (blocks) hooks.add(engine.hook_add(uc.HOOK_BLOCK, (_, _address, bytes) => {
-    if (!blocks.enter(bytes)) engine.emu_stop();
-  }, null, 1, 0));
+  let blocks;
+  try { blocks = budget === ExecutionBudget.Blocks ? new UnicornBudget(uc, handle) : undefined; }
+  catch (error) {
+    registerTransfer.close(); uc._free(transfer); compiler?.close(); engine.close(); throw error;
+  }
   let pending = null;
   let closed = false;
   let mappedBytes = 0, executedMilliseconds = 0;
@@ -199,6 +201,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       if (failedWasm) return;
       compiler?.close();
       states.close();
+      blocks?.close();
       for (const hook of hooks) engine.hook_del(hook);
       hooks.clear();
       registerTransfer.close();

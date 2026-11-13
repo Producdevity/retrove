@@ -12,6 +12,7 @@ tar xzf "$vendor/source/unicorn-source.tar.gz" --strip-components=1 -C "$work/un
 git -C "$work/unicorn" init -q
 git -C "$work/unicorn" apply "$vendor/source/unicorn-arm-temporaries.patch"
 cp "$root/native/unicorn/tier.h" "$work/src/retrove-tier.h"
+cp "$root/native/unicorn/budget.h" "$work/src/retrove-budget.h"
 vp exec node --input-type=module - "$root/native/unicorn/exports.ts" "$work/src/retrove-exports.js" <<'JS'
 import {readFile, writeFile} from 'node:fs/promises';
 import {stripTypeScriptTypes} from 'node:module';

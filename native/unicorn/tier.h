@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <emscripten.h>
 #include "exec/exec-all.h"
+#include "retrove-budget.h"
 
 #define RETROVE_TIER_BITS 12
 #define RETROVE_TIER_WAYS 4
