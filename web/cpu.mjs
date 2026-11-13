@@ -1,3 +1,4 @@
+import {BlockBudget, ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import createUnicorn from './vendor/unicorn-arm.mjs';
 
 const PAGE = 4096;
@@ -20,7 +21,8 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU() {
+export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
+  if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
   const uc = await createUnicorn();
   const engine = new uc.Unicorn(uc.ARCH_ARM, uc.MODE_ARM);
   const handle = uc.getValue(engine.handle_ptr, '*');
@@ -31,6 +33,10 @@ export async function createCPU() {
   if (!transfer) { engine.close(); throw Error('Unable to allocate the guest memory transfer buffer'); }
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
   const hooks = new Set();
+  const blocks = budget === ExecutionBudget.Blocks ? new BlockBudget() : undefined;
+  if (blocks) hooks.add(engine.hook_add(uc.HOOK_BLOCK, (_, _address, bytes) => {
+    if (!blocks.enter(bytes)) engine.emu_stop();
+  }, null, 1, 0));
   let pending = null;
   let closed = false;
   let mappedBytes = 0, executedMilliseconds = 0;
@@ -125,7 +131,10 @@ export async function createCPU() {
         engine.emu_stop();
       }, null, first, last);
       hooks.add(hook);
-      return () => { if (hooks.delete(hook)) engine.hook_del(hook); };
+      blocks?.invalidateTraps();
+      return () => {
+        if (hooks.delete(hook)) { engine.hook_del(hook); blocks?.invalidateTraps(); }
+      };
     },
     run(startPC = cpu.nextPC, { until = 0, count = 100000 } = {}) {
       uint32(startPC, 'start PC');
@@ -137,7 +146,14 @@ export async function createCPU() {
       memoryFault = null;
       try {
         const before = performance.now();
-        engine.emu_start(startPC, until, 0, count);
+        if (blocks?.requiresRefresh(until)) {
+          // Unicorn flushes translated blocks when removing its instruction-count hook.
+          // Stop before guest execution while installing that hook, then remove it below.
+          blocks.stop();
+          engine.emu_start(startPC, until, 0, 1);
+        }
+        blocks?.start(count, until);
+        engine.emu_start(startPC, until, 0, blocks ? 0 : count);
         executedMilliseconds += performance.now() - before;
       } catch (err) {
         failedWasm = err instanceof WebAssembly.RuntimeError;

@@ -1,3 +1,4 @@
+import type {ExecutionBudget} from "../src/runtime/cpu/execution-budget";
 export interface GuestCPU {
   map(address: number, size: number, permissions?: number): void;
   protect(address: number, size: number, permissions: number): void;
@@ -10,6 +11,9 @@ export interface GuestCPU {
     pc: number;
   };
   trap(address: number, handler: (cpu: GuestCPU, address: number) => void): () => void;
+  saveState(): unknown;
+  restoreState(state: unknown): void;
+  freeState(state: unknown): void;
   close(): void;
 }
-export function createCPU(): Promise<GuestCPU>;
+export function createCPU(options?: {readonly budget?: ExecutionBudget}): Promise<GuestCPU>;
