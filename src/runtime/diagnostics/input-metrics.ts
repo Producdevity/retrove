@@ -10,6 +10,7 @@ interface Dispatch {
   readonly target: string;
   readonly phase: TouchPhase;
   readonly point: readonly number[];
+  readonly viewPoint: readonly number[];
 }
 const HISTORY_LIMIT = 8;
 export class InputMetrics {
@@ -23,9 +24,14 @@ export class InputMetrics {
   drop(reason: DropReason): void {
     this.dropped.set(reason, (this.dropped.get(reason) ?? 0) + 1);
   }
-  dispatch(target: string, phase: TouchPhase, point: readonly number[]): void {
+  dispatch(
+    target: string,
+    phase: TouchPhase,
+    point: readonly number[],
+    viewPoint: readonly number[] = point,
+  ): void {
     this.delivered++;
-    this.recent.push({ target, phase, point: [...point] });
+    this.recent.push({ target, phase, point: [...point], viewPoint: [...viewPoint] });
     if (this.recent.length > HISTORY_LIMIT) this.recent.shift();
   }
   snapshot() {
@@ -33,7 +39,11 @@ export class InputMetrics {
       received: this.received,
       delivered: this.delivered,
       dropped: Object.fromEntries(this.dropped),
-      recent: this.recent.map((item) => ({ ...item, point: [...item.point] })),
+      recent: this.recent.map((item) => ({
+        ...item,
+        point: [...item.point],
+        viewPoint: [...item.viewPoint],
+      })),
     };
   }
 }

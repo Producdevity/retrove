@@ -433,7 +433,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       t.phase=phase; t.previous=t.point; t.point=e.point; t.time=e.time;
       const changed=collection('NSSet',[t.ptr]), all=collection('NSSet',[...active.values()].map(t=>t.ptr));
       const event=alloc(names.get('UIEvent')); eventTouches.set(event,all);
-      try {inputMetrics.dispatch(className(t.target),e.type,e.point);await send(t.target,name,[changed,event]);}
+      try {inputMetrics.dispatch(className(t.target),e.type,e.point,convertPoint(e.point,window,t.target));await send(t.target,name,[changed,event]);}
       finally {
         await releaseFromHost(changed); await releaseFromHost(all); await releaseFromHost(event);
         if(phase>=3) {
@@ -452,5 +452,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>inputMetrics.snapshot(),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }

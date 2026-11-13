@@ -15,7 +15,7 @@ test("input diagnostics preserve delivered coordinates and explain rejected touc
   const metrics = new InputMetrics(),
     point = [10, 20];
   metrics.receive();
-  metrics.dispatch("GameView", "pointerdown", point);
+  metrics.dispatch("GameView", "pointerdown", point, [20, 310]);
   point[0] = 99;
   metrics.receive();
   metrics.drop(DropReason.NoTarget);
@@ -23,6 +23,6 @@ test("input diagnostics preserve delivered coordinates and explain rejected touc
     received: 2,
     delivered: 1,
     dropped: { "no-target": 1 },
-    recent: [{ target: "GameView", phase: "pointerdown", point: [10, 20] }],
+    recent: [{ target: "GameView", phase: "pointerdown", point: [10, 20], viewPoint: [20, 310] }],
   });
 });

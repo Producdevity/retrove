@@ -148,7 +148,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       if (a(0)!==RIOC || !a(1)) return invalid;
       const raw=defaultStream(), id=next++;
       units.set(id,{raw,format:parseStream(raw),maximum:4096,callback:0,ref:0,work:0,
-        frames:0,samples:0,started:false,time:0,sources:new Set()});
+        frames:0,samples:0,peak:0,underruns:0,started:false,time:0,sources:new Set()});
       write32(cpu,a(1),id); return 0;
     },
     _AudioUnitSetProperty: a => property(a,true),
@@ -216,6 +216,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     const length=frames*frameBytes, timestamp=work+8, list=work+72, pcm=work+88;
     const stamp=new Uint8Array(64), v=view(stamp);
     const now=context.currentTime;
+    if(unit.samples && unit.time<now)unit.underruns++;
     v.setFloat64(0,unit.samples,true); v.setBigUint64(8,BigInt(Math.floor(performance.now()*1e6)),true);
     v.setUint32(56,3,true); cpu.write(timestamp,stamp);
     write32(cpu,work,0); write32(cpu,list,1); write32(cpu,list+4,channels);
@@ -237,7 +238,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       const input=view(cpu.read(read32(cpu,list+12),length));
       for (let c=0;c<channels;c++) {
         const out=buffer.getChannelData(c);
-        for(let i=0;i<frames;i++) out[i]=format.sample(input,i*frameBytes+c*width);
+        for(let i=0;i<frames;i++) {out[i]=format.sample(input,i*frameBytes+c*width);unit.peak=Math.max(unit.peak,Math.abs(out[i]));}
       }
     }
     const source=context.createBufferSource(); source.buffer=buffer; source.connect(context.destination);
@@ -285,5 +286,6 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     if(routeListening)globalThis.navigator?.mediaDevices?.removeEventListener?.('devicechange',onRoute);
     for(const u of units.values())release(u);units.clear();listeners.clear();
   }
-  return {funcs,pump,pumpSession,close,setSessionActive};
+  return {funcs,pump,pumpSession,close,setSessionActive,
+    snapshot:()=>({context:context?.state,active:session.active,units:[...units.values()].map(u=>({started:u.started,rate:u.format.rate,channels:u.format.channels,frames:u.frames,samples:u.samples,peak:u.peak,underruns:u.underruns,queuedSources:u.sources.size}))})};
 }
