@@ -1,9 +1,10 @@
 import {guestMutexFunctions} from '../src/runtime/ios/threads/guest-mutex.ts';
 import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
-import {ExecutionMetrics} from '../src/runtime/diagnostics/execution-metrics.ts';
+import {ExecutionMetrics, ExecutionMetricLimit} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {FrameMetrics} from '../src/runtime/diagnostics/frame-metrics.ts';
+import {GraphicsMetrics, GraphicsMetricOperation} from '../src/runtime/diagnostics/graphics-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
 import {nonlocalJumps} from './nonlocal-jump.mjs';
@@ -32,7 +33,6 @@ const STACK_TOP = 0x70000000, STACK_SIZE = 4 << 20;
 const hex = address => '0x' + address.toString(16);
 const label = value => String(value).slice(0, 192);
 const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', 'lr', 'pc');
-const sleep = () => new Promise(resolve => setTimeout(resolve, 0));
 
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
@@ -45,7 +45,13 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   const importMetrics = new ImportMetrics();
   const executionMetrics = new ExecutionMetrics();
   const frameMetrics = new FrameMetrics();
-  let graphicsMilliseconds = 0;
+  const graphicsMetrics = new GraphicsMetrics();
+  let graphicsMilliseconds = 0, yieldMilliseconds = 0;
+  async function yieldToBrowser() {
+    const before = performance.now();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    yieldMilliseconds += performance.now() - before;
+  }
   const recent = [], active = [], deferred = new Map();
   const missingAssets = [], missingAssetSet = new Set(), recentMissingAssets = [];
   let missingAssetRequests = 0;
@@ -62,8 +68,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     // Put fault context before variable-length lists so it survives a shortened mobile export.
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
-      lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
-      execution: executionMetrics.snapshot(), input: objc?.inputSnapshot(), audio:audio?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+      lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
+      execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
     phase = message;
@@ -158,7 +164,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       onLifecycle: milestone,
       onPresent(presented, duration = 0) {
         graphicsMilliseconds += duration;
-        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds});
+        graphicsMetrics.record(GraphicsMetricOperation.Present,duration);
+        if (presented) graphicsMetrics.present();
+        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds,yieldMs:yieldMilliseconds});
         render.presentAttempts++;
         if (presented && ++render.presentedFrames === 1) {
           report(snapshot());
@@ -259,11 +267,11 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
               if (value !== undefined) { cpu.setReg(0,value); break; }
               // The blocked caller has yielded its CPU to runnable threads.
               await service(8);
-              await sleep();
+              await yieldToBrowser();
             }
           }
           if (result.budget || performance.now() - lastService > 4) await service();
-          if (performance.now() - lastYield > 16) { await sleep(); lastYield = performance.now(); }
+          if (performance.now() - lastYield > 16) { await yieldToBrowser(); lastYield = performance.now(); }
         } catch (error) {
           // A C++ throw can cross a guest callback invoked from a host import.
           // Pass the transfer back through nested() until its owning stack is
@@ -325,7 +333,11 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         if (error instanceof GuestLandingPad) value = error;
         else { captureFault(error); throw error; }
       } finally {
-        if (host.graphics) graphicsMilliseconds += Math.max(0, performance.now() - graphicsStarted - (cpu.executedMilliseconds - graphicsCpuStarted));
+        if (host.graphics) {
+          const duration = Math.max(0, performance.now() - graphicsStarted - (cpu.executedMilliseconds - graphicsCpuStarted));
+          graphicsMilliseconds += duration;
+          graphicsMetrics.record(lastSymbol,duration);
+        }
         active.pop();
       }
       if (lastSymbol === '_glClear') { render.clearCalls++; onRender(); }

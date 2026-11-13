@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { ExecutionMetrics } from "./execution-metrics";
+import { ExecutionMetrics, ExecutionMetricLimit } from "./execution-metrics";
 import { DropReason, InputMetrics } from "./input-metrics";
 test("CPU samples aggregate instruction offsets by function and retain thread identity", () => {
   const metrics = new ExecutionMetrics();
@@ -25,4 +25,16 @@ test("input diagnostics preserve delivered coordinates and explain rejected touc
     dropped: { "no-target": 1 },
     recent: [{ target: "GameView", phase: "pointerdown", point: [10, 20], viewPoint: [20, 310] }],
   });
+});
+
+test("CPU samples replace startup symbols with the current workload", () => {
+  const metrics = new ExecutionMetrics();
+  for (let index = 0; index < ExecutionMetricLimit.Samples; index++)
+    metrics.sample(2, index, { name: `startup-${index}`, offset: 0 });
+  for (let index = 0; index < ExecutionMetricLimit.Samples; index++)
+    metrics.sample(3, 0x1234, { name: "gameplay", offset: 4 });
+  expect(metrics.sampleCount).toBe(ExecutionMetricLimit.Samples);
+  expect(metrics.snapshot()).toEqual([
+    { thread: 3, symbol: "gameplay", address: 0x1230, samples: ExecutionMetricLimit.Samples },
+  ]);
 });

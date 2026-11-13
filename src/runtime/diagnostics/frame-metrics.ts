@@ -6,11 +6,13 @@ interface Counters {
   readonly at: number;
   readonly cpuMs: number;
   readonly graphicsMs: number;
+  readonly yieldMs: number;
 }
 interface Sample {
   readonly frameMs: number;
   readonly cpuMs: number;
   readonly graphicsMs: number;
+  readonly yieldMs: number;
   readonly otherMs: number;
 }
 interface Distribution {
@@ -41,7 +43,8 @@ export class FrameMetrics {
     const frameMs = counters.at - previous.at;
     const cpuMs = counters.cpuMs - previous.cpuMs;
     const graphicsMs = counters.graphicsMs - previous.graphicsMs;
-    if (frameMs < 0 || cpuMs < 0 || graphicsMs < 0) {
+    const yieldMs = counters.yieldMs - previous.yieldMs;
+    if (frameMs < 0 || cpuMs < 0 || graphicsMs < 0 || yieldMs < 0) {
       this.samples.length = 0;
       return;
     }
@@ -50,7 +53,8 @@ export class FrameMetrics {
       frameMs,
       cpuMs,
       graphicsMs,
-      otherMs: Math.max(0, frameMs - cpuMs - graphicsMs),
+      yieldMs,
+      otherMs: Math.max(0, frameMs - cpuMs - graphicsMs - yieldMs),
     });
     if (this.samples.length > FrameMetricLimit.Samples) this.samples.shift();
   }
@@ -63,6 +67,7 @@ export class FrameMetrics {
         readonly frameMs: Distribution;
         readonly guestCpuMs: Distribution;
         readonly graphicsImportMs: Distribution;
+        readonly yieldWaitMs: Distribution;
         readonly otherMs: Distribution;
       }
     | undefined {
@@ -77,6 +82,7 @@ export class FrameMetrics {
       frameMs: distribution(this.samples.map((sample) => sample.frameMs)),
       guestCpuMs: distribution(this.samples.map((sample) => sample.cpuMs)),
       graphicsImportMs: distribution(this.samples.map((sample) => sample.graphicsMs)),
+      yieldWaitMs: distribution(this.samples.map((sample) => sample.yieldMs)),
       otherMs: distribution(this.samples.map((sample) => sample.otherMs)),
     };
   }
