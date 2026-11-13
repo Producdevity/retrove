@@ -37,6 +37,7 @@ export interface TciTierStatistics {
   readonly functions: number;
   readonly bytes: number;
   readonly failures: number;
+  readonly compilationMs: number;
   readonly lastFailure: string | undefined;
 }
 function loadProcedure(value: unknown): value is TciHost["load"] {
@@ -65,6 +66,7 @@ export class TciTier {
   readonly #functions = new Map<number, number>();
   #bytes = 0;
   #failures = 0;
+  #compilationMs = 0;
   #lastFailure: string | undefined;
   #closed = false;
   constructor(module: TciTierModule, threshold = TciTierLimit.Threshold) {
@@ -87,6 +89,7 @@ export class TciTier {
   }
   #compile(address: number, size: number): number {
     if (this.#closed) return 0;
+    const started = performance.now();
     try {
       const block = decodeTci(
         this.#module.HEAPU8.subarray(address, address + size),
@@ -112,6 +115,8 @@ export class TciTier {
       this.#failures++;
       this.#lastFailure = error instanceof Error ? error.message : String(error);
       return 0;
+    } finally {
+      this.#compilationMs += performance.now() - started;
     }
   }
   #release(index: number): void {
@@ -146,6 +151,7 @@ export class TciTier {
       functions: this.#functions.size,
       bytes: this.#bytes,
       failures: this.#failures,
+      compilationMs: this.#compilationMs,
       lastFailure: this.#lastFailure,
     };
   }
