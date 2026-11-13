@@ -1,3 +1,4 @@
+import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
@@ -51,7 +52,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       } catch { /* The last successful CPU reads are still useful. */ }
     }
     // Put fault context before variable-length lists so it survives a shortened mobile export.
-    return {phase, elapsedMs: Math.round(performance.now() - started), calls, cpuSlices, budgetSlices, completedInitializers,
+    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, heapAllocations: heap?.live.size, exitStatus,
       topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
@@ -185,8 +186,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     cpu.write(GATES, gateCode);
     cpu.map(STACK_TOP - STACK_SIZE, STACK_SIZE, 3);
     cpu.trapRange(GATES, RETURN - 1, (_, at) => { pending = at; });
+    const nativeLibc = guestLibc(cpu,heap,hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy));
     const load = loadMachO(image, memory, b => {
-      const data = threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
+      const data = nativeLibc.get(b.name) ?? threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
         ?? objc.resolveData(b.name) ?? dispatch.data.get(b.name) ?? cg.data.get(b.name);
       if (data != null) return data;
       const fn = funcs[b.name];

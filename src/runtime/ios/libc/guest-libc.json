@@ -1,0 +1,11 @@
+{
+  "code": "YRBA4hkAUeMgAECSHv8v4QAQoOEEIJHkAABS4/z//xoAAEHgBABA4iABoOEe/y/hACCg4QQwkeQEMILkAABT4/v//xoe/y/hBCCQ5AQwkeQDAFLhAwAAGgAAUuP5//8aAACg4x7/L+EBAKDDAADgsx7/L+FAAFLjHPCfhQAAUuMe/y8BADCg4QHA0eQBwMPkASBS4vv//xoe/y/hAAAAAA==",
+  "symbols": {
+    "retrove_toupper": 0,
+    "retrove_wcslen": 16,
+    "retrove_wcscpy": 48,
+    "retrove_wcscmp": 72,
+    "retrove_memcpy": 116,
+    "retrove_memcpy_fallback": 156
+  }
+}
