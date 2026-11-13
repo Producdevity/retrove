@@ -1,3 +1,4 @@
+import { AudioVisibility } from "./media/audio-visibility";
 import { runGuest } from "../../web/runtime.mjs";
 import type { IpaArchive } from "../../web/ipa.mjs";
 import type { InstalledApplication } from "../domain/application";
@@ -23,17 +24,25 @@ export class PlayerSession {
   private failure: unknown;
   private running: Promise<void> | undefined;
   private sound: AudioContext | null = null;
+  private audioVisibility: AudioVisibility | undefined;
   constructor(
     private readonly library: ApplicationLibrary,
     private readonly app: InstalledApplication,
     private readonly archive: IpaArchive,
     private readonly display: PlayerDisplay,
     private readonly report: SessionReport,
+    private readonly needsAudioResume: (needed: boolean) => void,
   ) {}
   start(): Promise<void> {
     if (this.running) return this.running;
     this.sound = new AudioContext();
-    const resume = this.sound.resume();
+    this.audioVisibility = new AudioVisibility(
+      this.sound,
+      this.display.host.ownerDocument,
+      this.needsAudioResume,
+      (error) => this.report.diagnostic("warn", "audio", errorMessage(error)),
+    );
+    const resume = this.audioVisibility.resume();
     this.running = this.execute(resume);
     return this.running;
   }
@@ -62,6 +71,7 @@ export class PlayerSession {
         throw error;
       }
     } finally {
+      this.audioVisibility?.close();
       this.display.close();
       if (this.sound && this.sound.state !== "closed") await this.sound.close();
     }
@@ -78,7 +88,7 @@ export class PlayerSession {
     }
   }
   async resumeMedia(): Promise<void> {
-    await this.sound?.resume();
+    await this.audioVisibility?.resume();
     await Promise.all(
       [...this.display.host.querySelectorAll("video")].map((video) => video.play()),
     );

@@ -14,6 +14,11 @@ const start = element("start", HTMLButtonElement);
 const media = element("resume-media", HTMLButtonElement);
 let session: PlayerSession | undefined;
 let imageVisible = false;
+let audioResumeNeeded = false;
+let movieResumeNeeded = false;
+const updateMedia = (): void => {
+  media.hidden = !audioResumeNeeded && !movieResumeNeeded;
+};
 const fail = (error: unknown): void => {
   document.body.classList.remove("playing");
   document.body.classList.add("failed");
@@ -35,7 +40,10 @@ const report = new SessionReport(
       detail.textContent = message;
       if (!imageVisible) status.textContent = message;
     }
-    if (area === "movie" && message.includes("Tap")) media.hidden = false;
+    if (area === "movie" && message.includes("Tap")) {
+      movieResumeNeeded = true;
+      updateMedia();
+    }
   },
 );
 const display = new PlayerDisplay((error) => {
@@ -61,7 +69,10 @@ async function prepare(): Promise<void> {
   report.start(app.name);
   const archive = await openIPA(await library.open(app), report.diagnostic);
   display.configure(archive.info);
-  session = new PlayerSession(library, app, archive, display, report);
+  session = new PlayerSession(library, app, archive, display, report, (needed) => {
+    audioResumeNeeded = needed;
+    updateMedia();
+  });
   status.textContent = `Ready to open ${app.name}`;
   detail.textContent = "Tap Start to enable audio and launch the app.";
   start.hidden = false;
@@ -82,10 +93,14 @@ start.addEventListener(
 );
 media.addEventListener(
   "click",
-  action(async () => {
-    await session?.resumeMedia();
-    media.hidden = true;
-  }, fail),
+  action(
+    async () => {
+      await session?.resumeMedia();
+      movieResumeNeeded = false;
+      updateMedia();
+    },
+    (error) => report.diagnostic("warn", "media", errorMessage(error)),
+  ),
 );
 element("back", HTMLAnchorElement).addEventListener("click", (event) => {
   event.preventDefault();
