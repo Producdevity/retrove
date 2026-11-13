@@ -3,6 +3,7 @@ import { prepareBioShockConfig } from "../../../../web/bioshock-config.mjs";
 import profile from "./bioshock.json";
 import { patchExecutable } from "./patches";
 import { installBioShockKernels } from "./bioshock/kernels";
+import { prepareBioShockAntialias } from "./bioshock/audio/antialias";
 import { prepareBioShockDct36 } from "./bioshock/audio/dct36";
 interface PreparedApplication {
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -31,8 +32,10 @@ export async function prepareApplication(
     bytes,
     install: (host) => {
       const installDct = prepareBioShockDct36(host.cpu);
+      const installAntialias = prepareBioShockAntialias(host.cpu);
       installBioShockKernels(host);
       installDct(host);
+      installAntialias(host);
     },
   };
 }
