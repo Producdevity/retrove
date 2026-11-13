@@ -3,6 +3,7 @@ import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
 import {ExecutionMetrics} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
+import {FrameMetrics} from '../src/runtime/diagnostics/frame-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
 import {nonlocalJumps} from './nonlocal-jump.mjs';
@@ -43,6 +44,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   const render = {clearCalls: 0, drawCalls: 0, presentAttempts: 0, presentedFrames: 0};
   const importMetrics = new ImportMetrics();
   const executionMetrics = new ExecutionMetrics();
+  const frameMetrics = new FrameMetrics();
+  let graphicsMilliseconds = 0;
   const recent = [], active = [], deferred = new Map();
   const missingAssets = [], missingAssetSet = new Set(), recentMissingAssets = [];
   let missingAssetRequests = 0;
@@ -59,7 +62,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     // Put fault context before variable-length lists so it survives a shortened mobile export.
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
-      lastSelector: objc?.lastSelector, render: {...render}, heapAllocations: heap?.live.size, exitStatus,
+      lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
       execution: executionMetrics.snapshot(), input: objc?.inputSnapshot(), audio:audio?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
@@ -153,7 +156,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     objc = objcImports(cpu, heap, ipa, graphics, nested, signal, service, {
       threads, sys, audio, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
       onLifecycle: milestone,
-      onPresent(presented) {
+      onPresent(presented, duration = 0) {
+        graphicsMilliseconds += duration;
+        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds});
         render.presentAttempts++;
         if (presented && ++render.presentedFrames === 1) {
           report(snapshot());
@@ -181,7 +186,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       const at = GATES + gates.size * 4;
       if (at >= RETURN) throw Error('Too many imported functions');
       gates.set(key, at);
-      stubs.set(at, {fn, binding: b, counter: importMetrics.register(b.name)});
+      stubs.set(at, {fn, binding: b, counter: importMetrics.register(b.name), graphics:b.name.startsWith('_gl')});
       return at;
     }
     cpu.map(GATES, GATE_BYTES, 5);
@@ -312,12 +317,17 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       const arg = n => n < 4 ? cpu.getReg(n) : read32(cpu, cpu.getReg(13) + (n - 4) * 4);
       active.push({name:lastSymbol,thread});
       let value;
+      const graphicsStarted = host.graphics ? performance.now() : 0;
+      const graphicsCpuStarted = host.graphics ? cpu.executedMilliseconds : 0;
       try {
         value = await host.fn(arg);
       } catch (error) {
         if (error instanceof GuestLandingPad) value = error;
         else { captureFault(error); throw error; }
-      } finally { active.pop(); }
+      } finally {
+        if (host.graphics) graphicsMilliseconds += Math.max(0, performance.now() - graphicsStarted - (cpu.executedMilliseconds - graphicsCpuStarted));
+        active.pop();
+      }
       if (lastSymbol === '_glClear') { render.clearCalls++; onRender(); }
       else if (lastSymbol === '_glDrawArrays' || lastSymbol === '_glDrawElements') { render.drawCalls++; onRender(); }
       if (value && typeof value === 'object') {

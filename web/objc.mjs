@@ -387,11 +387,12 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return drawable.allocate(a(0), a(1));
   });
   method('EAGLContext', false, 'presentRenderbuffer:', (self, a) => {
+    const started = performance.now();
     let result = 0;
     try {
       if (currentContext() === self) result = drawable.present(a(0));
       return result;
-    } finally { onPresent(result); }
+    } finally { onPresent(result, performance.now() - started); }
   });
   const contexts = new Map();
   const initContext = (self, a) => {
