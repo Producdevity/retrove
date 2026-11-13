@@ -1,4 +1,5 @@
 .syntax unified
+.cpu cortex-a15
 .arm
 .text
 .equ ASCII_LOWER_FIRST, 97
@@ -64,4 +65,35 @@ retrove_memcpy:
 .global retrove_memcpy_fallback
 retrove_memcpy_fallback:
 .Lmemcpy_fallback:
+ .word 0
+
+.global retrove_umod
+retrove_umod:
+ cmp r1, #0
+ ldreq pc, .Ldivide_fallback
+ udiv r2, r0, r1
+ mls r0, r2, r1, r0
+ bx lr
+.global retrove_udiv
+retrove_udiv:
+ cmp r1, #0
+ ldreq pc, .Ldivide_fallback
+ udiv r0, r0, r1
+ bx lr
+.global retrove_mod
+retrove_mod:
+ cmp r1, #0
+ ldreq pc, .Ldivide_fallback
+ sdiv r2, r0, r1
+ mls r0, r2, r1, r0
+ bx lr
+.global retrove_div
+retrove_div:
+ cmp r1, #0
+ ldreq pc, .Ldivide_fallback
+ sdiv r0, r0, r1
+ bx lr
+.global retrove_divide_fallback
+retrove_divide_fallback:
+.Ldivide_fallback:
  .word 0

@@ -186,7 +186,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     cpu.write(GATES, gateCode);
     cpu.map(STACK_TOP - STACK_SIZE, STACK_SIZE, 3);
     cpu.trapRange(GATES, RETURN - 1, (_, at) => { pending = at; });
-    const nativeLibc = guestLibc(cpu,heap,hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy));
+    const nativeLibc = guestLibc(cpu,heap,{memcpy:hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy),divide:hostGate({name:"___umodsi3",library:"libSystem"},funcs.___umodsi3)});
     const load = loadMachO(image, memory, b => {
       const data = nativeLibc.get(b.name) ?? threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
         ?? objc.resolveData(b.name) ?? dispatch.data.get(b.name) ?? cg.data.get(b.name);
