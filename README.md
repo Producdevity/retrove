@@ -18,4 +18,8 @@ The library keeps original archives locally; guest saves and settings have separ
 
 The ARM libc helpers keep small memory copies and common string operations inside the emulator. Their assembly source and generated artifact live in `src/runtime/ios/libc/`. To regenerate the artifact with an installed LLVM toolchain, run `RETROVE_LLVM_BIN=/path/to/llvm/bin vp exec node src/build/compile-guest-libc.ts`, then `vp check` and `vp test`. The build tool rejects unresolved relocations and removes its temporary files.
 
+The CPU starts with the bundled Unicorn interpreter and compiles hot TCI blocks into WebAssembly. Both paths share guest memory, fault handling and helper functions. The compiler cache is bounded; unsupported blocks stay interpreted. This is not yet a gameplay performance claim.
+
+To rebuild the generated CPU module, activate Emscripten 3.1.69 and run `sh scripts/rebuild-unicorn.sh`. The script uses the bundled sources, applies the maintained patches and native bridge, and removes its temporary build directory. Run `vp check`, `vp test` and `vp build` afterward.
+
 See `NOTICE.md` for source provenance.

@@ -18,7 +18,10 @@ function procedure(value: unknown): value is CompiledTciBlock {
   return typeof value === "function";
 }
 export function compileTci(block: TciBlock, host: TciHost): CompiledTciBlock {
-  const module = new WebAssembly.Module(tciModule(block, host.pc));
+  return compileTciBinary(tciModule(block, host.pc), host);
+}
+export function compileTciBinary(binary: Uint8Array<ArrayBuffer>, host: TciHost): CompiledTciBlock {
+  const module = new WebAssembly.Module(binary);
   const { run } = new WebAssembly.Instance(module, {
     host: {
       memory: host.memory,

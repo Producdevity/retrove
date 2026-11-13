@@ -1,0 +1,21 @@
+--- a/build.py
++++ b/build.py
+@@ -172,6 +172,9 @@
+         shutil.copy2(HELPER_ADAPTER_SRC, dst)
+     apply_patch(UNICORN_DIR, "src/patches/unicorn-adapters.patch")
+ 
++    shutil.copy2(os.path.join(ROOT_DIR, "src/retrove-tier.h"), os.path.join(UNICORN_QEMU_DIR, "tcg/retrove-tier.h"))
++    apply_patch(UNICORN_DIR, "src/patches/retrove-tier.patch")
++
+     # Add missing PPC symbols
+     apply_patch(UNICORN_DIR, "src/patches/unicorn-ppc-fix.patch")
+     subprocess.run(["bash", "symbols.sh"], check=True, cwd=UNICORN_DIR)
+@@ -226,7 +229,7 @@
+     ]
+     for path in constant_files(archs):
+         cmd += ['--post-js', path]
+-    cmd += ['--post-js', 'src/unicorn-wrapper.js']
++    cmd += ['--post-js', 'src/unicorn-wrapper.js', '--post-js', 'src/retrove-exports.js']
+     cmd += ['-o', f'dist/unicorn{suffix}.js']
+     os.makedirs('dist', exist_ok=True)
+     subprocess.run(cmd, check=True)

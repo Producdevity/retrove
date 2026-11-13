@@ -1,5 +1,7 @@
 import type {ExecutionBudget} from "../src/runtime/cpu/execution-budget";
+import type {TciTierStatistics} from "../src/runtime/cpu/tci/tier";
 export interface GuestCPU {
+  readonly compiler: TciTierStatistics | undefined;
   readonly budget: ExecutionBudget;
   set threadPointer(address: number);
   map(address: number, size: number, permissions?: number): void;
@@ -18,4 +20,4 @@ export interface GuestCPU {
   freeState(state: unknown): void;
   close(): void;
 }
-export function createCPU(options?: {readonly budget?: ExecutionBudget}): Promise<GuestCPU>;
+export function createCPU(options?: {readonly budget?: ExecutionBudget; readonly compilationThreshold?: number}): Promise<GuestCPU>;

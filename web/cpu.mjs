@@ -2,6 +2,7 @@ import {BlockBudget, ExecutionBudget} from '../src/runtime/cpu/execution-budget.
 import createUnicorn from './vendor/unicorn-arm.mjs';
 import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
 import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
+import {TciTier, TciTierLimit} from '../src/runtime/cpu/tci/tier.ts';
 
 const PAGE = 4096;
 const COPY_CHUNK = 1 << 20;
@@ -23,9 +24,10 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
+export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
   const uc = await createUnicorn();
+  const compiler = compilationThreshold === 0 ? undefined : new TciTier(uc, compilationThreshold);
   const engine = new uc.Unicorn(uc.ARCH_ARM, uc.MODE_ARM);
   const handle = uc.getValue(engine.handle_ptr, '*');
   // Unicorn.js reads through getValue/setValue once per byte. Keep
@@ -82,6 +84,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
 
   const cpu = {
     get budget() { return budget; },
+    get compiler() { return compiler?.statistics; },
     get mappedBytes() { return mappedBytes; },
     get executedMilliseconds() { return executedMilliseconds; },
     // Darwin ARM code reads its thread pointer from TPIDRURO. Unicorn includes
@@ -109,6 +112,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
         uc.HEAPU8.set(chunk, transfer);
         const code = uc._uc_mem_write(handle, BigInt(address + i), transfer, BigInt(chunk.length));
         if (code !== uc.ERR_OK) throw Error('Guest memory write failed: ' + uc.strerror(code));
+        const invalidation = uc._retrove_tci_invalidate(handle, address + i, chunk.length);
+        if (invalidation !== uc.ERR_OK) throw Error('Guest code invalidation failed: ' + uc.strerror(invalidation));
       }
     },
     read(address, length) {
@@ -192,6 +197,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
       // A trap in the Wasm engine itself can leave its internal allocator invalid.
       // Dropping the instance then releases all memory without running guest cleanup.
       if (failedWasm) return;
+      compiler?.close();
       states.close();
       for (const hook of hooks) engine.hook_del(hook);
       hooks.clear();

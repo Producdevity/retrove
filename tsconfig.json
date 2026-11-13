@@ -20,6 +20,6 @@
     "skipLibCheck": true,
     "types": ["vite-plus/client", "node"]
   },
-  "include": ["src/**/*.ts", "vite.config.ts"],
+  "include": ["src/**/*.ts", "native/**/*.ts", "vite.config.ts"],
   "exclude": ["node_modules", "dist", ".agents"]
 }
