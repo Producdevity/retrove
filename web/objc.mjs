@@ -1,3 +1,4 @@
+import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from './screen.mjs';
 import {coreFoundation} from './corefoundation.mjs';
 import {bundleStrings} from './localized-strings.mjs';
@@ -509,6 +510,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const input = touchUIKit({getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,read,write,graphics,signal,text,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
+  installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
   let dispatchService;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData});

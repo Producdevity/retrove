@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f6fa" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Retrove</title>
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="stylesheet" href="/app/library.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/"
+          ><img src="/icons/icon.svg" alt="" width="34" height="34" /><span>Retrove</span></a
+        >
+        <nav aria-label="Main navigation">
+          <button class="nav-item active" data-page="library">
+            <span aria-hidden="true">▦</span> Apps</button
+          ><button class="nav-item" data-page="activity">
+            <span aria-hidden="true">◷</span> Activity</button
+          ><button class="nav-item" data-page="settings">
+            <span aria-hidden="true">⚙</span> Settings
+          </button>
+        </nav>
+        <p class="sidebar-note">Your apps.<br />On your device.</p>
+      </aside>
+      <main>
+        <section id="library" class="page">
+          <header class="page-header">
+            <div>
+              <h1>Apps</h1>
+              <p id="library-count">Your personal app library</p>
+            </div>
+            <label class="primary add-button"
+              ><span aria-hidden="true">＋</span> Add app<input
+                id="import"
+                type="file"
+                accept=".ipa"
+                aria-label="Add an IPA"
+            /></label>
+          </header>
+          <div class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10" cy="10" r="6" />
+              <path d="m15 15 5 5" /></svg
+            ><input
+              id="search"
+              type="search"
+              placeholder="Search your apps"
+              aria-label="Search your apps"
+            />
+          </div>
+          <div id="import-status" class="import-status" role="status" hidden>
+            <span></span><progress max="1" value="0"></progress>
+          </div>
+          <p id="error" role="alert" hidden></p>
+          <div id="apps" class="apps"></div>
+          <div id="empty" class="empty">
+            <div class="empty-icon" aria-hidden="true">
+              <img src="/icons/icon.svg" alt="" width="72" height="72" />
+            </div>
+            <h2>A home for your old favourites.</h2>
+            <p>Add a 32-bit iOS app to get started.<br />Your IPA and saves stay on this device.</p>
+            <label class="primary"
+              >Add your first app<input
+                type="file"
+                accept=".ipa"
+                id="empty-import"
+                aria-label="Add your first IPA"
+            /></label>
+            <p class="compatibility">
+              Compatibility is a work in progress.<br />BioShock is our first test case.
+            </p>
+          </div>
+          <p id="no-results" hidden>No apps match your search.</p>
+        </section>
+        <section id="activity" class="page" hidden>
+          <header class="page-header">
+            <div>
+              <h1>Activity</h1>
+              <p>Local reports from your last session</p>
+            </div>
+            <button id="export-log">Export report</button>
+          </header>
+          <div class="report-panel">
+            <p id="report-status">No sessions yet.</p>
+            <pre id="report"></pre>
+          </div>
+        </section>
+        <section id="settings" class="page" hidden>
+          <header class="page-header">
+            <div>
+              <h1>Settings</h1>
+              <p>Retrove on this device</p>
+            </div>
+          </header>
+          <div class="settings-group">
+            <h2>Storage</h2>
+            <p id="storage">Checking browser storage…</p>
+            <p>
+              Imported apps and their saves are stored in this browser. Removing an IPA keeps its
+              saves. Clearing this site's data removes both.
+            </p>
+            <button id="persist">Keep local storage</button>
+            <p id="persistence"></p>
+          </div>
+          <div class="settings-group">
+            <h2>Install Retrove</h2>
+            <p id="install-help">
+              On iPhone or iPad, use Share → Add to Home Screen. On desktop, use your browser's
+              install button.
+            </p>
+            <button id="install" hidden>Install app</button>
+          </div>
+          <div class="settings-group">
+            <h2>About</h2>
+            <p>
+              A local runtime for 32-bit iOS apps. App compatibility is being developed, starting
+              with BioShock.
+            </p>
+            <p class="secondary">Version 0.1.0</p>
+            <a href="/source.zip">Source &amp; licenses</a>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog id="app-details">
+      <form method="dialog"><button class="close" aria-label="Close app details">×</button></form>
+      <div id="details-content"></div>
+      <div class="dialog-actions">
+        <button id="details-launch" class="primary">Open app</button
+        ><button id="remove" class="danger">Remove IPA</button>
+      </div>
+      <p class="secondary">Removing the IPA keeps this app's saves.</p>
+    </dialog>
+    <script type="module" src="/app/library-ui.mjs"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-import test from "node:test";
+import {test} from "vite-plus/test";
 import assert from "node:assert/strict";
 import { crc32, deflateRawSync } from "node:zlib";
 import { openIPA, openZip, parsePlist } from "../web/ipa.mjs";

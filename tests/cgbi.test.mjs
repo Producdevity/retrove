@@ -1,4 +1,4 @@
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {deflateRawSync} from 'node:zlib';
 import {crc32} from '../web/crc32.mjs';

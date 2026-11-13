@@ -1,4 +1,4 @@
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {openIPA} from '../web/ipa.mjs';
@@ -16,7 +16,7 @@ test('ARM SJLJ leaves keep independent context chains across thread preemption',
   const {Heap, read32} = await import('../web/memory.mjs');
   const {threadImports} = await import('../web/threads.mjs');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
-  t.after(() => cpu.close());
+  t.onTestFinished(() => cpu.close());
   cpu.map(done, 4096, 5);
   const ts = threadImports(cpu, heap, done);
   const frame = () => heap.zero(44);

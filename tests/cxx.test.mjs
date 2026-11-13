@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import { cxxImports } from '../web/cxx.mjs';
 const bits=new DataView(new ArrayBuffer(8));
 function words(n) { bits.setFloat64(0,n,true);return [bits.getUint32(0,true),bits.getUint32(4,true)]; }

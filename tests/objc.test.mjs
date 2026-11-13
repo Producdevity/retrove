@@ -1,4 +1,4 @@
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import { createCPU } from '../web/cpu.mjs';
 import { Heap, read32, readString, write32 } from '../web/memory.mjs';
@@ -6,7 +6,7 @@ import { objcImports } from '../web/objc.mjs';
 
 async function fixture(t, call = () => {}, files = new Map()) {
   const cpu = await createCPU();
-  t.after(() => cpu.close());
+  t.onTestFinished(() => cpu.close());
   const heap = new Heap(cpu);
   const ipa = { info: {CFBundleIdentifier: 'com.test.fixture'}, bundlePath: 'Payload/Test.app', has: p => files.has(p), read: async p => files.get(p) };
   const objc = objcImports(cpu, heap, ipa, () => ({}), call);
@@ -225,4 +225,31 @@ test('UIKit invokes the animation before returning and preserves completion unti
   assert.deepEqual(calls,[[0x8410,changes]]);
   await assert.rejects(x.f('_UIApplicationMain',0,0,0,0),/without a supported event source/);
   assert.deepEqual(calls,[[0x8410,changes],[0x8420,copy,1]]);
+});
+
+
+test('NSScanner retains its source, scans device identifiers, and preserves failed output', async t => {
+  const x = await fixture(t);
+  const pool = x.f('_objc_autoreleasePoolPush');
+  const source = await x.send(x.cls('NSString'), 'stringWithUTF8String:', x.heap.string('iPhone5,1'));
+  const scanner = await x.send(x.cls('NSScanner'), 'scannerWithString:', source);
+  const digits = await x.send(x.cls('NSCharacterSet'), 'decimalDigitCharacterSet');
+  const output = x.heap.zero(4);
+  x.write(output, 73);
+  assert.equal(await x.send(scanner, 'scanInt:', output), 0);
+  assert.equal(x.read(output), 73);
+  assert.equal(await x.send(scanner, 'scanLocation'), 0);
+  assert.equal(await x.send(scanner, 'scanUpToCharactersFromSet:intoString:', digits, output), 1);
+  assert.equal(readString(x.cpu, await x.send(x.read(output), 'UTF8String')), 'iPhone');
+  assert.equal(await x.send(scanner, 'scanInt:', output), 1);
+  assert.equal(x.read(output), 5);
+  await x.send(scanner, 'setScanLocation:', 8);
+  await x.send(scanner, 'retain');
+  await x.f('_objc_autoreleasePoolPop', pool);
+  assert.equal(x.heap.live.has(source), true);
+  assert.equal(await x.send(scanner, 'scanInt:', output), 1);
+  assert.equal(x.read(output), 1);
+  assert.equal(await x.send(scanner, 'isAtEnd'), 1);
+  await x.send(scanner, 'release');
+  assert.equal(x.heap.live.has(source), false);
 });

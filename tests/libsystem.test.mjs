@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import {systemImports} from '../web/libsystem.mjs';
 import {Heap, read32, write32} from '../web/memory.mjs';
 import {stringImports} from '../web/strings.mjs';

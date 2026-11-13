@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import { glesImports } from '../web/gles.mjs';
 import { write32 } from '../web/memory.mjs';
 

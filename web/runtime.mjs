@@ -4,7 +4,7 @@ import {nonlocalJumps} from './nonlocal-jump.mjs';
 import {coreGraphics} from './coregraphics.mjs';
 import {commonCrypto} from './commoncrypto.mjs';
 import {createCPU} from './cpu.mjs';
-import {prepareBioShockConfig} from './bioshock-config.mjs';
+import {prepareApplication} from './profiles/index.mjs';
 import {parseMachO, loadMachO, prepareStartup} from './macho.mjs';
 import {Heap, read32, write32} from './memory.mjs';
 import {systemImports} from './libsystem.mjs';
@@ -118,7 +118,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   try {
     milestone('Read executable', {path: label(ipa.executablePath)});
     signal?.throwIfAborted();
-    const bytes = await ipa.readExecutable();
+    let bytes = await ipa.readExecutable();
+    bytes = await prepareApplication(ipa, bytes, diagnostic);
     signal?.throwIfAborted();
     milestone('Parse ARM Mach-O', {executableBytes: bytes.length});
     image = parseMachO(bytes);
@@ -206,7 +207,6 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       unsupported: unsupported.slice(0, 40).map(label)};
     if (unsupported.length) diagnostic('debug', 'linker', 'Unresolved imports in this executable',
       unsupported.map(label).join('\n'));
-    await prepareBioShockConfig(ipa, diagnostic);
     signal?.throwIfAborted();
     milestone('Install Objective-C metadata', {initializers: load.initializers.length, unresolvedImports: unsupported.length});
     objc.install(image);
@@ -277,7 +277,18 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
 
     async function executeStep(pc) {
       cpuSlices++;
-      const result = cpu.run(pc, {until: RETURN, count: 65536});
+      let result;
+      if (stubs.has(pc)) { pending = pc; result = {reason:'trap'}; }
+      else {
+        try { result = cpu.run(pc, {until: RETURN, count: 65536}); }
+        catch (error) {
+          // Unicorn can reject the UDF before its code hook on a newly translated import gate.
+          const at = cpu.getReg(15);
+          if (!String(error.cause).includes('UC_ERR_INSN_INVALID') || (cpu.cpsr & 32) || !stubs.has(at) || read32(cpu,at)!==0xe7f000f0) throw error;
+          pending = at; result = {reason:'trap'};
+          diagnostic('debug','cpu','Dispatched registered import gate after UDF trap',{address:hex(at),symbol:stubs.get(at).binding.name});
+        }
+      }
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
       if (result.reason === 'budget') { budgetSlices++; return {pc:result.pc, budget:true}; }
       const host = stubs.get(pending);

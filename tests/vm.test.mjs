@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import {createCPU} from '../web/cpu.mjs';
 import {read32, write32} from '../web/memory.mjs';
 import {virtualMemoryImports} from '../web/vm.mjs';
 
 test('Darwin page mappings support partial unmap, first-fit reuse, and MAP_FIXED replacement', async t => {
   const cpu = await createCPU();
-  t.after(() => cpu.close());
+  t.onTestFinished(() => cpu.close());
   cpu.map(0x3000, 4096, 3);
   const vm = virtualMemoryImports(cpu, 0x3000), args = (...values) => i => values[i] ?? 0;
   const anon = (address, size, flags = 0x1002) => vm._mmap(args(address, size, 3, flags, 0xffffffff));

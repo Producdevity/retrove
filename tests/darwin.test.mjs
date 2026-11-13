@@ -1,4 +1,4 @@
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {darwinSystem,TASK} from '../web/darwin-system.mjs';
 import {darwinAlgorithms} from '../web/darwin-algorithms.mjs';

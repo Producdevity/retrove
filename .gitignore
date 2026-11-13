@@ -4,3 +4,10 @@ dist/
 .agents/
 *.ipa
 *.bsg
+!tests/fixtures/*.ipa
+
+.vite/
+.vp/
+*.apk
+*.obb
+*.xapk

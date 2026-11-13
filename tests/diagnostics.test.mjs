@@ -1,4 +1,4 @@
-import test from 'node:test';
+import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {DiagnosticRecorder} from '../web/diagnostics.mjs';
 
@@ -57,7 +57,7 @@ test('a noisy run keeps startup, the first failure, and the newest checkpoint', 
   const restored = new DiagnosticRecorder({storage}).text();
   assert.match(restored, /First checkpoint/);
   assert.match(restored, /Original failure/);
-  assert.match(restored, /at TestContext/);
+  assert.match(restored, /diagnostics\.test\.mjs:\d+:\d+/);
   assert.match(restored, /earlier event\(s\) omitted/);
   assert.match(restored, /tail 500/);
   assert.match(restored, /0x40000000/);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import test from 'node:test';
+import {test,vi} from 'vite-plus/test';
 import {openIPA} from '../web/ipa.mjs';
 import {runGuest} from '../web/runtime.mjs';
 
@@ -81,14 +81,15 @@ test('live heartbeat reports a CPU-only loop with no host calls and stopping it 
   const executable = await ipa.readExecutable();
   // Replace the fixture entry instruction with ARM "b .", keeping its initializer and real Mach-O loader.
   executable.set([0xfe, 0xff, 0xff, 0xea], 0x800);
-  t.mock.timers.enable({apis: ['setInterval']});
+  vi.useFakeTimers({toFake: ['setInterval']});
+  t.onTestFinished(() => vi.useRealTimers());
   let heartbeat;
   const traceEvent = session.diagnostic;
   session.diagnostic = (...event) => {
     traceEvent(...event);
     if (event[2].startsWith('Application entry at')) {
       setImmediate(() => {
-        t.mock.timers.tick(5000);
+        vi.advanceTimersByTime(5000);
         heartbeat = session.states.at(-1);
         controller.abort();
       });

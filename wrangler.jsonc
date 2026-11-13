@@ -1,0 +1,7 @@
+{
+  "name": "retrove",
+  "account_id": "bbc023e366a9a37dee21f83f3a502dc9",
+  "compatibility_date": "2026-11-13",
+  "assets": { "directory": "./dist" },
+  "workers_dev": true,
+}
