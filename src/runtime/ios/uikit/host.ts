@@ -10,7 +10,7 @@ export interface ViewState {
   needsLayout: boolean;
 }
 export interface StructureMethod {
-  (self: number, arguments_: GuestArguments, destination: number): void;
+  (self: number, arguments_: GuestArguments, destination: number): void | Promise<void>;
   stret: true;
 }
 export interface UIKitHost extends FoundationHost {
@@ -41,7 +41,7 @@ export const UIKitClass = {
   String: "NSString",
 } as const;
 export function structureMethod(
-  implementation: (self: number, args: GuestArguments, destination: number) => void,
+  implementation: (self: number, args: GuestArguments, destination: number) => void | Promise<void>,
 ): StructureMethod {
   return Object.assign(implementation, { stret: true as const });
 }

@@ -110,16 +110,18 @@ export class LabelDrawing {
       context.restore();
     }
   }
-  fit(self: number): void {
+  size(self: number, width = MAX_TEXT_EXTENT, height = MAX_TEXT_EXTENT): [number, number] {
     const state = this.labels.get(self);
-    const text = state.text ? this.host.text(state.text) : "";
-    const [width, height] = this.measure(
-      text,
+    return this.measure(
+      state.text ? this.host.text(state.text) : "",
       this.fonts.get(state.font),
-      MAX_TEXT_EXTENT,
-      MAX_TEXT_EXTENT,
+      width,
+      height,
       state,
     );
+  }
+  fit(self: number): void {
+    const [width, height] = this.size(self);
     const frame = this.host.view(self).frame;
     this.host.setFrame(self, [frame[GeometryField.X], frame[GeometryField.Y], width, height]);
   }

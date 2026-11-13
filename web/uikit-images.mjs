@@ -192,5 +192,5 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
   }
   function close() {for(const n of nodes.values())n.remove();nodes.clear();images.clear();}
   function removeView(view) {nodes.get(view)?.remove();nodes.delete(view);}
-  return {render,close,removeView};
+  return {render,close,removeView,size:p=>[images.get(p)?.width??0,images.get(p)?.height??0]};
 }

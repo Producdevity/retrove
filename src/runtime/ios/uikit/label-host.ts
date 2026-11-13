@@ -57,6 +57,7 @@ function installProperties(host: UIKitHost, labels: Labels): void {
 }
 export function installLabels(host: UIKitHost): {
   has(pointer: number): boolean;
+  size(pointer: number): [number, number];
   draw(pointer: number, context: CanvasRenderingContext2D): void;
   close(): void;
 } {
@@ -99,6 +100,7 @@ export function installLabels(host: UIKitHost): {
   );
   return {
     has: (pointer) => labels.has(pointer),
+    size: (pointer) => drawing.size(pointer),
     draw: (pointer, context) => drawing.draw(pointer, context),
     close: () => {
       fonts.close();

@@ -394,3 +394,37 @@ test('NSURL path queries match Foundation for escaped separators, directories an
   }
   await x.f('_objc_autoreleasePoolPop',pool);
 });
+
+test('UIButton sizing awaits state refresh, uses logical image size and preserves its frame', async t => {
+  const x=await fixture(t);
+  const float=value=>{const view=new DataView(new ArrayBuffer(4));view.setFloat32(0,value,true);return view.getUint32(0,true);};
+  const pool=x.f('_objc_autoreleasePoolPush');
+  x.objc.attachCoreGraphics({pixels:()=>({width:64,height:32}),retain:()=>{},release:()=>{}});
+  const image=await x.send(x.cls('UIImage'),'imageWithCGImage:scale:orientation:',1,float(2),0);
+  const button=await x.send(x.cls('UIButton'),'buttonWithType:',0);
+  await x.send(button,'setFrame:',float(4),float(8),float(90),float(60));
+  await x.send(button,'setBackgroundImage:forState:',image,0);
+  const result=x.heap.zero(16),frame=x.heap.zero(16);
+  await x.f('_objc_msgSend_stret',result,button,x.sel('sizeThatFits:'),float(0),float(0));
+  assert.deepEqual([x.read(result),x.read(result+4)],[float(32),float(16)]);
+  await x.f('_objc_msgSend_stret',frame,button,x.sel('frame'));
+  assert.deepEqual([0,4,8,12].map(offset=>x.read(frame+offset)),[4,8,90,60].map(float));
+  await x.send(button,'sizeToFit');
+  await x.f('_objc_msgSend_stret',frame,button,x.sel('frame'));
+  assert.deepEqual([0,4,8,12].map(offset=>x.read(frame+offset)),[4,8,32,16].map(float));
+  await x.f('_objc_autoreleasePoolPop',pool);
+});
+
+test('UIColor grayscale construction and alpha replacement preserve independent channels', async t => {
+  const x=await fixture(t);
+  const float=value=>{const view=new DataView(new ArrayBuffer(4));view.setFloat32(0,value,true);return view.getUint32(0,true);};
+  const pool=x.f('_objc_autoreleasePoolPush');
+  const color=await x.send(x.cls('UIColor'),'colorWithWhite:alpha:',float(.75),float(.5));
+  const replacement=await x.send(color,'colorWithAlphaComponent:',float(.25));
+  assert.deepEqual([4,8,12,16].map(offset=>x.read(color+offset)),[.75,.75,.75,.5].map(float));
+  assert.deepEqual([4,8,12,16].map(offset=>x.read(replacement+offset)),[.75,.75,.75,.25].map(float));
+  assert.equal(await x.send(color,'CGColor'),color);
+  await x.f('_objc_autoreleasePoolPop',pool);
+  assert.equal(x.heap.live.has(color),false);
+  assert.equal(x.heap.live.has(replacement),false);
+});

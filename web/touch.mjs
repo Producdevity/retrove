@@ -1,3 +1,4 @@
+import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
@@ -75,7 +76,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   textViews=installLabels(uiHost);
   const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
     touchInside:(set,view)=>{const touch=touches.get(items(set)[0]);if(!touch)return false;const [x,y]=convertPoint(touch.point,touch.window,view),[bx,by,w,h]=data(view).bounds;return x>=bx&&y>=by&&x<bx+w&&y<by+h;}};
-  const controls=installControls(controlHost);installButtons(controlHost,controls);
+  const controls=installControls(controlHost);installButtons({...controlHost,imageSize:imageViews.size,labelSize:textViews.size},controls);
   method('CALayer',false,'dealloc',async self=>{
     const v=views.get(self);
     if(v) {
@@ -172,15 +173,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'subviews',s=>autorelease(collection('NSArray',data(s).children)));
   method('UIView',false,'bringSubviewToFront:',(s,a)=>{const list=data(s).children,i=list.indexOf(a(0));if(i>=0)list.push(...list.splice(i,1));});
   method('UIView',false,'viewWithTag:',(s,a)=>{const target=a(0),walk=p=>data(p).tag===target?p:data(p).children.map(walk).find(Boolean)??0;return walk(s);});
-  hostClass('UIColor','NSObject',20);
-  function color(r,g,b,a) {const value=alloc(names.get('UIColor'));[r,g,b,a].forEach((n,i)=>write(value+4+i*4,bits(n)));return autorelease(value);}
-  const colors={blackColor:[0,0,0,1],whiteColor:[1,1,1,1],redColor:[1,0,0,1],clearColor:[0,0,0,0],darkTextColor:[0,0,0,1]};
-  for(const [name,channels] of Object.entries(colors))method('UIColor',true,name,()=>color(...channels));
-  method('UIColor',true,'colorWithRed:green:blue:alpha:',(_,a)=>color(...[0,1,2,3].map(i=>float(a(i)))));
-  method('UIColor',false,'CGColor',s=>s);
-  for(const mode of ['set','setFill','setStroke'])method('UIColor',false,mode,s=>{
-    getCoreGraphics?.()?.setColor([0,1,2,3].map(i=>float(read(s+4+i*4))),mode!=='setStroke',mode!=='setFill');
-  });
+  installColors({...uiHost,setColor:(channels,fill,stroke)=>getCoreGraphics?.()?.setColor(channels,fill,stroke)});
   method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
   method('UIApplication',false,'keyWindow',()=>window);
   method('UIViewController',false,'setView:',async(self,a)=>{

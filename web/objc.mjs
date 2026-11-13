@@ -114,7 +114,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       throw Error('Unimplemented Objective-C method ' + (info?.isMeta ? '+' : '-') + '[' + info?.name + ' ' + name + ']');
     }
     if (stret !== Boolean(implementation.stret)) throw Error('Unsupported return ABI for ' + name);
-    if (stret) { implementation(self, index => arg(index + 3), arg(0)); return arg(0); }
+    if (stret) { await implementation(self, index => arg(index + 3), arg(0)); return arg(0); }
     return implementation(self, index => arg(index + 2));
   }
   function alloc(cls) {

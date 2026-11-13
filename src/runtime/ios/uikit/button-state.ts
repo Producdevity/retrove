@@ -3,6 +3,11 @@ import type { ControlHost, Controls } from "./control-host";
 import { ControlState } from "./control-actions";
 import { TextAlignment } from "./text-layout";
 
+const TITLE_PADDING = 12;
+export interface ButtonHost extends ControlHost {
+  imageSize(pointer: number): [number, number];
+  labelSize(pointer: number): [number, number];
+}
 export interface Appearance {
   title: number;
   color: number;
@@ -20,7 +25,7 @@ export interface ButtonState {
 export class Buttons {
   private readonly states = new Map<number, Promise<ButtonState>>();
   constructor(
-    private readonly host: ControlHost,
+    private readonly host: ButtonHost,
     private readonly controls: Controls,
   ) {}
   get(self: number): Promise<ButtonState> {
@@ -84,7 +89,7 @@ export class Buttons {
     this.controls.changed(self);
     await this.host.release(previous);
   }
-  async layout(self: number): Promise<void> {
+  private async refresh(self: number): Promise<ButtonState> {
     const state = await this.get(self),
       flags = this.controls.flags(self);
     for (const [pointer, field, getter, setter] of [
@@ -97,9 +102,29 @@ export class Buttons {
       if (value !== (await this.host.send(pointer, getter)))
         await this.host.send(pointer, setter, [value]);
     }
+    return state;
+  }
+  async layout(self: number): Promise<void> {
+    const state = await this.refresh(self);
     const bounds = this.host.view(self).bounds;
     for (const pointer of [state.background, state.image, state.label])
       this.host.setFrame(pointer, [...bounds]);
+  }
+  async size(self: number): Promise<[number, number]> {
+    const state = await this.refresh(self),
+      flags = this.controls.flags(self);
+    const [imageWidth, imageHeight] = this.host.imageSize(
+      this.appearance(state, "image", flags, true),
+    );
+    const [backgroundWidth, backgroundHeight] = this.host.imageSize(
+      this.appearance(state, "background", flags, true),
+    );
+    const title = this.appearance(state, "title", flags, true);
+    const [textWidth, textHeight] = title ? this.host.labelSize(state.label) : [0, 0];
+    return [
+      Math.max(imageWidth, backgroundWidth, title ? textWidth + TITLE_PADDING : 0),
+      Math.max(imageHeight, backgroundHeight, title ? textHeight + TITLE_PADDING : 0),
+    ];
   }
   async destroy(self: number): Promise<void> {
     const state = await this.states.get(self);

@@ -5,7 +5,7 @@ export type HostMethod = (
   arguments_: GuestArguments,
 ) => HostResult | Promise<HostResult>;
 export interface FoundationHost {
-  hostClass(name: string, parent: string): number;
+  hostClass(name: string, parent: string, instanceSize?: number): number;
   method(
     className: string,
     classMethod: boolean,

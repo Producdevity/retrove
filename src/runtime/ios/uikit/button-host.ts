@@ -1,9 +1,10 @@
 import { Argument } from "../objc/host";
-import { floatFromBits, GeometryField } from "../abi/scalars";
-import { CONTROL_CLASS, type ControlHost, type Controls } from "./control-host";
-import { Buttons } from "./button-state";
+import { floatFromBits, floatBits, GeometryField, WORD_BYTES } from "../abi/scalars";
+import { CONTROL_CLASS, type Controls } from "./control-host";
+import { structureMethod } from "./host";
+import { Buttons, type ButtonHost } from "./button-state";
 const BUTTON_CLASS = "UIButton";
-export function installButtons(host: ControlHost, controls: Controls): void {
+export function installButtons(host: ButtonHost, controls: Controls): void {
   const klass = host.hostClass(BUTTON_CLASS, CONTROL_CLASS);
   const buttons = new Buttons(host, controls);
   host.method(BUTTON_CLASS, true, "buttonWithType:", async (_self, args) => {
@@ -24,6 +25,21 @@ export function installButtons(host: ControlHost, controls: Controls): void {
       floatFromBits(args(GeometryField.Width)),
       floatFromBits(args(GeometryField.Height)),
     ]);
+  });
+  host.structure(
+    BUTTON_CLASS,
+    false,
+    "sizeThatFits:",
+    structureMethod(async (self, _args, destination) => {
+      const [width, height] = await buttons.size(self);
+      host.write(destination, floatBits(width));
+      host.write(destination + WORD_BYTES, floatBits(height));
+    }),
+  );
+  host.method(BUTTON_CLASS, false, "sizeToFit", async (self) => {
+    const [width, height] = await buttons.size(self),
+      frame = host.view(self).frame;
+    host.setFrame(self, [frame[GeometryField.X], frame[GeometryField.Y], width, height]);
   });
   host.method(BUTTON_CLASS, false, "buttonType", async (self) => (await buttons.get(self)).kind);
   host.method(BUTTON_CLASS, false, "titleLabel", async (self) => (await buttons.get(self)).label);
