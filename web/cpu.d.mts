@@ -1,5 +1,7 @@
 import type {ExecutionBudget} from "../src/runtime/cpu/execution-budget";
 export interface GuestCPU {
+  readonly budget: ExecutionBudget;
+  set threadPointer(address: number);
   map(address: number, size: number, permissions?: number): void;
   protect(address: number, size: number, permissions: number): void;
   write(address: number, bytes: Uint8Array): void;

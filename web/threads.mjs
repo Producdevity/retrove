@@ -1,4 +1,5 @@
 import {read32, write32} from './memory.mjs';
+import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
 
 const PAGE = 4096, MAIN = 1;
 const asWait = poll => {
@@ -7,7 +8,8 @@ const asWait = poll => {
 };
 
 export function threadImports(cpu, heap, returnAddress) {
-  const attrs = new Map(), mutexAttrs = new Map(), mutexes = new Map(), conditions = new Map();
+  const attrs = new Map(), mutexAttrs = new Map(), conditions = new Map();
+  const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
   function threadPointer(id) {
     // The first visible word contains pthread_self. A private word directly
@@ -79,41 +81,13 @@ export function threadImports(cpu, heap, returnAddress) {
     workers.set(id, t);
     return id;
   }
-  function mutex(p) {
-    if (!mutexes.has(p)) {
-      const signature = read32(cpu,p);
-      // Darwin static initializers: normal, error-checking, recursive.
-      if (![0x32aaaba7,0x32aaaba1,0x32aaaba2].includes(signature)) return null;
-      mutexes.set(p, {owner: 0, depth: 0, type: signature === 0x32aaaba2 ? 2 : signature === 0x32aaaba1 ? 1 : 0});
-    }
-    return mutexes.get(p);
-  }
-  function take(m, id) {
-    if (!m.owner || (m.owner === id && m.type === 2)) {
-      m.owner = id; m.depth++; return 0;
-    }
-    return undefined;
-  }
-  function unlock(m, id) {
-    if (!m) return 22;
-    if (m.owner !== id) return 1;
-    if (!--m.depth) m.owner = 0;
-    return 0;
-  }
-  function lock(a, tryOnly) {
-    const m = mutex(a(0)), id = current.id;
-    if (!m) return 22;
-    if (!tryOnly && m.owner === id && m.type === 1) return 11;
-    if (tryOnly) return take(m,id) ?? 16;
-    return asWait(() => take(m,id));
-  }
   function cond(p) {
     if (!conditions.has(p)) conditions.set(p, []);
     return conditions.get(p);
   }
   function waitCond(a, timed) {
-    const q = cond(a(0)), m = mutex(a(1)), id = current.id;
-    if (!m || m.owner !== id || m.depth !== 1) return 22;
+    const q = cond(a(0)), pointer = a(1), id = current.id;
+    if (!mutexes.ownsOnce(pointer,id)) return 22;
     let deadline = Infinity;
     if (timed) {
       const t = a(2), ns = read32(cpu, t + 4);
@@ -121,10 +95,10 @@ export function threadImports(cpu, heap, returnAddress) {
       deadline = (read32(cpu,t) | 0) * 1000 + ns / 1e6;
     }
     const waiter = {signaled: false};
-    q.push(waiter); unlock(m,id);
+    q.push(waiter); mutexes.unlock(pointer,id);
     return asWait(() => {
       if (!waiter.signaled && Date.now() < deadline) return;
-      if (take(m, id) === undefined) return;
+      if (mutexes.take(pointer,id) === undefined) return;
       q.splice(q.indexOf(waiter), 1);
       return waiter.signaled ? 0 : 60;
     });
@@ -195,15 +169,12 @@ export function threadImports(cpu, heap, returnAddress) {
     _pthread_mutex_init: a => {
       const type = a(1) ? mutexAttrs.get(a(1)) : 0;
       if (type === undefined) return 22;
-      mutexes.set(a(0),{owner:0,depth:0,type}); return 0;
+      return mutexes.initialize(a(0),type);
     },
-    _pthread_mutex_destroy: a => {
-      const m = mutex(a(0)); if (!m) return 22; if (m.owner) return 16;
-      mutexes.delete(a(0)); write32(cpu,a(0),0); return 0;
-    },
-    _pthread_mutex_lock: a => lock(a,false),
-    _pthread_mutex_trylock: a => lock(a,true),
-    _pthread_mutex_unlock: a => unlock(mutex(a(0)),current.id),
+    _pthread_mutex_destroy: a => mutexes.destroy(a(0)),
+    _pthread_mutex_lock: a => mutexes.lock(a(0),current.id,false),
+    _pthread_mutex_trylock: a => mutexes.lock(a(0),current.id,true),
+    _pthread_mutex_unlock: a => mutexes.unlock(a(0),current.id),
     _pthread_cond_init: a => { conditions.set(a(0),[]); return 0; },
     _pthread_cond_destroy: a => { if (cond(a(0)).length) return 16; conditions.delete(a(0)); return 0; },
     _pthread_cond_wait: a => waitCond(a,false),
