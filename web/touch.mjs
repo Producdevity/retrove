@@ -445,6 +445,15 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       }
     }
   }
+  async function cancelTouches() {
+    const discarded=queue.clear();
+    for(let index=0;index<discarded;index++)inputMetrics.drop(DropReason.Inactive);
+    for(const [id,touch] of active) {
+      inputMetrics.receive();
+      queue.push({id,type:PointerPhase.Cancel,point:touch.point,time:performance.now()/1000});
+    }
+    if(queue.length)await pump();
+  }
   function scene(className) {
     const nodes=[],pending=window?[window]:[];
     while(pending.length&&nodes.length<12) {
@@ -454,5 +463,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }

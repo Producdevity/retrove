@@ -97,3 +97,38 @@ test("the UIKit loop advances guest work between touch phases and marks other fi
     await harness.stop();
   }
 });
+
+test("backgrounding cancels held touches and discards their pending movements", async () => {
+  const canvas = new Canvas();
+  const visibility = Object.assign(new EventTarget(), { hidden: false });
+  vi.stubGlobal("document", visibility);
+  let turn = 0;
+  const harness = await startTouchTest(canvas, undefined, {
+    onTurn: () => {
+      if (++turn === 1) canvas.pointer("pointerdown", 1, 30, 40);
+      else if (turn === 2) {
+        canvas.pointer("pointermove", 1, 80, 40);
+        visibility.hidden = true;
+        visibility.dispatchEvent(new Event("visibilitychange"));
+      }
+    },
+  });
+  try {
+    await vi.waitFor(() => expect(harness.events.map((event) => event.phase)).toEqual([0, 4]));
+    expect(harness.events.map((event) => event.point)).toEqual([
+      [20, 20],
+      [20, 20],
+    ]);
+    visibility.hidden = false;
+    visibility.dispatchEvent(new Event("visibilitychange"));
+    canvas.pointer("pointerdown", 1, 50, 40);
+    canvas.pointer("pointerup", 1, 50, 40);
+    await vi.waitFor(() =>
+      expect(harness.events.map((event) => event.phase)).toEqual([0, 4, 0, 3]),
+    );
+    expect(harness.events[2]?.previous).toEqual([40, 20]);
+  } finally {
+    await harness.stop();
+    vi.unstubAllGlobals();
+  }
+});

@@ -32,6 +32,11 @@ export class PointerQueue {
       this.#coalesced++;
     } else this.#pending.push(sample);
   }
+  clear(): number {
+    const count = this.#pending.length;
+    this.#pending.length = 0;
+    return count;
+  }
   takeTurn(): PointerSample[] {
     const pointers = new Set<number>();
     let count = 0;

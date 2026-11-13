@@ -1,3 +1,5 @@
+import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
+import {DISPLAY_INTERVAL_MS, nextDisplayRefresh} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from './screen.mjs';
@@ -427,29 +429,24 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const displays = new Map();
   // The emulated iOS 7 device has a 60 Hz screen. Modern browsers can
   // deliver RAF at 120 Hz or skip an update when a guest frame runs long.
-  const refreshMs = 1000 / 60;
+  const refreshMs = DISPLAY_INTERVAL_MS;
   const displayTime = new DataView(new ArrayBuffer(8));
   const timeBits = seconds => {
     displayTime.setFloat64(0, seconds, true);
     return displayTime.getBigUint64(0, true);
   };
-  function nextRefresh() {
-    signal?.throwIfAborted();
-    return new Promise((resolve, reject) => {
-      const raf = typeof requestAnimationFrame === 'function' && !globalThis.document?.hidden;
-      const handle = raf ? requestAnimationFrame(finish) : setTimeout(() => finish(performance.now()), refreshMs);
-      function finish(time) {
-        signal?.removeEventListener('abort', cancel);
-        resolve(time);
-      }
-      function cancel() {
-        if (raf) cancelAnimationFrame(handle);
-        else clearTimeout(handle);
-        reject(signal.reason);
-      }
-      signal?.addEventListener('abort', cancel, {once:true});
-    });
-  }
+  const visibility = mediaHost?.ownerDocument ?? globalThis.document;
+  const lifecycle = new ApplicationLifecycle({
+    async delegate(selector) {
+      if (selector === LifecycleEvent.Inactive.selector) await input.cancelTouches();
+      await send(delegate, selector, [application], true);
+    },
+    async notify(notification) {
+      const center = await send(names.get('NSNotificationCenter'), 'defaultCenter');
+      await send(center, 'postNotificationName:object:', [string(notification), application]);
+    },
+  });
+  const nextRefresh = () => nextDisplayRefresh(signal, visibility);
   async function send(self, name, args = [], optional = false) {
     if (!self) return 0;
     const cls = read(self);
@@ -507,6 +504,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('CADisplayLink', false, 'setPaused:', (self, a) => { displays.get(self).paused = Boolean(a(0)); });
   method('CADisplayLink', false, 'isPaused', self => Number(displays.get(self).paused));
   method('UIApplication', true, 'sharedApplication', () => application);
+  method('UIApplication', false, 'applicationState', () => lifecycle.state);
   method('UIApplication', false, 'delegate', () => delegate);
   method('UIApplication', false, 'setDelegate:', (_, a) => { delegate = a(0); });
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
@@ -560,20 +558,22 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       if (lookup(read(responder), 'application:didFinishLaunchingWithOptions:')) {
         await send(responder, 'application:didFinishLaunchingWithOptions:', [application, 0]);
       } else await send(responder, 'applicationDidFinishLaunching:', [application], true);
-      await send(responder, 'applicationDidBecomeActive:', [application], true);
     }
     input.connect();
+    await lifecycle.start(visibility);
     onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
     try {
       while (input.hasWindow() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || [...displays.values()].some(d => d.scheduled)) {
+        await lifecycle.pump();
         const time = await nextRefresh();
         const token = poolPush();
         try {
+          await lifecycle.pump();
           await foundationObjects.pollMain();
           await scheduler.pump();
-          await input.pump();
+          if (lifecycle.active) await input.pump();
           for (const [ptr, d] of [...displays]) {
-            if (!d.scheduled || d.paused || time + 0.5 < d.next) continue;
+            if (!lifecycle.active || !d.scheduled || d.paused || time + 0.5 < d.next) continue;
             const period = d.interval * refreshMs;
             d.next += (Math.floor((time + 0.5 - d.next) / period) + 1) * period;
             d.timestamp = time;
@@ -582,7 +582,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
           await service(8, true);
         } finally { await poolPop(token); }
       }
-    } finally { input.disconnect(); }
+    } finally { lifecycle.close(); input.disconnect(); }
     throw Error('UIApplication launched without a supported event source (key window or CADisplayLink)');
   }
 
@@ -646,7 +646,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
-  for (const name of ['UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
+  for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
     'UIApplicationWillTerminateNotification', 'UIDeviceOrientationDidChangeNotification', 'UIKeyboardWillHideNotification',
     'UIKeyboardWillShowNotification', 'UIKeyboardFrameEndUserInfoKey', 'UIScreenDidConnectNotification',
@@ -791,7 +791,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       await send(center,'postNotificationName:object:userInfo:',[string(notification),avSession??=alloc(names.get('AVAudioSession')),info]);
     },
     async fileURLPath(url) { return await send(url, 'isFileURL') ? text(await send(url, 'path')) : null; },
-    close() { movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
+    close() { lifecycle.close(); movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
     get lastSelector() {
     const latest=lastDispatch.get(threadId());if(!latest)return;
     const {cls:lastClass,method:lastMethod}=latest;

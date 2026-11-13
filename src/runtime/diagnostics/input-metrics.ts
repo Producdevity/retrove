@@ -4,6 +4,7 @@ export const DropReason = {
   Occupied: "single-touch-view",
   Missing: "missing-touch",
   Duplicate: "duplicate-down",
+  Inactive: "inactive-application",
 } as const;
 type DropReason = (typeof DropReason)[keyof typeof DropReason];
 interface Dispatch {

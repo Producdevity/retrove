@@ -95,6 +95,52 @@ test('UIApplicationMain delivers guest delegate callbacks in launch order', asyn
   assert.ok(calls.every(c => c[1][2] === calls[0][1][2]));
 });
 
+test('UIApplication forwards visibility changes and notifications through guest Objective-C methods', async t => {
+  class Visibility extends EventTarget {
+    hidden = false;
+    show(visible) {this.hidden=!visible;this.dispatchEvent(new Event('visibilitychange'));}
+  }
+  const visibility=new Visibility(), calls=[];
+  vi.stubGlobal('document',visibility);
+  t.onTestFinished(()=>vi.unstubAllGlobals());
+  let active=0,timer;
+  const callback={active:0x4500,inactive:0x4520,background:0x4540,foreground:0x4560,tick:0x4580,notification:0x45a0};
+  const x=await fixture(t,async(pc,args)=>{
+    if(pc===callback.tick) {if(active===1)visibility.show(false);return;}
+    if(pc===callback.notification) {
+      const name=await x.send(args[2],'name');
+      const sender=await x.send(args[2],'object');
+      calls.push([readString(x.cpu,await x.send(name,'UTF8String')),await x.send(sender,'applicationState')]);
+      return;
+    }
+    calls.push([readString(x.cpu,args[1]),await x.send(args[2],'applicationState')]);
+    if(pc===callback.active && ++active===1) {
+      timer=await x.send(x.cls('NSTimer'),'scheduledTimerWithTimeInterval:target:selector:userInfo:repeats:',0,0,args[0],x.sel('tick:'),0,1);
+    }
+    if(pc===callback.active && active===2)await x.send(timer,'invalidate');
+    if(pc===callback.background)visibility.show(true);
+  });
+  t.onTestFinished(()=>x.objc.close());
+  const delegate=x.instance('LifecycleDelegate',[
+    ['applicationDidBecomeActive:',callback.active],['applicationWillResignActive:',callback.inactive],
+    ['applicationDidEnterBackground:',callback.background],['applicationWillEnterForeground:',callback.foreground],
+    ['tick:',callback.tick],['notified:',callback.notification],
+  ]);
+  x.install({'__objc_classlist':[delegate]});
+  const observer=await x.send(delegate,'alloc'),center=await x.send(x.cls('NSNotificationCenter'),'defaultCenter');
+  await x.send(center,'addObserver:selector:name:object:',observer,x.sel('notified:'),0,0);
+  const name=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('LifecycleDelegate'));
+  await assert.rejects(x.f('_UIApplicationMain',0,0,0,name),/without a supported event source/);
+  assert.equal(await x.send(timer,'isValid'),0);
+  assert.deepEqual(calls,[
+    ['applicationDidBecomeActive:',0],['UIApplicationDidBecomeActiveNotification',0],
+    ['applicationWillResignActive:',1],['UIApplicationWillResignActiveNotification',1],
+    ['applicationDidEnterBackground:',2],['UIApplicationDidEnterBackgroundNotification',2],
+    ['UIApplicationWillEnterForegroundNotification',1],['applicationWillEnterForeground:',1],
+    ['applicationDidBecomeActive:',0],['UIApplicationDidBecomeActiveNotification',0],
+  ]);
+});
+
 test('Darwin returns a retained directory array and exports NSString constants through data slots', async t => {
   const x = await fixture(t);
   const token = x.f('_objc_autoreleasePoolPush');
