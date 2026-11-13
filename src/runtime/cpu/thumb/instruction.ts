@@ -1,5 +1,10 @@
 export type ThumbInstruction =
   | {
+      readonly kind: "load-pointers";
+      readonly base: number;
+      readonly destinations: readonly number[];
+    }
+  | {
       readonly kind: "load-float" | "store-float";
       readonly base: number;
       readonly offset: number;

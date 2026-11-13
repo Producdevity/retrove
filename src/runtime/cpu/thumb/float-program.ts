@@ -46,6 +46,13 @@ function integer(
     case "add-immediate":
       registers.set(instruction.destination, (get(instruction.base) + instruction.immediate) >>> 0);
       break;
+    case "load-pointers": {
+      const base = get(instruction.base);
+      instruction.destinations.forEach((destination, index) =>
+        registers.set(destination, required(pointers.get(base + index * Thumb.WordBytes))),
+      );
+      break;
+    }
     case "load-pointer":
       registers.set(
         instruction.destination,

@@ -2,6 +2,9 @@ import type { ThumbInstruction } from "./instruction";
 import { Thumb } from "./instruction";
 const Field = {
   LowRegister: 7,
+  NarrowOffsetShift: 6,
+  NarrowOffsetMask: 0x1f,
+  MinimumListRegisters: 2,
   Register: 0xf,
   HighRegister: 8,
   HighShift: 4,
@@ -25,6 +28,11 @@ const Field = {
   TopByteShift: 24,
 };
 const Encoding = {
+  NarrowLoadMask: 0xf800,
+  NarrowLoad: 0x6800,
+  MultipleLoadMask: 0xfff0,
+  MultipleLoad: 0xe890,
+  MultipleForbidden: 0xa000,
   RegisterAddMask: 0xff00,
   RegisterAdd: 0x4400,
   StackAddMask: 0xf800,
@@ -63,6 +71,13 @@ function expand(value: number): number {
 }
 export function decodeAddress(first: number, second?: number): ThumbInstruction | undefined {
   if (second === undefined) {
+    if ((first & Encoding.NarrowLoadMask) === Encoding.NarrowLoad)
+      return {
+        kind: "load-pointer",
+        destination: first & Field.LowRegister,
+        base: (first >>> Field.SourceShift) & Field.LowRegister,
+        immediate: ((first >>> Field.NarrowOffsetShift) & Field.NarrowOffsetMask) * Thumb.WordBytes,
+      };
     if ((first & Encoding.RegisterAddMask) === Encoding.RegisterAdd)
       return {
         kind: "add-register",
@@ -78,6 +93,15 @@ export function decodeAddress(first: number, second?: number): ThumbInstruction 
         immediate: (first & Field.ImmediateByte) * Thumb.WordBytes,
       };
     return undefined;
+  }
+  if ((first & Encoding.MultipleLoadMask) === Encoding.MultipleLoad) {
+    const base = first & Field.Register;
+    if (base === Thumb.PC || second & Encoding.MultipleForbidden) return undefined;
+    const destinations = Array.from({ length: Thumb.PC }, (_, index) => index).filter(
+      (index) => second & (1 << index),
+    );
+    if (destinations.length < Field.MinimumListRegisters) return undefined;
+    return { kind: "load-pointers", base, destinations };
   }
   if ((first & Encoding.PointerMask) === Encoding.PointerLoad)
     return {
