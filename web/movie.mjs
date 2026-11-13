@@ -1,10 +1,11 @@
+import {MoviePlayback} from '../src/runtime/ios/media/movie-playback.ts';
 // MPMoviePlayerController delivers notifications from the guest main thread.
 const finished = 'MPMoviePlayerPlaybackDidFinishNotification';
 const reasonKey = 'MPMoviePlayerPlaybackDidFinishReasonUserInfoKey';
 const floatBits = new DataView(new ArrayBuffer(8));
 
 export function moviePlayers({hostClass, method, names, alloc, destroy, retain, release, string, text, send,
-  ipa, mediaHost, diagnostic}) {
+  ipa, mediaHost, diagnostic, needsMovieResume = () => {}}) {
   const cls = 'MPMoviePlayerController', players = new Map();
   hostClass(cls, 'NSObject');
   let delivering = false;
@@ -13,8 +14,13 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       scaling: 1, autoplay: 1, controls: 1, repeat: 0, fullscreen: 0});
     return players.get(self);
   }
+  function setResume(s, needed) {
+    s.needsResume = needed;
+    needsMovieResume([...players.values()].some(player => player.needsResume));
+  }
   function reset(s) {
-    s.video?.pause();
+    s.playback?.close();
+    s.playback = null;
     s.video?.remove();
     if (s.blobURL) URL.revokeObjectURL(s.blobURL);
     s.video = null; s.blobURL = null; s.reason = undefined; s.reported = false; s.wantsPlay = false;
@@ -41,6 +47,19 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     video.playbackRate = s.rate; video.controls = !!s.controls;
     video.style.objectFit = ['none','contain','cover','fill'][s.scaling] ?? 'contain';
     const finish = reason => { if (s.video === video && !s.reported) s.reason = reason; };
+    s.playback = new MoviePlayback(video, mediaHost.ownerDocument, {
+      needsResume: needed => {
+        if (needed) {
+          video.controls = true;
+          diagnostic('info', 'movie', 'Tap the video play control to start playback');
+        }
+        setResume(s, needed);
+      },
+      failed: error => {
+        diagnostic('warn', 'movie', 'Movie playback failed', {path, message: String(error)});
+        finish(1);
+      },
+    });
     video.addEventListener('ended', () => finish(0));
     video.addEventListener('error', () => {
       if (s.video !== video) return;
@@ -62,15 +81,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     }
   }
   function playElement(s) {
-    const video = s.video;
-    if (!video?.src) return;
-    video.play().catch(error => {
-      if (s.video !== video || error.name === 'AbortError') return;
-      if (error.name === 'NotAllowedError') {
-        video.controls = true;
-        diagnostic('info', 'movie', 'Tap the video play control to start playback');
-      } else if (!s.reported) s.reason = 1;
-    });
+    if (s.video?.src) s.playback.play();
   }
   method(cls, false, 'initWithContentURL:', setURL);
   method(cls, false, 'setContentURL:', setURL);
@@ -81,7 +92,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     const s = state(self); s.wantsPlay = true;
     if (!s.video) await prepare(self); else playElement(s);
   });
-  method(cls, false, 'pause', self => { const s = state(self); s.wantsPlay = false; s.video?.pause(); });
+  method(cls, false, 'pause', self => { const s = state(self); s.wantsPlay = false; s.playback?.pause(); });
   method(cls, false, 'stop', self => reset(state(self)));
   method(cls, false, 'playbackState', self => {
     const v = state(self).video;
@@ -107,7 +118,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
   method(cls, false, 'setCurrentPlaybackRate:', (self,a) => {
     const s = state(self);
     floatBits.setUint32(0,a(0),true); const rate = floatBits.getFloat32(0,true);
-    if (rate === 0) { s.video?.pause(); return; }
+    if (rate === 0) { s.wantsPlay = false; s.playback?.pause(); return; }
     if (Number.isFinite(rate) && rate > 0 && rate <= 4) {
       s.rate = rate;
       if (s.video) { s.video.playbackRate = rate; playElement(s); }

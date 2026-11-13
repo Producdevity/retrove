@@ -35,14 +35,10 @@ const report = new SessionReport(
     if (state.fault) fail(new Error(state.fault));
     else if (state.frames > 0) showImage();
   },
-  (level, area, message) => {
+  (level, _area, message) => {
     if (level === "info") {
       detail.textContent = message;
       if (!imageVisible) status.textContent = message;
-    }
-    if (area === "movie" && message.includes("Tap")) {
-      movieResumeNeeded = true;
-      updateMedia();
     }
   },
 );
@@ -69,9 +65,15 @@ async function prepare(): Promise<void> {
   report.start(app.name);
   const archive = await openIPA(await library.open(app), report.diagnostic);
   display.configure(archive.info);
-  session = new PlayerSession(library, app, archive, display, report, (needed) => {
-    audioResumeNeeded = needed;
-    updateMedia();
+  session = new PlayerSession(library, app, archive, display, report, {
+    audio: (needed) => {
+      audioResumeNeeded = needed;
+      updateMedia();
+    },
+    movie: (needed) => {
+      movieResumeNeeded = needed;
+      updateMedia();
+    },
   });
   status.textContent = `Ready to open ${app.name}`;
   detail.textContent = "Tap Start to enable audio and launch the app.";
@@ -96,8 +98,6 @@ media.addEventListener(
   action(
     async () => {
       await session?.resumeMedia();
-      movieResumeNeeded = false;
-      updateMedia();
     },
     (error) => report.diagnostic("warn", "media", errorMessage(error)),
   ),

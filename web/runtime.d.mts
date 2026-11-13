@@ -6,6 +6,7 @@ export interface RuntimeOptions {
   report: (snapshot: unknown) => void;
   diagnostic: Diagnostic;
   mediaHost: HTMLElement;
+  needsMovieResume?: (needed: boolean) => void;
   signal: AbortSignal;
 }
 export function runGuest(archive: IpaArchive, options: RuntimeOptions): Promise<unknown>;

@@ -19,7 +19,7 @@ const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder(), utf16: new TextDecoder('utf-16le') };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
-  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, threads, sys, audio, hostGate, cxx} = {}) {
+  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, hostGate, cxx} = {}) {
   const lastDispatch = new Map();
   const classes = new Map(), names = new Map(), selectors = new Map(), owned = new Map(), poolStacks = new Map();
   const read = address => read32(cpu, address);
@@ -533,7 +533,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication',false,'setApplicationIconBadgeNumber:',(_,a)=>{badge=a(0)|0;});
   method('UIApplication',false,'applicationIconBadgeNumber',()=>badge);
   const movies = moviePlayers({hostClass, method, names, alloc, destroy, retain, release: releaseFromHost,
-    string, text, send, ipa, mediaHost, diagnostic});
+    string, text, send, ipa, mediaHost, needsMovieResume, diagnostic});
   hostClass('AVAudioSession', 'NSObject');
   let avSession;
   method('AVAudioSession', true, 'sharedInstance', () => avSession ??= alloc(names.get('AVAudioSession')));

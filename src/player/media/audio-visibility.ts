@@ -1,3 +1,4 @@
+import { waitForPlayback } from "./wait-for-playback";
 import type { VisibilitySource } from "../../runtime/ios/uikit/application/display-refresh";
 interface AudioHost extends EventTarget {
   readonly state: AudioContextState;
@@ -48,10 +49,13 @@ export class AudioVisibility {
       });
     this.update();
   };
-  async resume(): Promise<void> {
+  async resume(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     if (this.#closed || this.visibility.hidden || this.audio.state === "closed") return;
     try {
-      await this.audio.resume();
+      const resumed = this.audio.resume();
+      this.update();
+      await waitForPlayback(resumed, signal);
       if (this.visibility.hidden) this.suspend();
     } finally {
       this.update();

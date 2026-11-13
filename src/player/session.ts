@@ -1,3 +1,4 @@
+import { waitForPlayback } from "./media/wait-for-playback";
 import { AudioVisibility } from "./media/audio-visibility";
 import { runGuest } from "../../web/runtime.mjs";
 import type { IpaArchive } from "../../web/ipa.mjs";
@@ -19,6 +20,10 @@ function causedBy(error: unknown, reason: unknown): boolean {
   }
   return false;
 }
+interface MediaResume {
+  readonly audio: (needed: boolean) => void;
+  readonly movie: (needed: boolean) => void;
+}
 export class PlayerSession {
   private readonly controller = new AbortController();
   private failure: unknown;
@@ -31,7 +36,7 @@ export class PlayerSession {
     private readonly archive: IpaArchive,
     private readonly display: PlayerDisplay,
     private readonly report: SessionReport,
-    private readonly needsAudioResume: (needed: boolean) => void,
+    private readonly mediaResume: MediaResume,
   ) {}
   start(): Promise<void> {
     if (this.running) return this.running;
@@ -39,10 +44,10 @@ export class PlayerSession {
     this.audioVisibility = new AudioVisibility(
       this.sound,
       this.display.host.ownerDocument,
-      this.needsAudioResume,
+      this.mediaResume.audio,
       (error) => this.report.diagnostic("warn", "audio", errorMessage(error)),
     );
-    const resume = this.audioVisibility.resume();
+    const resume = this.audioVisibility.resume(this.controller.signal);
     this.running = this.execute(resume);
     return this.running;
   }
@@ -56,6 +61,7 @@ export class PlayerSession {
           graphics: this.display.graphics,
           audioContext: () => this.sound,
           mediaHost: this.display.host,
+          needsMovieResume: this.mediaResume.movie,
           diagnostic: this.report.diagnostic,
           report: this.report.snapshot,
           log: (message) => this.report.diagnostic("debug", "guest-output", message),
@@ -88,9 +94,11 @@ export class PlayerSession {
     }
   }
   async resumeMedia(): Promise<void> {
-    await this.audioVisibility?.resume();
-    await Promise.all(
-      [...this.display.host.querySelectorAll("video")].map((video) => video.play()),
-    );
+    await Promise.all([
+      this.audioVisibility?.resume(this.controller.signal),
+      ...[...this.display.host.querySelectorAll("video")].map((video) =>
+        waitForPlayback(video.play(), this.controller.signal),
+      ),
+    ]);
   }
 }

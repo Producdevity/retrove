@@ -34,7 +34,7 @@ const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', '
 const sleep = () => new Promise(resolve => setTimeout(resolve, 0));
 
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
-  log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, signal} = {}) {
+  log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
   let cpu, heap, threads, audio, queues, sounds, objc, closeFiles, image;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
@@ -151,7 +151,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     queues = audioQueues(cpu,heap,nested,audioContext);
     audio = audioImports(cpu, heap, nested, audioContext);
     objc = objcImports(cpu, heap, ipa, graphics, nested, signal, service, {
-      threads, sys, audio, mediaHost, diagnostic, hostGate, cxx,
+      threads, sys, audio, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
       onLifecycle: milestone,
       onPresent(presented) {
         render.presentAttempts++;

@@ -93,3 +93,21 @@ test("a delayed resume completing in the background is suspended again", async (
   expect(required).toHaveBeenLastCalledWith(false);
   media.close();
 });
+
+test("blocked startup remains recoverable and closing cancels its pending resume", async () => {
+  const source = new Visibility(),
+    audio = new Audio(),
+    required = vi.fn();
+  const controller = new AbortController(),
+    reason = new Error("App closed");
+  audio.change("suspended");
+  audio.resume.mockReturnValueOnce(new Promise<void>(() => {}));
+  const media = new AudioVisibility(audio, source, required, vi.fn());
+  const resumed = media.resume(controller.signal);
+  expect(required).toHaveBeenLastCalledWith(true);
+  const rejected = expect(resumed).rejects.toBe(reason);
+  controller.abort(reason);
+  await rejected;
+  media.close();
+  expect(required).toHaveBeenLastCalledWith(false);
+});
