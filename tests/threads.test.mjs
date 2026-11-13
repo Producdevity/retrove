@@ -88,3 +88,32 @@ test('a worker dispatch_once block can wait for a mutex held by its scheduling m
   const result = await runGuest(ipa, {signal: AbortSignal.timeout(2000)});
   assert.equal(result.exitStatus,0);
 });
+
+
+test('Darwin realtime attributes create workers at FMOD priorities', async () => {
+  const {createCPU} = await import('../web/cpu.mjs');
+  const {Heap,read32,write32} = await import('../web/memory.mjs');
+  const {threadImports} = await import('../web/threads.mjs');
+  const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
+  cpu.map(done,4096);
+  const threads = threadImports(cpu,heap,done);
+  const attribute = heap.zero(64), parameter = heap.zero(4), output = heap.zero(4);
+  const call = (name,...args) => threads.funcs[name](index=>args[index] ?? 0);
+  try {
+    for (const priority of [90,94,99]) {
+      assert.equal(call('_pthread_attr_init',attribute),0);
+      assert.equal(call('_pthread_attr_setdetachstate',attribute,2),0);
+      assert.equal(call('_pthread_attr_setstacksize',attribute,8192),0);
+      assert.equal(call('_pthread_attr_setschedpolicy',attribute,4),0);
+      write32(cpu,parameter,priority);
+      assert.equal(call('_pthread_attr_setschedparam',attribute,parameter),0);
+      assert.equal(call('_pthread_create',output,attribute,done,priority),0);
+      assert.ok(read32(cpu,output)>1);
+      assert.equal(call('_pthread_attr_destroy',attribute),0);
+    }
+    let ran = 0;
+    await threads.advance(async()=>{ran++;return {done:true,value:0};});
+    assert.equal(ran,3);
+    assert.equal(call('_pthread_create',output,attribute,done,0),22);
+  } finally {threads.close();cpu.close();}
+});

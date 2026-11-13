@@ -1,5 +1,6 @@
 import {read32, write32} from './memory.mjs';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
+import {ThreadAttributes} from '../src/runtime/ios/threads/attributes.ts';
 
 const PAGE = 4096, MAIN = 1;
 const asWait = poll => {
@@ -8,7 +9,7 @@ const asWait = poll => {
 };
 
 export function threadImports(cpu, heap, returnAddress) {
-  const attrs = new Map(), mutexAttrs = new Map(), conditions = new Map();
+  const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
   function threadPointer(id) {
@@ -56,11 +57,6 @@ export function threadImports(cpu, heap, returnAddress) {
     t.state = null; t.stack = 0;
   }
   function reap(t) { release(t); workers.delete(t.id); }
-  function attrValue(p, key, value, valid) {
-    if (!attrs.has(p) || !valid) return 22;
-    attrs.get(p)[key] = value;
-    return 0;
-  }
   function create(a) {
     const [out, attr, pc, arg] = [a(0), a(1), a(2), a(3)];
     if (!out || !pc || (attr && !attrs.has(attr))) return 22;
@@ -105,16 +101,12 @@ export function threadImports(cpu, heap, returnAddress) {
   }
 
   const funcs = {
-    _pthread_attr_init: a => { attrs.set(a(0),{}); return 0; },
-    _pthread_attr_destroy: a => attrs.delete(a(0)) ? 0 : 22,
-    _pthread_attr_setstacksize: a => attrValue(a(0),'size',Math.ceil(a(1)/PAGE)*PAGE,a(1)>=8192 && a(1)<=32*1024*1024),
-    _pthread_attr_setdetachstate: a => attrValue(a(0),'detached',a(1)===2,[1,2].includes(a(1))),
-    _pthread_attr_setschedpolicy: a => attrValue(a(0),'policy',a(1),[1,2,4].includes(a(1))),
-    _pthread_attr_setschedparam: a => {
-      if (!a(1)) return 22;
-      const priority = read32(cpu,a(1)) | 0;
-      return attrValue(a(0),'priority',priority,priority >= 0 && priority <= 63);
-    },
+    _pthread_attr_init: a => attrs.initialize(a(0)),
+    _pthread_attr_destroy: a => attrs.destroy(a(0)),
+    _pthread_attr_setstacksize: a => attrs.stackSize(a(0),a(1)),
+    _pthread_attr_setdetachstate: a => attrs.detach(a(0),a(1)),
+    _pthread_attr_setschedpolicy: a => attrs.policy(a(0),a(1)),
+    _pthread_attr_setschedparam: a => a(1) ? attrs.priority(a(0),read32(cpu,a(1)) | 0) : 22,
     _pthread_create: create,
     _pthread_self: () => current.id,
     _pthread_main_np: () => Number(current.id === MAIN),
