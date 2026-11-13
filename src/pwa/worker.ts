@@ -1,3 +1,4 @@
+import { navigationResponse, shellDocument } from "./navigation";
 declare const __RETROVE_ASSETS__: readonly string[];
 declare const __RETROVE_VERSION__: string;
 const CACHE_PREFIX = "retrove.shell:";
@@ -37,7 +38,9 @@ async function activate(): Promise<void> {
 }
 async function respond(request: Request, pathname: string): Promise<Response> {
   const cache = await caches.open(cacheName);
-  return (await cache.match(pathname)) ?? fetch(request);
+  const cached = await cache.match(pathname);
+  if (!cached) return fetch(request);
+  return request.mode === "navigate" ? navigationResponse(cached) : cached;
 }
 globalThis.addEventListener("install", (event) => {
   if (isLifetimeEvent(event)) event.waitUntil(install());
@@ -49,7 +52,6 @@ globalThis.addEventListener("fetch", (event) => {
   if (!isRequestEvent(event) || event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) return;
-  const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+  const pathname = shellDocument(url.pathname);
   if (assets.has(pathname)) event.respondWith(respond(event.request, pathname));
 });
-export {};
