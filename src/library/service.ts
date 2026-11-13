@@ -41,7 +41,7 @@ export class ApplicationLibrary {
     report(ImportPhase.Inspecting, 0);
     const metadata = await this.inspector.inspect(file, signal);
     const id = applicationId(metadata.platform, metadata.bundleId);
-    return this.environment.exclusive(id, async () => {
+    return this.environment.mutateArchive(id, async () => {
       signal.throwIfAborted();
       const previous = await this.records.get(id);
       await this.environment.ensureCapacity(file.size);
@@ -80,7 +80,7 @@ export class ApplicationLibrary {
   }
 
   async remove(id: ApplicationId): Promise<void> {
-    await this.environment.exclusive(id, async () => {
+    await this.environment.mutateArchive(id, async () => {
       const app = await this.records.get(id);
       if (!app) return;
       await this.records.remove(id);

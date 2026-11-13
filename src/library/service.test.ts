@@ -10,6 +10,8 @@ import {
 } from "../domain/application";
 import type { ArchiveRepository, LibraryEnvironment, LibraryRepository } from "./contracts";
 import { ApplicationLibrary } from "./service";
+import { browserLibraryEnvironment } from "../storage/environment";
+import { withApplicationSession } from "../runtime/session-lock";
 
 class Records implements LibraryRepository {
   readonly data = new Map<ApplicationId, InstalledApplication>();
@@ -65,14 +67,18 @@ const metadata: ApplicationMetadata = {
 };
 const file = new File(["original app"], "example.ipa");
 const replacement = new File(["replacement app"], "example-update.ipa");
-function setup() {
+function setup(coordinate = false) {
   const records = new Records();
   const archives = new Archives();
   const cleanupErrors: unknown[] = [];
   let selected = metadata;
+  const coordination = browserLibraryEnvironment((error) => cleanupErrors.push(error));
   const environment: LibraryEnvironment = {
     now: () => Date.now(),
-    exclusive: (_id, operation) => operation(),
+    exclusive: (id, operation) =>
+      coordinate ? coordination.exclusive(id, operation) : operation(),
+    mutateArchive: (id, operation) =>
+      coordinate ? coordination.mutateArchive(id, operation) : operation(),
     ensureCapacity: () => Promise.resolve(),
     requestPersistence: () => Promise.resolve(true),
     cleanupFailure: (error) => cleanupErrors.push(error),
@@ -159,4 +165,21 @@ describe("app ownership and replacement", () => {
     expect(() => applicationId(Platform.IOS, "")).toThrow();
     expect(() => applicationId(Platform.Android, "invalid\0identifier")).toThrow();
   });
+});
+
+test("an active app session blocks archive replacement and removal without blocking play metadata", async () => {
+  const context = setup(true);
+  const original = await context.importFile();
+  await withApplicationSession(original.id, async () => {
+    await expect(context.importFile(replacement)).rejects.toThrow("Close this app");
+    await expect(context.library.remove(original.id)).rejects.toThrow("Close this app");
+    await context.library.played(original.id);
+    expect((await context.library.get(original.id))?.archive).toEqual(original.archive);
+    expect(context.archives.data.size).toBe(1);
+  });
+  const updated = await context.importFile(replacement);
+  expect(updated.archive).not.toEqual(original.archive);
+  expect(context.archives.data.size).toBe(1);
+  await context.library.remove(original.id);
+  expect(context.archives.data.size).toBe(0);
 });

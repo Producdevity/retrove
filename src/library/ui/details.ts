@@ -41,11 +41,14 @@ export function appDetails(
     saves?.close();
     saves = undefined;
     selected = undefined;
+    open.disabled = remove.disabled = false;
   });
   return (app) => {
     selected = app;
     saves?.close();
-    saves = new SaveActions(app, refresh);
+    saves = new SaveActions(app, refresh, (busy) => {
+      open.disabled = remove.disabled = busy;
+    });
     contents.replaceChildren(
       icons.create(app),
       node("h2", "", app.name),

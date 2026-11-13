@@ -38,6 +38,7 @@ export interface ArchiveRepository {
 export interface LibraryEnvironment {
   now(): number;
   exclusive<T>(id: ApplicationId, operation: () => Promise<T>): Promise<T>;
+  mutateArchive<T>(id: ApplicationId, operation: () => Promise<T>): Promise<T>;
   ensureCapacity(bytes: number): Promise<void>;
   requestPersistence(): Promise<boolean>;
   cleanupFailure(error: unknown): void;

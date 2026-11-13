@@ -2,8 +2,10 @@ import { ArchiveKind, type ArchiveReference } from "../domain/application";
 import type { ArchiveRepository } from "../library/contracts";
 import type { LibraryDatabase } from "./library-database";
 
+import type { ArchiveInventory } from "./archive-maintenance";
+const OWNED_ARCHIVE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ARCHIVE_DIRECTORY = "retrove-archives";
-export class BrowserArchives implements ArchiveRepository {
+export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
   constructor(
     private readonly db: LibraryDatabase,
     private readonly storage: StorageManager = navigator.storage,
@@ -68,10 +70,26 @@ export class BrowserArchives implements ArchiveRepository {
     return (await directory.getFileHandle(reference.key)).getFile();
   }
 
+  async list(): Promise<ArchiveReference[]> {
+    const archives: ArchiveReference[] = (await this.db.archiveKeys())
+      .filter((key) => OWNED_ARCHIVE.test(key))
+      .map((key) => ({ kind: ArchiveKind.Database, key }));
+    const directory = await this.directory();
+    if (directory)
+      for await (const [key, handle] of directory.entries())
+        if (handle.kind === "file" && OWNED_ARCHIVE.test(key))
+          archives.push({ kind: ArchiveKind.FileSystem, key });
+    return archives;
+  }
+
   async remove(reference: ArchiveReference): Promise<void> {
     if (reference.kind === ArchiveKind.Database) return this.db.removeArchive(reference.key);
     const directory = await this.directory();
     if (!directory) throw new Error("File storage is unavailable in this browser.");
-    await directory.removeEntry(reference.key);
+    try {
+      await directory.removeEntry(reference.key);
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
+    }
   }
 }

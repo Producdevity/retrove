@@ -67,3 +67,18 @@ describe("persistent library records", () => {
     await storage.close();
   });
 });
+
+test("archive inventory reads keys without loading large payloads and survives reopen", async () => {
+  const factory = new IDBFactory();
+  const storage = new LibraryDatabase(factory);
+  const first = crypto.randomUUID(),
+    second = crypto.randomUUID();
+  await storage.storeArchive(new File(["one"], "one.ipa"), first);
+  await storage.storeArchive(new File(["two"], "two.ipa"), second);
+  await storage.close();
+  const reopened = new LibraryDatabase(factory);
+  expect((await reopened.archiveKeys()).sort()).toEqual([first, second].sort());
+  await reopened.removeArchive(first);
+  expect(await reopened.archiveKeys()).toEqual([second]);
+  await reopened.close();
+});

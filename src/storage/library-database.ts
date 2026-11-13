@@ -83,6 +83,13 @@ export class LibraryDatabase implements LibraryRepository {
     });
   }
 
+  async archiveKeys(): Promise<string[]> {
+    return transaction(await this.database(), [LibraryStore.Archives], "readonly", async (tx) => {
+      const keys = await requestResult(tx.objectStore(LibraryStore.Archives).getAllKeys());
+      return keys.filter((key): key is string => typeof key === "string");
+    });
+  }
+
   async removeArchive(key: string): Promise<void> {
     await transaction(await this.database(), [LibraryStore.Archives], "readwrite", async (tx) => {
       await requestResult(tx.objectStore(LibraryStore.Archives).delete(key));

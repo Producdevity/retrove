@@ -3,7 +3,12 @@ import { BrowserArchives } from "../storage/archive-repository";
 import { LibraryDatabase } from "../storage/library-database";
 import { browserLibraryEnvironment } from "../storage/environment";
 
-export function browserLibrary(report: (error: unknown) => void): ApplicationLibrary {
+import { collectOrphanArchives } from "../storage/archive-maintenance";
+interface BrowserLibrary {
+  readonly library: ApplicationLibrary;
+  readonly recover: () => Promise<number>;
+}
+export function browserLibrary(report: (error: unknown) => void): BrowserLibrary {
   const database = new LibraryDatabase();
   const inspector = {
     async inspect(file: File, signal: AbortSignal) {
@@ -11,10 +16,12 @@ export function browserLibrary(report: (error: unknown) => void): ApplicationLib
       return inspectIpa(file, signal, report);
     },
   };
-  return new ApplicationLibrary(
+  const archives = new BrowserArchives(database);
+  const library = new ApplicationLibrary(
     database,
-    new BrowserArchives(database),
+    archives,
     inspector,
     browserLibraryEnvironment(report),
   );
+  return { library, recover: () => collectOrphanArchives(database, archives) };
 }

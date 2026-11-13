@@ -16,7 +16,7 @@ const failure = (cause: unknown): void => {
   error.textContent = errorMessage(cause);
   error.hidden = false;
 };
-const library = browserLibrary(failure);
+const { library, recover } = browserLibrary(failure);
 const list = element("apps", HTMLDivElement);
 const search = element("search", HTMLInputElement);
 const count = element("library-count", HTMLParagraphElement);
@@ -29,6 +29,7 @@ const launch = (app: InstalledApplication): void => {
 };
 const storage = connectSettings(failure);
 const refresh = async (): Promise<void> => {
+  await recover().catch(failure);
   apps = (await library.list()).sort((left, right) => left.name.localeCompare(right.name));
   render();
   await storage();

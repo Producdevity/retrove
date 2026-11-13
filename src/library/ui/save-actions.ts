@@ -23,6 +23,7 @@ export class SaveActions {
   constructor(
     private readonly app: InstalledApplication,
     private readonly refresh: () => Promise<void>,
+    private readonly onBusy: (busy: boolean) => void,
   ) {
     const heading = node("h3", "", "Progress & settings");
     const help = node("p", "secondary", "Keep a backup or move your progress to another device.");
@@ -64,11 +65,13 @@ export class SaveActions {
     if (this.busy || this.controller.signal.aborted) return;
     this.busy = true;
     this.controls.disabled = true;
+    this.onBusy(true);
     try {
       await operation();
     } finally {
       this.controls.disabled = false;
       this.busy = false;
+      if (!this.controller.signal.aborted) this.onBusy(false);
     }
   }
   private async export(): Promise<void> {

@@ -42,7 +42,7 @@ const display = new PlayerDisplay((error) => {
   session?.abort(error);
   fail(error);
 }, showImage);
-const library = browserLibrary(fail);
+const { library } = browserLibrary(fail);
 function isIosId(value: string | null): value is ApplicationId {
   return (
     value !== null &&
