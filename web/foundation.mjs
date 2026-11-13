@@ -1,4 +1,5 @@
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
+import {installUrlPaths} from '../src/runtime/ios/foundation/url-paths.ts';
 import {formatDarwin} from './format.mjs';
 import {readString} from './memory.mjs';
 
@@ -312,6 +313,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSProcessInfo',false,'environment',()=>property({}));
   hostClass('NSURL','NSObject');
   const urls=new Map();
+  installUrlPaths({method,string,urls});
   function url(value,cls=names.get('NSURL')) {
     const ptr=alloc(cls);urls.set(ptr,value);return autorelease(ptr);
   }

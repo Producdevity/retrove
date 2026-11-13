@@ -1,3 +1,4 @@
+import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
 import {nonlocalJumps} from './nonlocal-jump.mjs';
@@ -35,6 +36,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
   const render = {clearCalls: 0, drawCalls: 0, presentAttempts: 0, presentedFrames: 0};
+  const importMetrics = new ImportMetrics();
   const recent = [], active = [], deferred = new Map();
   const missingAssets = [], missingAssetSet = new Set(), recentMissingAssets = [];
   let missingAssetRequests = 0;
@@ -52,7 +54,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, heapAllocations: heap?.live.size, exitStatus,
-      recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+      topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
     phase = message;
@@ -172,7 +174,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       const at = GATES + gates.size * 4;
       if (at >= RETURN) throw Error('Too many imported functions');
       gates.set(key, at);
-      stubs.set(at, {fn, binding: b});
+      stubs.set(at, {fn, binding: b, counter: importMetrics.register(b.name)});
       return at;
     }
     cpu.map(GATES, GATE_BYTES, 5);
@@ -303,6 +305,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
       if (!host.fn) throw Error('Missing import ' + lastSymbol + ' from ' + (host.binding.library || 'flat namespace') + ' (guest LR ' + hex(lr) + ')');
       calls++;
+      host.counter.calls++;
       const arg = n => n < 4 ? cpu.getReg(n) : read32(cpu, cpu.getReg(13) + (n - 4) * 4);
       active.push({name:lastSymbol,thread});
       let value;

@@ -374,3 +374,23 @@ test('NSURL backup exclusion checks file existence and reports unsupported resou
   assert.equal(await x.send(missing,'setResourceValue:forKey:error:',yes,key,error),0);
   assert.equal(await x.send(x.read(error),'code'),4);
 });
+
+test('NSURL path queries match Foundation for escaped separators, directories and dotfiles', async t => {
+  const x=await fixture(t);
+  const pool=x.f('_objc_autoreleasePoolPush');
+  const string=value=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(value));
+  for(const [value,last,extension] of [
+    ['file:///Documents/a%20b.dat','a b.dat','dat'],
+    ['file:///Documents/folder/','folder',''],
+    ['file:///','/',''],
+    ['https://example.com/a%2Fb.tar.gz?x=1','b.tar.gz','gz'],
+    ['file:///Documents/.hidden','.hidden',''],
+  ]) {
+    const url=await x.send(x.cls('NSURL'),'URLWithString:',await string(value));
+    for(const [selector,expected] of [['lastPathComponent',last],['pathExtension',extension]]) {
+      const result=await x.send(url,selector);
+      assert.equal(readString(x.cpu,await x.send(result,'UTF8String')),expected);
+    }
+  }
+  await x.f('_objc_autoreleasePoolPop',pool);
+});
