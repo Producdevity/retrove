@@ -23,3 +23,13 @@ The CPU starts with the bundled Unicorn interpreter and compiles hot TCI blocks 
 To rebuild the generated CPU module, activate Emscripten 3.1.69 and run `sh scripts/rebuild-unicorn.sh`. The script uses the bundled sources, applies the maintained patches and native bridge, and removes its temporary build directory. Run `vp check`, `vp test` and `vp build` afterward.
 
 See `NOTICE.md` for source provenance.
+
+## Runtime direction
+
+Retrove targets a shared ARM32 execution core with separate iOS and Android platform support. The CPU boundary owns registers, instruction execution, memory permissions, interrupts and code invalidation. Platform layers own executable loading and operating-system APIs. Graphics, audio, input and persistent storage are host services. Game-specific compatibility stays outside the CPU core.
+
+BioShock is the first acceptance workload. Its Linux port is a reference for individual compatibility issues, not Retrove's runtime foundation. Supporting another operating system requires its API and ABI implementation; CPU support alone does not make arbitrary IPAs or APKs compatible.
+
+The next CPU candidate reuses [Dynarmic's ARM frontend](https://github.com/touchHLE/dynarmic) with a new Wasm backend, including SIMD and block dispatch inside Wasm. It remains an isolated experiment. The shipped backend described above has not been replaced. Integration requires broader instruction and floating-point correctness, memory and code invalidation tests, bounded cache behavior, and measured gameplay on modern phones.
+
+Keep the library shell independent of execution modules, load platform support when needed, and bound translation and asset caches. A full guest operating-system image is outside this architecture. The acceptance target remains sustained interactive gameplay at 30 FPS, with save and relaunch verification.
