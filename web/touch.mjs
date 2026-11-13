@@ -1,0 +1,449 @@
+import {phoneScreen} from './screen.mjs';
+import {uiImages} from './uikit-images.mjs';
+
+const floatBits = new DataView(new ArrayBuffer(8));
+const float = bits => { floatBits.setUint32(0, bits, true); return floatBits.getFloat32(0, true); };
+const bits = n => { floatBits.setFloat32(0, n, true); return floatBits.getUint32(0, true); };
+const double = n => { floatBits.setFloat64(0, n, true); return floatBits.getBigUint64(0, true); };
+const phases = {pointerdown: [0, 'touchesBegan:withEvent:'], pointermove: [1, 'touchesMoved:withEvent:'],
+  pointerup: [3, 'touchesEnded:withEvent:'], pointercancel: [4, 'touchesCancelled:withEvent:']};
+
+export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
+  selector, read, write, graphics, signal, text, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
+  for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
+    ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
+  hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
+  const views = new Map(), controllerViews = new Map(), touches = new Map(), collections = new Map(), eventTouches = new Map();
+  const active = new Map(), queue = [];
+  let window = 0, screen = 0, canvas, events, previousTap, animation;
+  async function withAnimation(seconds,delay,options,changes) {
+    const previous=animation;
+    const start=performance.now();
+    animation={duration:Math.max(0,seconds),delay:Math.max(0,delay),curve:['ease-in-out','ease-in','ease-out','linear'][(options>>>16)&3],start};
+    try {return await changes();} finally {animation=previous;}
+  }
+  function data(ptr) {
+    if (!views.has(ptr)) views.set(ptr, {frame:[0,0,0,0],bounds:[0,0,0,0],children:[],parent:0,hidden:false,
+      interactive:true,multi:false,alpha:1,layer:0,controller:0,transform:[1,0,0,1,0,0]});
+    return views.get(ptr);
+  }
+  const readRect = a => [0,1,2,3].map(i => float(a(i)));
+  function rectMethod(cls, name, get) {
+    const fn = (self, _, dest) => get(self).forEach((value,i) => write(dest + i*4, bits(value)));
+    fn.stret = true; method(cls, false, name, fn);
+  }
+  function bounds() {
+    const {width:w, height:h} = phoneScreen;
+    return getOrientation() > 2 ? [0,0,h,w] : [0,0,w,h];
+  }
+  const setFrame = (self, r) => {
+    const v = data(self);
+    v.layoutAnimation=animation;
+    if (v.bounds[2] !== r[2] || v.bounds[3] !== r[3]) {
+      v.needsLayout=true;
+      v.needsDisplay=true;
+    }
+    v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
+  };
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds});
+  function detach(self) {
+    const v = data(self);
+    if (v.parent) { const next = data(v.parent).children; next.splice(next.indexOf(self),1); }
+    v.parent = 0;
+  }
+  const deallocObject=lookup(names.get('NSObject'),'dealloc');
+  method('UIView',false,'dealloc',async self=>{
+    const v=views.get(self);
+    if(v) {
+      if(window===self)window=0;
+      if(v.parent)detach(self);
+      for(const child of v.children)data(child).parent=0;
+      for(const owned of [...v.children,v.image,v.highlightedImage,v.backgroundColor,v.layer,v.rootController]) {
+        if(owned)await releaseFromHost(owned);
+      }
+      views.delete(self);
+    }
+    imageViews.removeView(self);
+    await deallocObject(self);
+  });
+  method('CALayer',false,'dealloc',async self=>{
+    const v=views.get(self);
+    if(v) {
+      if(v.borderColor)await releaseFromHost(v.borderColor);
+      if(v.drawableProperties)await releaseFromHost(v.drawableProperties);
+      views.delete(self);
+    }
+    await deallocObject(self);
+  });
+  function attach(parent, child) {
+    if (!child) return;
+    for (let p=parent; p; p=data(p).parent) if (p === child) throw Error('UIView hierarchy cycle');
+    if(!data(child).parent)retain(child);
+    detach(child);
+    data(child).parent = parent; data(parent).children.push(child); data(parent).needsLayout=true; data(child).needsLayout=true;
+  }
+  function key(self) {
+    window = self; data(self).hidden = false;
+    if (!data(self).bounds[2]) setFrame(self, bounds());
+  }
+  method('UIScreen',true,'mainScreen',() => screen ||= alloc(names.get('UIScreen')));
+  method('UIScreen',true,'screens',() => autorelease(collection('NSArray',[screen ||= alloc(names.get('UIScreen'))])));
+  const portraitBounds=()=>[0,0,phoneScreen.width,phoneScreen.height];
+  rectMethod('UIScreen','bounds',portraitBounds); rectMethod('UIScreen','applicationFrame',portraitBounds);
+  method('UIScreen',false,'scale',() => bits(phoneScreen.scale));
+  method('UIView',false,'initWithFrame:',(self,a) => setFrame(self,readRect(a)));
+  method('UIView',false,'setFrame:',(self,a) => { setFrame(self,readRect(a)); });
+  method('UIView',false,'setBounds:',(self,a) => {
+    const v=data(self), bounds=readRect(a), [x,y,w,h]=v.frame;
+    v.layoutAnimation=animation; v.bounds=bounds; v.needsDisplay=true; v.needsLayout=true;
+    v.frame=[x+(w-bounds[2])/2,y+(h-bounds[3])/2,bounds[2],bounds[3]];
+  });
+  async function layout(view) {
+    const v=data(view);
+    if(v.needsLayout) {
+      v.needsLayout=false;
+      if(v.controller)await send(v.controller,'viewWillLayoutSubviews',[],true);
+      await send(view,'layoutSubviews');
+      if(v.controller)await send(v.controller,'viewDidLayoutSubviews',[],true);
+    }
+    for(const child of [...v.children])if(data(child).parent===view)await layout(child);
+  }
+  method('UIView',false,'layoutSubviews',()=>{});
+  method('UIView',false,'setNeedsLayout',s=>{data(s).needsLayout=true;});
+  method('UIView',false,'layoutIfNeeded',layout);
+  for(const sel of ['setNeedsDisplay','setNeedsDisplayInRect:'])method('UIView',false,sel,self=>{data(self).needsDisplay=true;});
+  function frame(s) {
+    const v=data(s),[x,y,w,h]=v.bounds;
+    const corners=[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map(p=>toParent(v,p));
+    const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]),left=Math.min(...xs),top=Math.min(...ys);
+    return [left,top,Math.max(...xs)-left,Math.max(...ys)-top];
+  }
+  rectMethod('UIView','frame',frame); rectMethod('UIView','bounds',s=>data(s).bounds);
+  method('UIView',false,'addSubview:',(self,a)=>attach(self,a(0)));
+  method('UIView',false,'removeFromSuperview',s=>{if(data(s).parent){detach(s);return releaseFromHost(s);}});
+  method('UIView',false,'superview',self=>data(self).parent);
+  method('UIView',false,'window',self => { let v=self; while(data(v).parent) v=data(v).parent; return v===window ? v : 0; });
+  method('UIView',false,'setHidden:',(s,a)=>{ data(s).hidden=!!a(0); });
+  method('UIView',false,'isHidden',s=>Number(data(s).hidden));
+  method('UIView',false,'setAlpha:',(s,a)=>{ data(s).alpha=float(a(0));data(s).opacityAnimation=animation; });
+  method('UIView',false,'alpha',s=>bits(data(s).alpha));
+  for (const [getter,setter,prop] of [['isUserInteractionEnabled','setUserInteractionEnabled:','interactive'],
+    ['isMultipleTouchEnabled','setMultipleTouchEnabled:','multi']]) {
+    method('UIView',false,getter,s=>Number(data(s)[prop]));
+    method('UIView',false,setter,(s,a)=>{data(s)[prop]=!!a(0);});
+  }
+  method('UIView',true,'layerClass',()=>names.get('CALayer'));
+  method('UIView',false,'layer',async self => {
+    const v=data(self);
+    if (!v.layer) v.layer=await send(await send(await send(read(self),'layerClass'),'alloc'),'init');
+    return v.layer;
+  });
+  method('UIWindow',false,'setScreen:',(s,a)=>{data(s).screen=a(0);});
+  method('UIWindow',false,'screen',s=>data(s).screen??(screen ||= alloc(names.get('UIScreen'))));
+  for(const [cls,getter,setter,fallback] of [
+    ['UIWindow','windowLevel','setWindowLevel:',0],['UIView','isOpaque','setOpaque:',1],
+    ['UIView','contentScaleFactor','setContentScaleFactor:',bits(1)],['UIView','tag','setTag:',0],
+    ['UIView','contentMode','setContentMode:',0],['UIView','autoresizingMask','setAutoresizingMask:',0],
+    ['UIView','clearsContextBeforeDrawing','setClearsContextBeforeDrawing:',1],['UIView','clipsToBounds','setClipsToBounds:',0],['UIView','autoresizesSubviews','setAutoresizesSubviews:',1],
+    ['CALayer','contentsScale','setContentsScale:',bits(1)],['CALayer','isOpaque','setOpaque:',0],
+    ['CALayer','borderWidth','setBorderWidth:',0],['CALayer','cornerRadius','setCornerRadius:',0],
+    ['CALayer','masksToBounds','setMasksToBounds:',0],['UIViewController','wantsFullScreenLayout','setWantsFullScreenLayout:',0]]) {
+    method(cls,false,getter,s=>data(s)[getter]??fallback);
+    method(cls,false,setter,(s,a)=>{data(s)[getter]=a(0);});
+  }
+  for(const [cls,getter,setter] of [['UIView','backgroundColor','setBackgroundColor:'],['CALayer','borderColor','setBorderColor:'],
+    ['CAEAGLLayer','drawableProperties','setDrawableProperties:']]) {
+    method(cls,false,getter,s=>data(s)[getter]??0);
+    method(cls,false,setter,async(s,a)=>{const d=data(s),old=d[getter];d[getter]=retain(a(0));if(old)await releaseFromHost(old);});
+  }
+  const center=(s,_,dest)=>{const [x,y,w,h]=data(s).frame;write(dest,bits(x+w/2));write(dest+4,bits(y+h/2));};
+  center.stret=true;method('UIView',false,'center',center);
+  method('UIView',false,'setCenter:',(s,a)=>{const view=data(s),f=view.frame;view.layoutAnimation=animation;f[0]=float(a(0))-f[2]/2;f[1]=float(a(1))-f[3]/2;});
+  method('UIView',false,'subviews',s=>autorelease(collection('NSArray',data(s).children)));
+  method('UIView',false,'bringSubviewToFront:',(s,a)=>{const list=data(s).children,i=list.indexOf(a(0));if(i>=0)list.push(...list.splice(i,1));});
+  method('UIView',false,'viewWithTag:',(s,a)=>{const target=a(0),walk=p=>data(p).tag===target?p:data(p).children.map(walk).find(Boolean)??0;return walk(s);});
+  hostClass('UIColor','NSObject',20);
+  function color(r,g,b,a) {const value=alloc(names.get('UIColor'));[r,g,b,a].forEach((n,i)=>write(value+4+i*4,bits(n)));return autorelease(value);}
+  const colors={blackColor:[0,0,0,1],whiteColor:[1,1,1,1],redColor:[1,0,0,1],clearColor:[0,0,0,0],darkTextColor:[0,0,0,1]};
+  for(const [name,channels] of Object.entries(colors))method('UIColor',true,name,()=>color(...channels));
+  method('UIColor',true,'colorWithRed:green:blue:alpha:',(_,a)=>color(...[0,1,2,3].map(i=>float(a(i)))));
+  method('UIColor',false,'CGColor',s=>s);
+  for(const mode of ['set','setFill','setStroke'])method('UIColor',false,mode,s=>{
+    getCoreGraphics?.()?.setColor([0,1,2,3].map(i=>float(read(s+4+i*4))),mode!=='setStroke',mode!=='setFill');
+  });
+  method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
+  method('UIApplication',false,'keyWindow',()=>window);
+  method('UIViewController',false,'setView:',async(self,a)=>{
+    const view=a(0), old=controllerViews.get(self);
+    if(old===view)return;
+    controllerViews.set(self,retain(view));
+    if(view)data(view).controller=self;
+    if(old){data(old).controller=0;await releaseFromHost(old);}
+  });
+  method('UIViewController',false,'view',async self=>{
+    if (!controllerViews.get(self)) {
+      if (typeof lookup(read(self),'loadView') === 'number') await send(self,'loadView');
+      else await send(self,'setView:',[autorelease(setFrame(alloc(names.get('UIView')),bounds()))]);
+      await send(self,'viewDidLoad',[],true);
+    }
+    return controllerViews.get(self) ?? 0;
+  });
+  method('UIWindow',false,'setRootViewController:',async (self,a)=>{
+    const v=data(self), controller=a(0);
+    const previous=v.rootController;
+    if(previous===controller)return;
+    if(previous) {
+      const old=controllerViews.get(previous);
+      if(old&&data(old).parent===self) {detach(old);await releaseFromHost(old);}
+      await releaseFromHost(previous);
+    }
+    v.rootController=retain(controller);
+    if(!controller) return;
+    const root=await send(controller,'view');
+    if (!root) throw Error('UIWindow root controller returned nil view');
+    if (!data(root).bounds[2]) setFrame(root,v.bounds[2]?v.bounds:bounds());
+    attach(self,root);
+  });
+  method('UIWindow',false,'rootViewController',s=>data(s).rootController ?? 0);
+  const nextResponder = self => data(self).controller || data(self).parent;
+  method('UIView',false,'nextResponder',nextResponder);
+  method('UIViewController',false,'nextResponder',self=>controllerViews.has(self)?data(controllerViews.get(self)).parent:0);
+  for (const [,name] of Object.values(phases)) {
+    method('UIResponder',false,name,async (self,a)=>{
+      const next=await send(self,'nextResponder',[],true);
+      if(next) await send(next,name,[a(0),a(1)],true);
+    });
+  }
+  // UIKit transforms operate about the view's center. Keep model frame and
+  // bounds in logical points even when the browser scales the backing canvas.
+  function rotation(view) {
+    const parent=view.parent&&data(view.parent);
+    if(!parent || !view.controller || parent.rootController!==view.controller || parent.bounds[2]>=parent.bounds[3])return 0;
+    return getOrientation()>2?getOrientation():0;
+  }
+  // Before iOS 8 the window remains portrait in landscape. UIKit centers its
+  // root controller's view and applies the interface-orientation transform.
+  function rootToWindow(view, point, inverse) {
+    const orient=rotation(view);
+    if(!orient)return point;
+    const wb=data(view.parent).bounds;
+    let [x,y]=point;
+    if(inverse){
+      x-=wb[0];y-=wb[1];
+      return orient===3?[y,wb[2]-x]:[wb[3]-y,x];
+    }
+    return orient===3?[wb[0]+wb[2]-y,wb[1]+x]:[wb[0]+y,wb[1]+wb[3]-x];
+  }
+  function fromParent(view, point) {
+    point=rootToWindow(view,point,true);
+    const [x,y,w,h]=view.frame, [bx,by,bw,bh]=view.bounds;
+    const [a,b,c,d,tx,ty]=view.transform, det=a*d-b*c;
+    if (!det) return [Infinity, Infinity];
+    const px=point[0]-(x+w/2+tx), py=point[1]-(y+h/2+ty);
+    return [bx+bw/2+(px*d-py*c)/det, by+bh/2+(py*a-px*b)/det];
+  }
+  function toParent(view, point) {
+    const [x,y,w,h]=view.frame, [bx,by,bw,bh]=view.bounds;
+    const [a,b,c,d,tx,ty]=view.transform;
+    const px=point[0]-bx-bw/2, py=point[1]-by-bh/2;
+    return rootToWindow(view,[x+w/2+tx+a*px+c*py, y+h/2+ty+b*px+d*py],false);
+  }
+  function convertPoint(point, from, to) {
+    for(let p=from;p&&p!==window;p=data(p).parent) point=toParent(data(p),point);
+    const chain=[];
+    for(let p=to;p&&p!==window;p=data(p).parent) chain.push(p);
+    for(const p of chain.reverse()) point=fromParent(data(p),point);
+    return point;
+  }
+  function displayBounds(win) {
+    const [,,w,h]=data(win).bounds;
+    return w<h&&getOrientation()>2?[0,0,h,w]:[0,0,w,h];
+  }
+  function displayPoint(point, from, win) {
+    const [bx,by,w,h]=data(win).bounds;
+    const p=convertPoint(point,from,win),x=p[0]-bx,y=p[1]-by;
+    if(w<h && getOrientation()===3)return [y,w-x];
+    if(w<h && getOrientation()===4)return [h-y,x];
+    return [x,y];
+  }
+  const transform=(s,_,dest)=>data(s).transform.forEach((v,i)=>write(dest+i*4,bits(v)));
+  transform.stret=true; method('UIView',false,'transform',transform);
+  method('UIView',false,'setTransform:',(s,a)=>{data(s).transform=Array.from({length:6},(_,i)=>float(a(i)));data(s).layoutAnimation=animation;});
+  for(const [name,fromSelf] of [['convertPoint:toView:',true],['convertPoint:fromView:',false]]) {
+    const convert=(s,a,dest)=>convertPoint([float(a(0)),float(a(1))],fromSelf?s:a(2),fromSelf?a(2):s)
+      .forEach((v,i)=>write(dest+i*4,bits(v)));
+    convert.stret=true;method('UIView',false,name,convert);
+  }
+  for(const [name,fromSelf] of [['convertRect:toView:',true],['convertRect:fromView:',false]]) {
+    const convert=(s,a,dest)=>{
+      const [x,y,w,h]=readRect(a),from=fromSelf?s:a(4),to=fromSelf?a(4):s;
+      const corners=[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map(p=>convertPoint(p,from,to));
+      const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]),l=Math.min(...xs),t=Math.min(...ys);
+      [l,t,Math.max(...xs)-l,Math.max(...ys)-t].forEach((v,i)=>write(dest+i*4,bits(v)));
+    };
+    convert.stret=true;method('UIView',false,name,convert);
+  }
+  method('UIViewController',false,'interfaceOrientation',()=>getOrientation());
+  function pointInView(self, ref, previous) {
+    const t=touches.get(self);
+    return convertPoint(previous?t.previous:t.point,window,ref);
+  }
+  for(const [name,previous] of [['locationInView:',false],['previousLocationInView:',true]]) {
+    const fn=(self,a,dest)=>pointInView(self,a(0),previous).forEach((n,i)=>write(dest+i*4,bits(n)));
+    fn.stret=true; method('UITouch',false,name,fn);
+  }
+  method('UITouch',false,'view',s=>touches.get(s).target);
+  method('UITouch',false,'window',s=>touches.get(s).window);
+  method('UITouch',false,'phase',s=>touches.get(s).phase);
+  method('UITouch',false,'timestamp',s=>double(touches.get(s).time));
+  method('UITouch',false,'tapCount',s=>touches.get(s).taps);
+  method('UITouch',false,'dealloc',s=>{touches.delete(s); destroy(s);});
+  method('UIEvent',false,'allTouches',s=>eventTouches.get(s));
+  method('UIEvent',false,'dealloc',s=>{eventTouches.delete(s); destroy(s);});
+  function collection(cls, items) {
+    const obj=alloc(names.get(cls)); collections.set(obj,items.map(retain)); return obj;
+  }
+  function items(s) {
+    if(!collections.has(s)) collections.set(s,[]);
+    return collections.get(s);
+  }
+  for(const [cls, mutable, factory] of [['NSArray','NSMutableArray','array'],['NSSet','NSMutableSet','set']]){
+    method(cls,true,factory,c=>autorelease(alloc(c)));
+    method(cls,true,factory+'WithObject:',(c,a)=>{const ptr=alloc(c);items(ptr).push(retain(a(0)));return autorelease(ptr);});
+    method(mutable,true,factory+'WithCapacity:',c=>autorelease(alloc(c)));
+    method(cls,false,'containsObject:',async(s,a)=>{
+      const target=a(0);for(const item of items(s)) if(item===target||await send(item,'isEqual:',[target]))return 1;
+      return 0;
+    });
+    method(mutable,false,'addObject:',async(s,a)=>{
+      const value=a(0);if(!value)throw Error('Adding nil to '+mutable);
+      if(cls==='NSSet'&&await send(s,'containsObject:',[value]))return;
+      items(s).push(retain(value));
+    });
+    method(mutable,false,'removeAllObjects',async s=>{for(const v of items(s).splice(0))await releaseFromHost(v);});
+    method(mutable,false,'removeObject:',async(s,a)=>{
+      const target=a(0),list=items(s);
+      for(let i=list.length-1;i>=0;i--) if(list[i]===target||await send(list[i],'isEqual:',[target])){
+        const [v]=list.splice(i,1);await releaseFromHost(v);
+      }
+    });
+    method(cls,false,'copy',s=>collection(cls,items(s)));
+    method(cls,false,'mutableCopy',s=>collection(mutable,items(s)));
+  }
+  method('NSArray',true,'arrayWithObjects:',(cls,a)=>{
+    const ptr=alloc(cls);for(let i=0;a(i);i++)items(ptr).push(retain(a(i)));return autorelease(ptr);
+  });
+  method('NSArray',true,'arrayWithObjects:count:',(cls,a)=>{
+    const ptr=alloc(cls);for(let i=0;i<a(1);i++)items(ptr).push(retain(read(a(0)+i*4)));return autorelease(ptr);
+  });
+  method('NSArray',false,'initWithArray:',(s,a)=>{collections.set(s,items(a(0)).map(retain));return s;});
+  method('NSArray',false,'lastObject',s=>items(s).at(-1)??0);
+  method('NSArray',false,'firstObject',s=>items(s)[0]??0);
+  method('NSMutableArray',false,'removeObjectAtIndex:',(s,a)=>{
+    const list=items(s),at=a(0);if(at>=list.length)throw Error('NSArray index outside bounds');
+    return releaseFromHost(list.splice(at,1)[0]);
+  });
+  method('NSMutableArray',false,'insertObject:atIndex:',(s,a)=>{
+    const p=a(0),i=a(1),list=items(s);if(!p||i>list.length)throw Error('Invalid NSMutableArray insertion');
+    list.splice(i,0,retain(p));
+  });
+  for (const cls of ['NSSet','NSArray']) {
+    method(cls,false,'count',s=>items(s).length);
+    method(cls,false,'dealloc',async s=>{
+      const items = collections.get(s) || [];
+      collections.delete(s);
+      for (const ptr of items) await releaseFromHost(ptr);
+      destroy(s);
+    });
+    method(cls,false,'countByEnumeratingWithState:objects:count:',(s,a)=>{
+      const state=a(0), buffer=a(1), start=read(state), items=collections.get(s)??[];
+      const n=Math.min(a(2),Math.max(0,items.length-start));
+      if(n) {
+        for(let i=0;i<n;i++)write(buffer+i*4,items[start+i]);
+        write(state,start+n); write(state+4,buffer); write(state+8,s);
+      }
+      return n;
+    });
+  }
+  method('NSArray',false,'objectAtIndex:',(s,a)=>{
+    if(a(0)>=items(s).length) throw Error('NSArray index outside bounds');
+    return items(s)[a(0)];
+  });
+  method('NSSet',false,'anyObject',s=>collections.get(s)[0] ?? 0);
+  method('NSSet',false,'allObjects',s=>autorelease(collection('NSArray',[...collections.get(s)])));
+  function hit(self, x,y) {
+    const v=data(self),[bx,by,w,h]=v.bounds;
+    if(v.hidden || !v.interactive || v.alpha<=0.01 || x<bx || y<by || x>=bx+w || y>=by+h) return 0;
+    for (let i=v.children.length-1;i>=0;i--) {
+      const p=v.children[i],child=data(p);
+      const found=hit(p,...fromParent(child,[x,y]));
+      if(found)return found;
+    }
+    return self;
+  }
+  function connect() {
+    if(!window || canvas)return;
+    canvas=graphics().canvas; events=new AbortController();
+    const enqueue = e=>{
+      if(e.pointerType==='mouse' && e.type==='pointerdown' && e.button!==0)return;
+      const rect=canvas.getBoundingClientRect(), b=data(window).bounds;
+      if(!rect.width || !rect.height)return;
+      let x=(e.clientX-rect.left)/rect.width, y=(e.clientY-rect.top)/rect.height;
+      const orientation=getOrientation();
+      if (b[2]<b[3] && orientation>2) {
+        if(orientation===3) [x,y]=[1-y,x];
+        if(orientation===4) [x,y]=[y,1-x];
+      }
+      const point=[b[0]+x*b[2],b[1]+y*b[3]];
+      if(e.type==='pointerdown' && canvas.hasPointerCapture && !canvas.hasPointerCapture(e.pointerId)) {
+        try {canvas.setPointerCapture(e.pointerId);} catch { /* Synthetic events have no active pointer. */ }
+      }
+      if(e.type==='pointermove' && !e.buttons && e.pointerType==='mouse') return;
+      queue.push({id:e.pointerId,type:e.type,point,time:e.timeStamp/1000});
+      e.preventDefault();
+    };
+    canvas.style.touchAction='none';
+    for(const type of Object.keys(phases))canvas.addEventListener(type,enqueue,{passive:false,signal:events.signal});
+    signal?.addEventListener('abort',disconnect,{once:true});
+  }
+  function disconnect(){events?.abort(); signal?.removeEventListener('abort',disconnect);canvas=null;}
+  async function pump() {
+    if(window)await layout(window);
+    await imageViews.render(window);
+    for(const e of queue.splice(0)) {
+      let t=active.get(e.id);
+      if(e.type==='pointerdown') {
+        if(t) continue;
+        const target=hit(window,...e.point);
+        if(!target || (!data(target).multi && [...active.values()].some(a=>a.target===target)))continue;
+        const taps = previousTap && previousTap.target===target && e.time-previousTap.time < 0.35 &&
+          Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10 ? previousTap.taps+1 : 1;
+        t={ptr:alloc(names.get('UITouch')),window,target,taps,point:e.point};
+        active.set(e.id,t); touches.set(t.ptr,t);
+      }
+      if(!t)continue;
+      const [phase,name]=phases[e.type];
+      t.phase=phase; t.previous=t.point; t.point=e.point; t.time=e.time;
+      const changed=collection('NSSet',[t.ptr]), all=collection('NSSet',[...active.values()].map(t=>t.ptr));
+      const event=alloc(names.get('UIEvent')); eventTouches.set(event,all);
+      try {await send(t.target,name,[changed,event]);}
+      finally {
+        await releaseFromHost(changed); await releaseFromHost(all); await releaseFromHost(event);
+        if(phase>=3) {
+          if(phase===3)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};
+          active.delete(e.id); await releaseFromHost(t.ptr);
+        }
+      }
+    }
+  }
+  function scene(className) {
+    const nodes=[],pending=window?[window]:[];
+    while(pending.length&&nodes.length<12) {
+      const p=pending.shift(),v=data(p);
+      nodes.push({class:className(p),controller:v.controller?className(v.controller):undefined,rootController:v.rootController?className(v.rootController):undefined, frame:v.frame.slice(),bounds:v.bounds.slice(), transform:v.transform.slice(),hidden:v.hidden});
+      pending.push(...v.children.slice(0,12));
+    }
+    return nodes;
+  }
+  return {scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+}

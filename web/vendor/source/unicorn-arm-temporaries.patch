@@ -1,0 +1,19 @@
+--- a/qemu/tcg/tcg.c
++++ b/qemu/tcg/tcg.c
+@@ -1568,6 +1568,16 @@
+     op->args[pi++] = flags;
+     TCGOP_CALLI(op) = real_args;
+
++#if defined(__EMSCRIPTEN__) && TCG_TARGET_REG_BITS == 32
++    /* The wasm helper adapter widens every narrow argument to a temporary.
++       The op now owns the references; later ops can reuse these temp slots. */
++    for (i = 0; i < nargs; i++) {
++        if (!(sizemask & (1u << ((i + 1) * 2)))) {
++            tcg_temp_free_internal(tcg_ctx, args[i]);
++        }
++    }
++#endif
++
+     /* Make sure the fields didn't overflow.  */
+     tcg_debug_assert(TCGOP_CALLI(op) == real_args);
+     tcg_debug_assert(pi <= ARRAY_SIZE(op->args));

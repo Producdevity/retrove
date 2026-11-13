@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {createCPU} from '../web/cpu.mjs';
+import {read32, write32} from '../web/memory.mjs';
+import {virtualMemoryImports} from '../web/vm.mjs';
+
+test('Darwin page mappings support partial unmap, first-fit reuse, and MAP_FIXED replacement', async t => {
+  const cpu = await createCPU();
+  t.after(() => cpu.close());
+  cpu.map(0x3000, 4096, 3);
+  const vm = virtualMemoryImports(cpu, 0x3000), args = (...values) => i => values[i] ?? 0;
+  const anon = (address, size, flags = 0x1002) => vm._mmap(args(address, size, 3, flags, 0xffffffff));
+  const base = anon(0, 3 * 4096);
+  assert.ok(base !== 0xffffffff && base % 4096 === 0);
+  assert.equal(cpu.mappedBytes, 4 * 4096);
+  write32(cpu, base, 0x1234);
+  write32(cpu, base + 4096, 0x5678);
+  write32(cpu, base + 8192, 0x9abc);
+  assert.equal(vm._munmap(args(base + 4096, 1)), 0);
+  assert.throws(() => read32(cpu, base + 4096));
+  assert.equal(anon(0, 1), base + 4096);
+  assert.equal(read32(cpu, base + 4096), 0);
+  assert.equal(anon(base + 8192, 1, 0x1012), base + 8192);
+  assert.equal(read32(cpu, base + 8192), 0);
+  assert.equal(read32(cpu, base), 0x1234);
+  assert.equal(vm._munmap(args(base, 3 * 4096)), 0);
+  assert.equal(cpu.mappedBytes, 4096);
+  assert.throws(() => read32(cpu, base));
+  assert.equal(vm._munmap(args(base + 1, 4096)), 0xffffffff);
+  assert.equal(read32(cpu, 0x3000), 22);
+});
