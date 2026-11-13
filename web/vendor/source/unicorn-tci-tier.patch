@@ -15,7 +15,7 @@
  
 +retrove_next_block:
 +    {
-+        int status = retrove_dispatch(regs, &tb_ptr, &ret);
++        int status = retrove_dispatch(env, regs, &tb_ptr, &ret);
 +        if (status > 0) return ret;
 +        if (status == 0) goto retrove_next_block;
 +    }

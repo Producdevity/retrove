@@ -22,11 +22,14 @@ export interface TciTierModule {
   _retrove_tci_load_entry(): number;
   _retrove_tci_store_entry(): number;
   _retrove_tci_statistics(): number;
+  _retrove_tci_evict(): number;
   _retrove_tci_configure(threshold: number): void;
   addFunction(procedure: CompiledTciBlock, signature: "iiii"): number;
   removeFunction(index: number): void;
 }
 export interface TciTierStatistics {
+  readonly recoveries: number;
+  readonly evictions: number;
   readonly registered: number;
   readonly attempts: number;
   readonly executions: number;
@@ -83,7 +86,7 @@ export class TciTier {
     module._retrove_tci_configure(threshold);
   }
   #compile(address: number, size: number): number {
-    if (this.#closed || this.#functions.size === TciTierLimit.Functions) return 0;
+    if (this.#closed) return 0;
     try {
       const block = decodeTci(
         this.#module.HEAPU8.subarray(address, address + size),
@@ -91,7 +94,15 @@ export class TciTier {
         this.#abi,
       );
       const binary = tciModule(block, this.#host.pc);
-      if (this.#bytes + binary.length > TciTierLimit.Bytes) return 0;
+      if (binary.length > TciTierLimit.Bytes)
+        throw new Error("Compiled TCI block exceeds the code budget.");
+      while (
+        this.#functions.size >= TciTierLimit.Functions ||
+        this.#bytes + binary.length > TciTierLimit.Bytes
+      ) {
+        if (!this.#module._retrove_tci_evict())
+          throw new Error("TCI cache cannot release a compiled block.");
+      }
       const procedure = compileTciBinary(binary, this.#host);
       const index = this.#module.addFunction(procedure, "iiii");
       this.#functions.set(index, binary.length);
@@ -115,11 +126,19 @@ export class TciTier {
   }
   get statistics(): TciTierStatistics {
     const WORD_BYTES = 4,
-      METRICS = 4;
+      METRICS = 6;
     const start = this.#module._retrove_tci_statistics() / WORD_BYTES;
-    const [registered = 0, attempts = 0, executions = 0, fallbacks = 0] =
-      this.#module.HEAPU32.subarray(start, start + METRICS);
+    const [
+      registered = 0,
+      attempts = 0,
+      executions = 0,
+      fallbacks = 0,
+      recoveries = 0,
+      evictions = 0,
+    ] = this.#module.HEAPU32.subarray(start, start + METRICS);
     return {
+      recoveries,
+      evictions,
       registered,
       attempts,
       executions,

@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <emscripten.h>
+#include "exec/exec-all.h"
 
-#define RETROVE_TIER_BITS 14
+#define RETROVE_TIER_BITS 12
+#define RETROVE_TIER_WAYS 4
 #define RETROVE_TIER_SLOTS (1u << RETROVE_TIER_BITS)
 #define RETROVE_TIER_HASH 0x9e3779b1u
 #define RETROVE_TIER_MAX_BYTES 65536u
@@ -12,12 +14,14 @@ typedef struct {
     uint32_t size;
     uint32_t hits;
     RetroveBlock compiled;
+    uint32_t used;
 } RetroveEntry;
 
-static RetroveEntry retrove_entries[RETROVE_TIER_SLOTS];
+static RetroveEntry retrove_entries[RETROVE_TIER_SLOTS * RETROVE_TIER_WAYS];
+static uint32_t retrove_clock;
 static uint32_t retrove_enabled;
 static uint32_t retrove_threshold = 64;
-static uint32_t retrove_metrics[4];
+static uint32_t retrove_metrics[6];
 
 EM_JS(int, retrove_compile, (int address, int size), {
     return Module['retroveTier'] ? Module['retroveTier'].compile(address >>> 0, size) : 0;
@@ -32,22 +36,69 @@ EM_JS(void, retrove_clear, (), {
 static RetroveEntry *retrove_entry(uintptr_t address)
 {
     uint32_t index = ((address >> 2) * RETROVE_TIER_HASH) >> (32 - RETROVE_TIER_BITS);
-    return &retrove_entries[index];
+    RetroveEntry *group = &retrove_entries[index * RETROVE_TIER_WAYS];
+    for (uint32_t way = 0; way < RETROVE_TIER_WAYS; way++)
+        if (group[way].address == address) return &group[way];
+    for (uint32_t way = 0; way < RETROVE_TIER_WAYS; way++)
+        if (!group[way].address) return &group[way];
+    RetroveEntry *cold = NULL;
+    uint32_t heat = UINT32_MAX;
+    for (uint32_t way = 0; way < RETROVE_TIER_WAYS; way++) {
+        uint32_t hits = group[way].hits == UINT32_MAX ? 0 : group[way].hits;
+        if (!group[way].compiled && (!cold || hits < heat)) {
+            cold = &group[way];
+            heat = hits;
+        }
+    }
+    if (cold) return cold;
+    for (uint32_t way = 0; way < RETROVE_TIER_WAYS; way++) {
+        if (!group[way].used) return &group[way];
+        group[way].used = 0;
+    }
+    return group;
+}
+
+static void retrove_discard(RetroveEntry *entry)
+{
+    if (!entry->compiled) return;
+    retrove_release((int)(uintptr_t)entry->compiled);
+    entry->compiled = NULL;
+    entry->hits = 0;
+    retrove_metrics[5]++;
+}
+
+static RetroveEntry *retrove_record(uintptr_t address, uint32_t size)
+{
+    RetroveEntry *entry = retrove_entry(address);
+    retrove_discard(entry);
+    *entry = (RetroveEntry){address, size, 0, NULL, 0};
+    return entry;
 }
 
 void retrove_tci_register(void *code, uint32_t size)
 {
-    RetroveEntry *entry;
     if (!retrove_enabled || !size || size > RETROVE_TIER_MAX_BYTES) return;
-    entry = retrove_entry((uintptr_t)code);
-    if (entry->compiled) retrove_release((int)(uintptr_t)entry->compiled);
-    *entry = (RetroveEntry){(uintptr_t)code, size, 0, NULL};
+    retrove_record((uintptr_t)code, size);
     retrove_metrics[0]++;
+}
+
+EMSCRIPTEN_KEEPALIVE int retrove_tci_evict(void)
+{
+    const uint32_t entries = ARRAY_SIZE(retrove_entries);
+    for (uint32_t scanned = 0; scanned < entries * 2; scanned++) {
+        RetroveEntry *entry = &retrove_entries[retrove_clock++ % entries];
+        if (!entry->compiled) continue;
+        if (entry->used) { entry->used = 0; continue; }
+        retrove_discard(entry);
+        return 1;
+    }
+    return 0;
 }
 
 void retrove_tci_reset(void)
 {
     memset(retrove_entries, 0, sizeof(retrove_entries));
+    retrove_clock = 0;
     retrove_clear();
 }
 
@@ -64,12 +115,21 @@ EMSCRIPTEN_KEEPALIVE uintptr_t retrove_tci_statistics(void)
     return (uintptr_t)retrove_metrics;
 }
 
-static int retrove_dispatch(uint32_t *regs, uint8_t **next, uintptr_t *result)
+static int retrove_dispatch(CPUArchState *env, uint32_t *regs, uint8_t **next, uintptr_t *result)
 {
     RetroveEntry *entry;
     if (!retrove_enabled) return -1;
     entry = retrove_entry((uintptr_t)*next);
-    if (entry->address != (uintptr_t)*next) { retrove_metrics[3]++; return -1; }
+    if (entry->address != (uintptr_t)*next) {
+        TranslationBlock *tb = tcg_tb_lookup(env->uc->tcg_ctx, (uintptr_t)*next);
+        if (!tb || tb->tc.ptr != *next || !tb->tc.size || tb->tc.size > RETROVE_TIER_MAX_BYTES) {
+            retrove_metrics[3]++;
+            return -1;
+        }
+        entry = retrove_record((uintptr_t)*next, tb->tc.size);
+        retrove_metrics[4]++;
+    }
+    entry->used = 1;
     if (!entry->compiled && entry->hits != UINT32_MAX && ++entry->hits >= retrove_threshold) {
         entry->hits = UINT32_MAX;
         retrove_metrics[1]++;
