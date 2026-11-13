@@ -109,7 +109,7 @@ test("ARM division preserves 32-bit boundaries and reports zero divisors through
     cpu.trap(fallback, () => {
       called = true;
     });
-    for (const name of ["___umodsi3", "___udivsi3", "___modsi3", "___divsi3"]) {
+    for (const name of ["___umodsi3", "___udivsi3", "___modsi3", "___divsi3", "___divmodsi4"]) {
       called = false;
       const address = helpers.get(name);
       if (address === undefined) throw new Error("Missing division helper.");
@@ -120,6 +120,49 @@ test("ARM division preserves 32-bit boundaries and reports zero divisors through
       expect(called).toBe(true);
       expect([cpu.getReg(0), cpu.getReg(1), cpu.getReg(14)]).toEqual([42, 0, returnTo]);
     }
+  } finally {
+    cpu.close();
+  }
+});
+
+test("ARM combined division writes the remainder and preserves caller-owned registers", async () => {
+  const { cpu, call, destination } = await fixture();
+  try {
+    for (const left of [-2147483648, -17, -1, 0, 1, 17, 2147483647])
+      for (const right of [-2147483648, -7, -1, 1, 7, 2147483647]) {
+        cpu.write(destination, new Uint8Array(12).fill(0xaa));
+        for (let register = 4; register <= 11; register++) cpu.setReg(register, register * 17);
+        expect(call("___divmodsi4", left, right, destination + 4)).toBe(
+          Math.trunc(left / right) >>> 0,
+        );
+        const data = cpu.read(destination, 12);
+        expect(new DataView(data.buffer).getInt32(4, true)).toBe((left % right) | 0);
+        expect([...data.subarray(0, 4), ...data.subarray(8)]).toEqual(new Array(8).fill(0xaa));
+        for (let register = 4; register <= 11; register++)
+          expect(cpu.getReg(register)).toBe(register * 17);
+      }
+  } finally {
+    cpu.close();
+  }
+});
+test("ARM strcmp compares unsigned bytes without reading beyond a terminator", async () => {
+  const { cpu, call, destination, source } = await fixture();
+  try {
+    for (const left of [[], [1], [127], [128], [255], [65, 66]])
+      for (const right of [[], [1], [127], [128], [255], [65, 67]]) {
+        const leftBytes = Uint8Array.from([...left, 0]);
+        const rightBytes = Uint8Array.from([...right, 0]);
+        cpu.write(destination, leftBytes);
+        cpu.write(source, rightBytes);
+        let expected = 0;
+        for (let i = 0; i < Math.max(leftBytes.length, rightBytes.length); i++) {
+          expected = (leftBytes[i] ?? 0) - (rightBytes[i] ?? 0);
+          if (expected) break;
+        }
+        expect(call("_strcmp", destination, source) | 0).toBe(expected);
+      }
+    cpu.write(source + 4095, Uint8Array.of(0));
+    expect(call("_strcmp", source + 4095, source + 4095)).toBe(0);
   } finally {
     cpu.close();
   }

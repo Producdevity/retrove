@@ -97,3 +97,25 @@ retrove_div:
 retrove_divide_fallback:
 .Ldivide_fallback:
  .word 0
+
+.global retrove_divmod
+retrove_divmod:
+ cmp r1, #0
+ ldreq pc, .Ldivide_fallback
+ sdiv r3, r0, r1
+ mls r1, r3, r1, r0
+ str r1, [r2]
+ mov r0, r3
+ bx lr
+.global retrove_strcmp
+retrove_strcmp:
+1:
+ ldrb r2, [r0], #1
+ ldrb r3, [r1], #1
+ subs ip, r2, r3
+ movne r0, ip
+ bxne lr
+ cmp r2, #0
+ bne 1b
+ mov r0, #0
+ bx lr

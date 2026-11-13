@@ -38,5 +38,7 @@ export function guestLibc(
     ["___udivsi3", base + artifact.symbols.retrove_udiv],
     ["___modsi3", base + artifact.symbols.retrove_mod],
     ["___divsi3", base + artifact.symbols.retrove_div],
+    ["___divmodsi4", base + artifact.symbols.retrove_divmod],
+    ["_strcmp", base + artifact.symbols.retrove_strcmp],
   ]);
 }
