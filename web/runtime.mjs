@@ -1,4 +1,5 @@
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
+import {ExecutionMetrics} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
@@ -6,7 +7,7 @@ import {nonlocalJumps} from './nonlocal-jump.mjs';
 import {coreGraphics} from './coregraphics.mjs';
 import {commonCrypto} from './commoncrypto.mjs';
 import {createCPU} from './cpu.mjs';
-import {prepareApplication} from './profiles/index.mjs';
+import {prepareApplication} from '../src/runtime/ios/profiles/index.ts';
 import {parseMachO, loadMachO, prepareStartup} from './macho.mjs';
 import {Heap, read32, write32} from './memory.mjs';
 import {systemImports} from './libsystem.mjs';
@@ -38,6 +39,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   let link = {}, exitStatus, firstRender = false;
   const render = {clearCalls: 0, drawCalls: 0, presentAttempts: 0, presentedFrames: 0};
   const importMetrics = new ImportMetrics();
+  const executionMetrics = new ExecutionMetrics();
   const recent = [], active = [], deferred = new Map();
   const missingAssets = [], missingAssetSet = new Set(), recentMissingAssets = [];
   let missingAssetRequests = 0;
@@ -55,7 +57,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, heapAllocations: heap?.live.size, exitStatus,
-      topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+      execution: executionMetrics.snapshot(), input: objc?.inputSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
     phase = message;
@@ -294,7 +296,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         }
       }
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
-      if (result.reason === 'budget') { budgetSlices++; return {pc:result.pc, budget:true}; }
+      if (result.reason === 'budget') { budgetSlices++; executionMetrics.sample(threads.funcs._pthread_self(),result.pc,image.symbolAt(result.pc)); return {pc:result.pc, budget:true}; }
       const host = stubs.get(pending);
       if (!host) throw Error('Invalid import gate ' + hex(pending));
       const lr = cpu.getReg(14);

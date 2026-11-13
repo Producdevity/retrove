@@ -1,3 +1,4 @@
+import {InputMetrics, DropReason} from '../src/runtime/diagnostics/input-metrics.ts';
 import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
@@ -13,12 +14,13 @@ const phases = {pointerdown: [0, 'touchesBegan:withEvent:'], pointermove: [1, 't
   pointerup: [3, 'touchesEnded:withEvent:'], pointercancel: [4, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, selectorName, read, write, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
+  selector, selectorName, className, read, write, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
   const views = new Map(), controllerViews = new Map(), touches = new Map(), collections = new Map(), eventTouches = new Map();
   const active = new Map(), queue = [];
+  const inputMetrics = new InputMetrics();
   let window = 0, screen = 0, canvas, events, previousTap, animation;
   async function withAnimation(seconds,delay,options,changes) {
     const previous=animation;
@@ -402,6 +404,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
         try {canvas.setPointerCapture(e.pointerId);} catch { /* Synthetic events have no active pointer. */ }
       }
       if(e.type==='pointermove' && !e.buttons && e.pointerType==='mouse') return;
+      inputMetrics.receive();
       queue.push({id:e.pointerId,type:e.type,point,time:e.timeStamp/1000});
       e.preventDefault();
     };
@@ -416,20 +419,21 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     for(const e of queue.splice(0)) {
       let t=active.get(e.id);
       if(e.type==='pointerdown') {
-        if(t) continue;
+        if(t) {inputMetrics.drop(DropReason.Duplicate);continue;}
         const target=hit(window,...e.point);
-        if(!target || (!data(target).multi && [...active.values()].some(a=>a.target===target)))continue;
+        if(!target) {inputMetrics.drop(DropReason.NoTarget);continue;}
+        if(!data(target).multi && [...active.values()].some(a=>a.target===target)) {inputMetrics.drop(DropReason.Occupied);continue;}
         const taps = previousTap && previousTap.target===target && e.time-previousTap.time < 0.35 &&
           Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10 ? previousTap.taps+1 : 1;
         t={ptr:alloc(names.get('UITouch')),window,target,taps,point:e.point};
         active.set(e.id,t); touches.set(t.ptr,t);
       }
-      if(!t)continue;
+      if(!t){inputMetrics.drop(DropReason.Missing);continue;}
       const [phase,name]=phases[e.type];
       t.phase=phase; t.previous=t.point; t.point=e.point; t.time=e.time;
       const changed=collection('NSSet',[t.ptr]), all=collection('NSSet',[...active.values()].map(t=>t.ptr));
       const event=alloc(names.get('UIEvent')); eventTouches.set(event,all);
-      try {await send(t.target,name,[changed,event]);}
+      try {inputMetrics.dispatch(className(t.target),e.type,e.point);await send(t.target,name,[changed,event]);}
       finally {
         await releaseFromHost(changed); await releaseFromHost(all); await releaseFromHost(event);
         if(phase>=3) {
@@ -448,5 +452,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>inputMetrics.snapshot(),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }

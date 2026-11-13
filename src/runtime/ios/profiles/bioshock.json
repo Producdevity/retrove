@@ -1,0 +1,301 @@
+{
+  "sha256": "3ae21f0f246b72977e072be5a5311d54fd3820a974c31cdbd3fa2b0c0af7631e",
+  "name": "BioShock 1.3.5",
+  "groups": [
+    {
+      "name": "Existing platform compatibility",
+      "words": [
+        {
+          "offset": 25773824,
+          "original": 3813670912,
+          "replacement": 3851689984
+        },
+        {
+          "offset": 25773828,
+          "original": 436207619,
+          "replacement": 3780116482
+        },
+        {
+          "offset": 25773832,
+          "original": 3851689984,
+          "replacement": 436207618
+        },
+        {
+          "offset": 25773836,
+          "original": 3818917888,
+          "replacement": 3813670912
+        },
+        {
+          "offset": 25773840,
+          "original": 3813801984,
+          "replacement": 452984823
+        },
+        {
+          "offset": 25773844,
+          "original": 167772166,
+          "replacement": 3925868551
+        },
+        {
+          "offset": 27729800,
+          "original": 1,
+          "replacement": 0
+        },
+        {
+          "offset": 27729804,
+          "original": 1,
+          "replacement": 0
+        },
+        {
+          "offset": 25814048,
+          "original": 3808954248,
+          "replacement": 3925868574
+        },
+        {
+          "offset": 25804608,
+          "original": 3912057008,
+          "replacement": 3778019102
+        },
+        {
+          "offset": 25803512,
+          "original": 3912057072,
+          "replacement": 3778019102
+        },
+        {
+          "offset": 25857676,
+          "original": 3808954712,
+          "replacement": 3925868588
+        },
+        {
+          "offset": 24832644,
+          "original": 3851427840,
+          "replacement": 3926111534
+        },
+        {
+          "offset": 12887944,
+          "original": 3945969374,
+          "replacement": 3945874929
+        },
+        {
+          "offset": 25804612,
+          "original": 3785375744,
+          "replacement": 3813736480
+        },
+        {
+          "offset": 25804616,
+          "original": 3808952472,
+          "replacement": 866127904
+        },
+        {
+          "offset": 25804620,
+          "original": 3812622779,
+          "replacement": 3851427840
+        },
+        {
+          "offset": 25804624,
+          "original": 3800920072,
+          "replacement": 3942402764
+        },
+        {
+          "offset": 25804628,
+          "original": 3851423744,
+          "replacement": 3814260749
+        },
+        {
+          "offset": 25804632,
+          "original": 3809019592,
+          "replacement": 436302058
+        },
+        {
+          "offset": 25804636,
+          "original": 3812622779,
+          "replacement": 3851796520
+        },
+        {
+          "offset": 25804640,
+          "original": 3851419648,
+          "replacement": 3814457376
+        },
+        {
+          "offset": 25804644,
+          "original": 3942740747,
+          "replacement": 973172967
+        },
+        {
+          "offset": 25804648,
+          "original": 3808956600,
+          "replacement": 3813802016
+        },
+        {
+          "offset": 25804652,
+          "original": 3812626875,
+          "replacement": 866132000
+        },
+        {
+          "offset": 25804656,
+          "original": 3851489280,
+          "replacement": 3925962980
+        }
+      ]
+    },
+    {
+      "name": "Canvas point dimensions",
+      "words": [
+        {
+          "offset": 12226252,
+          "original": 3778019124,
+          "replacement": 3946040360
+        },
+        {
+          "offset": 12226284,
+          "original": 3778019121,
+          "replacement": 3946040359
+        },
+        {
+          "offset": 10560764,
+          "original": 3851460772,
+          "replacement": 3946456746
+        },
+        {
+          "offset": 10560788,
+          "original": 3851444392,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 10561016,
+          "original": 3851460772,
+          "replacement": 3946456683
+        },
+        {
+          "offset": 10561020,
+          "original": 3851444392,
+          "replacement": 3810586624
+        },
+        {
+          "offset": 25804660,
+          "original": 3942740743,
+          "replacement": 3808477236
+        },
+        {
+          "offset": 25804664,
+          "original": 3809368292,
+          "replacement": 3812672073
+        },
+        {
+          "offset": 25804668,
+          "original": 3812643295,
+          "replacement": 3852255232
+        },
+        {
+          "offset": 25804672,
+          "original": 3851751424,
+          "replacement": 3814457344
+        },
+        {
+          "offset": 25804676,
+          "original": 3884187649,
+          "replacement": 3808428600
+        },
+        {
+          "offset": 25804680,
+          "original": 3809022040,
+          "replacement": 318768128
+        },
+        {
+          "offset": 25804684,
+          "original": 3812626875,
+          "replacement": 3778019102
+        },
+        {
+          "offset": 25804688,
+          "original": 3851489280,
+          "replacement": 3808477236
+        },
+        {
+          "offset": 25804692,
+          "original": 3809291136,
+          "replacement": 3812672073
+        },
+        {
+          "offset": 25804696,
+          "original": 3812631007,
+          "replacement": 3852255232
+        },
+        {
+          "offset": 25804700,
+          "original": 3942740733,
+          "replacement": 3814457344
+        },
+        {
+          "offset": 25804704,
+          "original": 3851767808,
+          "replacement": 3808428352
+        },
+        {
+          "offset": 25804708,
+          "original": 3809017948,
+          "replacement": 318767872
+        },
+        {
+          "offset": 25804712,
+          "original": 3812622779,
+          "replacement": 3778019102
+        },
+        {
+          "offset": 25804716,
+          "original": 3851423744,
+          "replacement": 3808477236
+        },
+        {
+          "offset": 25804720,
+          "original": 3885236229,
+          "replacement": 3812672073
+        },
+        {
+          "offset": 25804724,
+          "original": 3809291152,
+          "replacement": 3852255232
+        },
+        {
+          "offset": 25804728,
+          "original": 3812631007,
+          "replacement": 3814457344
+        },
+        {
+          "offset": 25804732,
+          "original": 3942740725,
+          "replacement": 3808469560
+        },
+        {
+          "offset": 25804736,
+          "original": 3809017952,
+          "replacement": 318809088
+        },
+        {
+          "offset": 25804740,
+          "original": 3812622779,
+          "replacement": 3808452928
+        },
+        {
+          "offset": 25804744,
+          "original": 3851423744,
+          "replacement": 318792448
+        },
+        {
+          "offset": 25804748,
+          "original": 3885236229,
+          "replacement": 3778019102
+        }
+      ]
+    },
+    {
+      "name": "Empty global-object cleanup loop",
+      "words": [
+        {
+          "offset": 11358772,
+          "original": 3808692832,
+          "replacement": 3925868623
+        }
+      ]
+    }
+  ]
+}

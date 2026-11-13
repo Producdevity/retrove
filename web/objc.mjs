@@ -512,7 +512,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
   let quartz;
-  const input = touchUIKit({getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const input = touchUIKit({className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
@@ -791,7 +791,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       await send(center,'postNotificationName:object:userInfo:',[string(notification),avSession??=alloc(names.get('AVAudioSession')),info]);
     },
     async fileURLPath(url) { return await send(url, 'isFileURL') ? text(await send(url, 'path')) : null; },
-    close() { movies.close(); input.close(); }, get lastSelector() {
+    close() { movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
+    get lastSelector() {
     const latest=lastDispatch.get(threadId());if(!latest)return;
     const {cls:lastClass,method:lastMethod}=latest;
     return (lastClass?.isMeta ? '+' : '-') + '[' + (lastClass?.name || '?').slice(0, 96) + ' ' + lastMethod.slice(0, 128) + ']';

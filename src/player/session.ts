@@ -5,7 +5,7 @@ import { errorMessage } from "../domain/validation";
 import type { ApplicationLibrary } from "../library/service";
 import type { SessionReport } from "./report";
 import type { PlayerDisplay } from "./display";
-const SESSION_LOCK_PREFIX = "retrove.session:";
+import { withApplicationSession } from "../runtime/session-lock";
 function causedBy(error: unknown, reason: unknown): boolean {
   const visited = new Set<unknown>();
   for (
@@ -40,23 +40,18 @@ export class PlayerSession {
   private async execute(audioReady: Promise<void>): Promise<void> {
     try {
       await audioReady;
-      await navigator.locks.request(
-        SESSION_LOCK_PREFIX + this.app.id,
-        { ifAvailable: true },
-        async (lock) => {
-          if (!lock) throw new Error("This app is already running in another window.");
-          await this.library.played(this.app.id);
-          await runGuest(this.archive, {
-            signal: this.controller.signal,
-            graphics: this.display.graphics,
-            audioContext: () => this.sound,
-            mediaHost: this.display.host,
-            diagnostic: this.report.diagnostic,
-            report: this.report.snapshot,
-            log: (message) => this.report.diagnostic("debug", "guest-output", message),
-          });
-        },
-      );
+      await withApplicationSession(this.app.id, async () => {
+        await this.library.played(this.app.id);
+        await runGuest(this.archive, {
+          signal: this.controller.signal,
+          graphics: this.display.graphics,
+          audioContext: () => this.sound,
+          mediaHost: this.display.host,
+          diagnostic: this.report.diagnostic,
+          report: this.report.snapshot,
+          log: (message) => this.report.diagnostic("debug", "guest-output", message),
+        });
+      });
       this.report.finish("completed", "App exited");
     } catch (error) {
       if (this.controller.signal.aborted && causedBy(error, this.controller.signal.reason))
