@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { createCPU } from "../../../../../web/cpu.mjs";
-import { installBioShockKernels, SkinningEntry } from "./kernels";
+import { ArrayCopyEntry, installBioShockKernels, SkinningEntry } from "./kernels";
 import type { KernelHost } from "./kernels";
 async function fixture() {
   const cpu = await createCPU({ budget: "blocks" });
@@ -10,8 +10,9 @@ async function fixture() {
     gate = 0x5000;
   for (const [address, size] of [
     [0x89a000, 8192],
+    [0x907000, 4096],
     [frame, 8192],
-    [fallback, 4096],
+    [fallback, 8192],
     [gate, 4096],
   ]) {
     if (address === undefined || size === undefined) throw new Error("Invalid test memory.");
@@ -22,6 +23,9 @@ async function fixture() {
   write(SkinningEntry.Address, SkinningEntry.OutputLoad);
   write(SkinningEntry.Address + 4, SkinningEntry.CountCompare);
   write(SkinningEntry.Continue, SkinningEntry.EpilogueLoad);
+  write(ArrayCopyEntry.Address, ArrayCopyEntry.ClearIndex);
+  write(ArrayCopyEntry.Address + 4, ArrayCopyEntry.ArrayLoad);
+  write(ArrayCopyEntry.Continue, ArrayCopyEntry.EpilogueAddress);
   write(frame + 8, 0);
   write(frame + 12, data + 512);
   write(frame + 16, data + 1024);
@@ -29,12 +33,19 @@ async function fixture() {
   cpu.setReg(6, data);
   cpu.setReg(7, frame);
   cpu.setReg(8, data + 128);
-  let invoke: (() => { jump: number }) | undefined;
+  const callbacks: (() => { jump: number })[] = [];
+  let nextFallback = fallback;
   const host: KernelHost = {
     cpu,
-    heap: { alloc: () => fallback },
+    heap: {
+      alloc: () => {
+        const address = nextFallback;
+        nextFallback += 4096;
+        return address;
+      },
+    },
     gate: (_name, run) => {
-      invoke = run;
+      callbacks.push(run);
       return gate;
     },
   };
@@ -46,8 +57,9 @@ async function fixture() {
     frame,
     data,
     fallback,
-    execute() {
-      expect(cpu.run(SkinningEntry.Address, { count: 10 }).reason).toBe("trap");
+    execute(entry = SkinningEntry.Address) {
+      expect(cpu.run(entry, { count: 10 }).reason).toBe("trap");
+      const invoke = callbacks[entry === SkinningEntry.Address ? 0 : 1];
       if (!invoke) throw new Error("Kernel was not installed.");
       return invoke().jump;
     },
@@ -104,6 +116,54 @@ test("kernel installation rejects unexpected instructions before allocating or p
   const f = await fixture();
   try {
     f.write(SkinningEntry.Address + 4, 0);
+    expect(() => installBioShockKernels(f.host)).toThrow(/instructions/);
+    expect(new DataView(f.cpu.read(SkinningEntry.Address, 4).buffer).getUint32(0, true)).toBe(
+      SkinningEntry.OutputLoad,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("wide-array bridge copies storage and falls back to the original constructor on aliasing", async () => {
+  const f = await fixture();
+  try {
+    installBioShockKernels(f.host);
+    const source = f.frame,
+      destination = f.frame + 16,
+      stack = f.frame + 128;
+    f.write(source, f.data);
+    f.write(source + 4, 3);
+    f.write(source + 8, 3);
+    f.write(destination, f.data + 128);
+    f.write(destination + 4, 0);
+    f.write(destination + 8, 3);
+    f.write(stack + 36, destination);
+    f.cpu.write(f.data, new Uint8Array(Uint32Array.of(65, 0, 0x1f984).buffer));
+    f.cpu.setReg(2, source);
+    f.cpu.setReg(3, 3);
+    f.cpu.setReg(4, f.data + 128);
+    f.cpu.setReg(13, stack);
+    const registers = Array.from({ length: 15 }, (_, index) => f.cpu.getReg(index));
+    expect(f.execute(ArrayCopyEntry.Address)).toBe(ArrayCopyEntry.Continue);
+    expect(Array.from({ length: 15 }, (_, index) => f.cpu.getReg(index))).toEqual(registers);
+    expect(f.cpu.read(f.data + 128, 12)).toEqual(f.cpu.read(f.data, 12));
+    f.write(destination + 4, 0);
+    f.write(source, f.data + 128);
+    expect(f.execute(ArrayCopyEntry.Address)).toBe(f.fallback + 4096);
+    expect(
+      f.cpu.run(f.fallback + 4096, { until: ArrayCopyEntry.Address + 8, count: 10 }).reason,
+    ).toBe("until");
+    expect(f.cpu.getReg(6)).toBe(0);
+    expect(f.cpu.getReg(1)).toBe(destination);
+  } finally {
+    f.close();
+  }
+});
+test("a mismatched array routine leaves the earlier skinning entry untouched", async () => {
+  const f = await fixture();
+  try {
+    f.write(ArrayCopyEntry.Continue, 0);
     expect(() => installBioShockKernels(f.host)).toThrow(/instructions/);
     expect(new DataView(f.cpu.read(SkinningEntry.Address, 4).buffer).getUint32(0, true)).toBe(
       SkinningEntry.OutputLoad,

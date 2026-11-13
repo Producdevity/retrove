@@ -1,4 +1,5 @@
 import type { GuestCPU } from "../../../../../web/cpu.mjs";
+import { copyWideArray } from "./array-copy";
 import { requiredBoneBytes, SkinningLayout, skinVertices } from "./skinning";
 
 const WORD_BYTES = 4;
@@ -15,6 +16,22 @@ export const SkinningEntry = {
   CountCompare: 0xe3540000,
   EpilogueLoad: 0xe59d0014,
 };
+export const ArrayCopyEntry = {
+  Address: 0x907264,
+  Continue: 0x907348,
+  ClearIndex: 0xe3a06000,
+  ArrayLoad: 0xe59d1024,
+  EpilogueAddress: 0xe28d0028,
+};
+interface Kernel {
+  readonly name: string;
+  readonly address: number;
+  readonly continuation: number;
+  readonly first: number;
+  readonly second: number;
+  readonly epilogue: number;
+  readonly run: (cpu: GuestCPU) => boolean;
+}
 const Register = { RigidCount: 4, Rigid: 6, Frame: 7, Soft: 8 };
 const Frame = { SoftCount: 8, Matrices: 12, Output: 16 };
 export interface KernelHost {
@@ -77,27 +94,47 @@ function skin(cpu: GuestCPU): boolean {
   cpu.write(output, result);
   return true;
 }
-export function installBioShockKernels({ cpu, heap, gate }: KernelHost): void {
-  if (
-    read(cpu, SkinningEntry.Address) !== SkinningEntry.OutputLoad ||
-    read(cpu, SkinningEntry.Address + WORD_BYTES) !== SkinningEntry.CountCompare ||
-    read(cpu, SkinningEntry.Continue) !== SkinningEntry.EpilogueLoad
-  )
-    throw new Error("BioShock skinning instructions do not match the verified profile.");
+export function installBioShockKernels(host: KernelHost): void {
+  const kernels: readonly Kernel[] = [
+    {
+      name: "BioShock skinning",
+      address: SkinningEntry.Address,
+      continuation: SkinningEntry.Continue,
+      first: SkinningEntry.OutputLoad,
+      second: SkinningEntry.CountCompare,
+      epilogue: SkinningEntry.EpilogueLoad,
+      run: skin,
+    },
+    {
+      name: "BioShock wide-array copy",
+      address: ArrayCopyEntry.Address,
+      continuation: ArrayCopyEntry.Continue,
+      first: ArrayCopyEntry.ClearIndex,
+      second: ArrayCopyEntry.ArrayLoad,
+      epilogue: ArrayCopyEntry.EpilogueAddress,
+      run: copyWideArray,
+    },
+  ];
+  for (const kernel of kernels) {
+    if (
+      read(host.cpu, kernel.address) !== kernel.first ||
+      read(host.cpu, kernel.address + WORD_BYTES) !== kernel.second ||
+      read(host.cpu, kernel.continuation) !== kernel.epilogue
+    )
+      throw new Error(`${kernel.name} instructions do not match the verified profile.`);
+  }
+  for (const kernel of kernels) installKernel(host, kernel);
+}
+function installKernel({ cpu, heap, gate }: KernelHost, kernel: Kernel): void {
   const fallback = heap.alloc(PAGE_BYTES, PAGE_BYTES);
   if (!fallback) throw new Error("Unable to allocate the BioShock kernel fallback.");
   cpu.write(
     fallback,
-    words(
-      SkinningEntry.OutputLoad,
-      SkinningEntry.CountCompare,
-      ARM_ABSOLUTE_JUMP,
-      SkinningEntry.Address + PATCH_BYTES,
-    ),
+    words(kernel.first, kernel.second, ARM_ABSOLUTE_JUMP, kernel.address + PATCH_BYTES),
   );
   cpu.protect(fallback, PAGE_BYTES, READ_EXECUTE);
-  const target = gate("BioShock skinning", () => ({
-    jump: skin(cpu) ? SkinningEntry.Continue : fallback,
+  const target = gate(kernel.name, () => ({
+    jump: kernel.run(cpu) ? kernel.continuation : fallback,
   }));
-  cpu.write(SkinningEntry.Address, words(ARM_ABSOLUTE_JUMP, target));
+  cpu.write(kernel.address, words(ARM_ABSOLUTE_JUMP, target));
 }
