@@ -1,3 +1,5 @@
+import type { Diagnostic } from "../../web/ipa.mjs";
+import { graphicsContextInfo } from "../runtime/graphics/context-info";
 import { initialOrientation, phoneScreen } from "../../web/screen.mjs";
 import { element } from "../ui/dom";
 const LAST_PORTRAIT_ORIENTATION = 2;
@@ -9,6 +11,7 @@ export class PlayerDisplay {
   constructor(
     private readonly fault: (error: Error) => void,
     onImage: () => void,
+    private readonly diagnostic: Diagnostic,
   ) {
     this.observer = new MutationObserver(() => {
       if (this.host.querySelector('canvas[style*="position"]')) onImage();
@@ -44,6 +47,7 @@ export class PlayerDisplay {
     );
     this.host.prepend(canvas);
     this.context = context;
+    this.diagnostic("info", "graphics", "Graphics context created", graphicsContextInfo(context));
     return context;
   };
   close(): void {

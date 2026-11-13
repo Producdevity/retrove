@@ -42,10 +42,14 @@ const report = new SessionReport(
     }
   },
 );
-const display = new PlayerDisplay((error) => {
-  session?.abort(error);
-  fail(error);
-}, showImage);
+const display = new PlayerDisplay(
+  (error) => {
+    session?.abort(error);
+    fail(error);
+  },
+  showImage,
+  report.diagnostic,
+);
 const { library } = browserLibrary(fail);
 function isIosId(value: string | null): value is ApplicationId {
   return (
