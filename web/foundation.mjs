@@ -1,4 +1,5 @@
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
+import {installValues} from '../src/runtime/ios/foundation/values.ts';
 import {installUrlPaths} from '../src/runtime/ios/foundation/url-paths.ts';
 import {formatDarwin} from './format.mjs';
 import {readString} from './memory.mjs';
@@ -25,7 +26,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     for (const [key, value] of pairs) if (key && value) associated(ptr,key,value);
     return ptr;
   }
-  hostClass('NSNumber','NSObject');
+  installValues({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value)});
+  hostClass('NSNumber','NSValue');
   function number(value) {
     const n=alloc(names.get('NSNumber')); numbers.set(n,value); return autorelease(n);
   }

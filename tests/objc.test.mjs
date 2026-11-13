@@ -428,3 +428,29 @@ test('UIColor grayscale construction and alpha replacement preserve independent 
   assert.equal(x.heap.live.has(color),false);
   assert.equal(x.heap.live.has(replacement),false);
 });
+
+test('NSValue boxes pointers without owning their targets and exposes stable type bytes', async t => {
+  const x=await fixture(t);
+  const pool=x.f('_objc_autoreleasePoolPush');
+  const target=await x.send(x.cls('NSObject'),'alloc');
+  const value=await x.send(x.cls('NSValue'),'valueWithPointer:',target);
+  const same=await x.send(x.cls('NSValue'),'valueWithPointer:',target);
+  const unretained=await x.send(x.cls('NSValue'),'valueWithNonretainedObject:',target);
+  assert.equal(await x.send(value,'pointerValue'),target);
+  assert.equal(await x.send(unretained,'nonretainedObjectValue'),target);
+  assert.equal(await x.send(target,'retainCount'),1);
+  assert.equal(await x.send(value,'isEqualToValue:',same),1);
+  assert.equal(await x.send(value,'isEqualToValue:',unretained),0);
+  const type=await x.send(value,'objCType');
+  assert.equal(readString(x.cpu,type),'^v');
+  const output=x.heap.zero(4);
+  await x.send(value,'getValue:',output);
+  assert.equal(x.read(output),target);
+  const number=await x.send(x.cls('NSNumber'),'numberWithInt:',3);
+  assert.equal(await x.send(number,'isKindOfClass:',x.cls('NSValue')),1);
+  await x.f('_objc_autoreleasePoolPop',pool);
+  assert.equal(x.heap.live.has(value),false);
+  assert.equal(x.heap.live.has(target),true);
+  assert.equal(readString(x.cpu,type),'^v');
+  await x.send(target,'release');
+});
