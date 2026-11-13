@@ -1,3 +1,4 @@
+import {PointerPhase, PointerQueue, TouchPhase} from '../src/runtime/ios/uikit/touch/pointer-queue.ts';
 import {InputMetrics, DropReason} from '../src/runtime/diagnostics/input-metrics.ts';
 import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
@@ -10,8 +11,8 @@ const floatBits = new DataView(new ArrayBuffer(8));
 const float = bits => { floatBits.setUint32(0, bits, true); return floatBits.getFloat32(0, true); };
 const bits = n => { floatBits.setFloat32(0, n, true); return floatBits.getUint32(0, true); };
 const double = n => { floatBits.setFloat64(0, n, true); return floatBits.getBigUint64(0, true); };
-const phases = {pointerdown: [0, 'touchesBegan:withEvent:'], pointermove: [1, 'touchesMoved:withEvent:'],
-  pointerup: [3, 'touchesEnded:withEvent:'], pointercancel: [4, 'touchesCancelled:withEvent:']};
+const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:'], [PointerPhase.Move]: [TouchPhase.Moved, 'touchesMoved:withEvent:'],
+  [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
   selector, selectorName, className, read, write, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
@@ -19,7 +20,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
   const views = new Map(), controllerViews = new Map(), touches = new Map(), collections = new Map(), eventTouches = new Map();
-  const active = new Map(), queue = [];
+  const active = new Map(), queue = new PointerQueue();
   const inputMetrics = new InputMetrics();
   let window = 0, screen = 0, canvas, events, previousTap, animation;
   async function withAnimation(seconds,delay,options,changes) {
@@ -416,7 +417,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   async function pump() {
     if(window)await layout(window);
     await imageViews.render(window);
-    for(const e of queue.splice(0)) {
+    for(const e of queue.takeTurn()) {
       let t=active.get(e.id);
       if(e.type==='pointerdown') {
         if(t) {inputMetrics.drop(DropReason.Duplicate);continue;}
@@ -429,6 +430,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
         active.set(e.id,t); touches.set(t.ptr,t);
       }
       if(!t){inputMetrics.drop(DropReason.Missing);continue;}
+      for(const touch of active.values()) { touch.phase=TouchPhase.Stationary; touch.previous=touch.point; }
       const [phase,name]=phases[e.type];
       t.phase=phase; t.previous=t.point; t.point=e.point; t.time=e.time;
       const changed=collection('NSSet',[t.ptr]), all=collection('NSSet',[...active.values()].map(t=>t.ptr));
@@ -436,8 +438,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       try {inputMetrics.dispatch(className(t.target),e.type,e.point,convertPoint(e.point,window,t.target));await send(t.target,name,[changed,event]);}
       finally {
         await releaseFromHost(changed); await releaseFromHost(all); await releaseFromHost(event);
-        if(phase>=3) {
-          if(phase===3)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};
+        if(phase>=TouchPhase.Ended) {
+          if(phase===TouchPhase.Ended)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};
           active.delete(e.id); await releaseFromHost(t.ptr);
         }
       }
@@ -452,5 +454,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }

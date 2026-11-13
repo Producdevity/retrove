@@ -4,7 +4,7 @@ import { objcImports } from '../web/objc.mjs';
 
 // Exercise the same UIApplication loop and Objective-C dispatch as a loaded app.
 // Each guest IMP saves r0-r3 into guest memory before returning through LR.
-export async function startTouchTest(canvas, orientation) {
+export async function startTouchTest(canvas, orientation, {multiple=false,onTurn=()=>{}} = {}) {
   const cpu=await createCPU(), heap=new Heap(cpu), abort=new AbortController();
   const read=p=>read32(cpu,p), write=(p,v)=>write32(cpu,p,v);
   const events=[];
@@ -28,10 +28,12 @@ export async function startTouchTest(canvas, orientation) {
     if(status.reason!=='until' || read(captured)!==view)throw Error('ARM touch callback failed');
     const set=read(captured+8), evt=read(captured+12);
     const touch=await send(set,'anyObject'), all=await send(evt,'allTouches');
-    events.push({phase:await send(touch,'phase'),target:await send(touch,'view'),expected:view,
+    const objects=await send(all,'allObjects'), allPhases=[];
+    for(let i=0;i<await send(objects,'count');i++)allPhases.push(await send(await send(objects,'objectAtIndex:',i),'phase'));
+    events.push({allPhases,phase:await send(touch,'phase'),target:await send(touch,'view'),expected:view,
       point:await getPoint(touch,'locationInView:'),previous:await getPoint(touch,'previousLocationInView:'),
       count:await send(all,'count'),touch});
-  },abort.signal);
+  },abort.signal,onTurn);
   const child=heap.zero(20), meta=heap.zero(20), methods=heap.zero(8+4*12);
   const host=cls('UIView'), name=heap.string('TouchTestView');
   for(const [p,isa,superclass] of [[child,meta,host],[meta,read(read(host)),read(host)]]) {
@@ -58,6 +60,7 @@ export async function startTouchTest(canvas, orientation) {
     await send(win,'addSubview:',view);
   }
   await send(win,'makeKeyAndVisible');
+  await send(view,'setMultipleTouchEnabled:',Number(multiple));
   const running=f('_UIApplicationMain',0,0,0,0).catch(e=>{if(!abort.signal.aborted)throw e;});
   return {events, async stop(){abort.abort();await running;cpu.close();}};
 }
