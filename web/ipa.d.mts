@@ -15,3 +15,5 @@ export interface IpaArchive {
 export type Diagnostic = (level: "debug" | "info" | "warn" | "error", area: string, message: string, details?: unknown) => void;
 export function openIPA(blob: Blob, diagnostic?: Diagnostic): Promise<IpaArchive>;
 export function parsePlist(bytes: Uint8Array): unknown;
+
+export function openZip(blob: Blob, diagnostic?: Diagnostic): Promise<Omit<IpaArchive, "info" | "bundlePath" | "executablePath" | "readExecutable">>;
