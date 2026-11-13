@@ -81,7 +81,10 @@ function kernel(plan: FloatPlan): Uint8Array<ArrayBuffer> {
     if (operation.kind === "load")
       integer(code, operation.offset).add(Op.Load, Wasm.FloatAlignment, 0);
     else {
-      code.add(Op.Get).unsigned(operation.left).add(Op.Get).unsigned(operation.right);
+      code.add(Op.Get).unsigned(operation.left);
+      if (plan.operations[operation.left]?.kind === "load") code.add(Op.Call, 0);
+      code.add(Op.Get).unsigned(operation.right);
+      if (plan.operations[operation.right]?.kind === "load") code.add(Op.Call, 0);
       code.add(
         operation.kind === "add"
           ? Op.Add
@@ -90,7 +93,8 @@ function kernel(plan: FloatPlan): Uint8Array<ArrayBuffer> {
             : Op.Multiply,
       );
     }
-    code.add(Op.Call, 0, Op.Set).unsigned(index);
+    if (operation.kind !== "load") code.add(Op.Call, 0);
+    code.add(Op.Set).unsigned(index);
   }
   for (const output of plan.outputs) {
     integer(code, output.offset)
