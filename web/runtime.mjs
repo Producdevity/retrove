@@ -1,3 +1,4 @@
+import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
 import {ExecutionMetrics} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
@@ -24,6 +25,7 @@ import {objcImports} from './objc.mjs';
 
 const GATES = 0x40000000, GATE_BYTES = 0x40000;
 const RETURN = GATES + GATE_BYTES - 4;
+const ARM_GATE_LOOP = 0xeafffffe;
 const STACK_TOP = 0x70000000, STACK_SIZE = 4 << 20;
 const hex = address => '0x' + address.toString(16);
 const label = value => String(value).slice(0, 192);
@@ -54,7 +56,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       } catch { /* The last successful CPU reads are still useful. */ }
     }
     // Put fault context before variable-length lists so it survives a shortened mobile export.
-    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, calls, cpuSlices, budgetSlices, completedInitializers,
+    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, heapAllocations: heap?.live.size, exitStatus,
       execution: executionMetrics.snapshot(), input: objc?.inputSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
@@ -132,7 +134,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     link = {entry: image.entry, imports: unique.size, executableBytes: bytes.length,
       segmentCount: image.segments.length, dylibCount: image.dylibs.length};
     milestone('Initialize ARM WebAssembly CPU', {entry: hex(image.entry), imports: unique.size});
-    cpu = await createCPU();
+    cpu = await createCPU({budget: ExecutionBudget.Blocks});
     signal?.throwIfAborted();
     milestone('Map segments and bind imports');
     const memory = {map: cpu.map, write: cpu.write, read32: p => read32(cpu,p), write32: (p,v) => write32(cpu,p,v)};
@@ -181,10 +183,10 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       return at;
     }
     cpu.map(GATES, GATE_BYTES, 5);
-    // UDF terminates each translated block even when its host hook is missed.
+    // A missed import trap stays at its own address until the bounded CPU slice ends.
     const gateCode = new Uint8Array(GATE_BYTES);
     const gateView = new DataView(gateCode.buffer);
-    for (let i = 0; i < gateCode.length; i += 4) gateView.setUint32(i, 0xe7f000f0, true);
+    for (let i = 0; i < gateCode.length; i += 4) gateView.setUint32(i, ARM_GATE_LOOP, true);
     cpu.write(GATES, gateCode);
     cpu.map(STACK_TOP - STACK_SIZE, STACK_SIZE, 3);
     cpu.trapRange(GATES, RETURN - 1, (_, at) => { pending = at; });
@@ -285,16 +287,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       cpuSlices++;
       let result;
       if (stubs.has(pc)) { pending = pc; result = {reason:'trap'}; }
-      else {
-        try { result = cpu.run(pc, {until: RETURN, count: 65536}); }
-        catch (error) {
-          // Unicorn can reject the UDF before its code hook on a newly translated import gate.
-          const at = cpu.getReg(15);
-          if (!String(error.cause).includes('UC_ERR_INSN_INVALID') || (cpu.cpsr & 32) || !stubs.has(at) || read32(cpu,at)!==0xe7f000f0) throw error;
-          pending = at; result = {reason:'trap'};
-          diagnostic('debug','cpu','Dispatched registered import gate after UDF trap',{address:hex(at),symbol:stubs.get(at).binding.name});
-        }
-      }
+      else result = cpu.run(pc, {until: RETURN, count: 65536});
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
       if (result.reason === 'budget') { budgetSlices++; executionMetrics.sample(threads.funcs._pthread_self(),result.pc,image.symbolAt(result.pc)); return {pc:result.pc, budget:true}; }
       const host = stubs.get(pending);

@@ -71,6 +71,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
   engine.reg_write_i32(uc.ARM_REG_CPSR, 0x10);
 
   const cpu = {
+    get budget() { return budget; },
     get mappedBytes() { return mappedBytes; },
     get executedMilliseconds() { return executedMilliseconds; },
     // Darwin ARM code reads its thread pointer from TPIDRURO. Unicorn includes
@@ -144,8 +145,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
       }
       pending = null;
       memoryFault = null;
+      const before = performance.now();
       try {
-        const before = performance.now();
         if (blocks?.requiresRefresh(until)) {
           // Unicorn flushes translated blocks when removing its instruction-count hook.
           // Stop before guest execution while installing that hook, then remove it below.
@@ -154,7 +155,6 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
         }
         blocks?.start(count, until);
         engine.emu_start(startPC, until, 0, blocks ? 0 : count);
-        executedMilliseconds += performance.now() - before;
       } catch (err) {
         failedWasm = err instanceof WebAssembly.RuntimeError;
         let pc;
@@ -162,6 +162,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions} = {}) {
         const address = memoryFault ? ` accessing 0x${memoryFault.faultAddress.toString(16)}` : '';
         const error = new Error(`Guest CPU fault${pc === undefined ? '' : ' at 0x' + pc.toString(16)}${address}: ${String(err)}`, {cause: err});
         throw Object.assign(error, { pc }, memoryFault);
+      } finally {
+        executedMilliseconds += performance.now() - before;
       }
       if (pending) {
         const { fn, address } = pending;
