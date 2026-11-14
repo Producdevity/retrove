@@ -540,6 +540,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
       const p=a(0),st=await pathStat(locate(p));
       return remove(p,(st.mode&0o170000)===0o40000);
     }),
+    _setxattr: checked(async a => { const path=locate(a(0)); await pathStat(path); error(path.bundle ? E.ROFS : E.NOTSUP); }),
     _getxattr: checked(async a => { await pathStat(locate(a(0))); error(93); }),
     _removexattr: checked(async a => { const path=locate(a(0)); await pathStat(path); error(path.bundle ? E.ROFS : 93); }),
     _unlink: checked(a => remove(a(0), false)), _rmdir: checked(a => remove(a(0), true)),

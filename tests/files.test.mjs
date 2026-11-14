@@ -221,3 +221,15 @@ test('temporary streams are unlinked and freopen preserves stream and descriptor
   assert.equal(await call('_getc',r),100);
   assert.equal(await call('_fclose',r),0);
 });
+
+
+test("unsupported extended attributes report Darwin errors without changing file data", async () => {
+  const {call,files,heap,cpu,errno}=fixture("xattr",memoryStorage());
+  const path=heap.string("/Documents/progress"),name=heap.string("com.apple.MobileBackup"),value=heap.zero(4);
+  cpu.write(value,Uint8Array.of(7,8,9,10));
+  const fd=await call("_open",path,0x202);assert.ok(fd>=3);assert.equal(await call("_write",fd,value,4),4);
+  assert.equal(await call("_setxattr",path,name,value,4,0,0),-1);assert.equal(errno(),45);
+  assert.equal(await call("_setxattr",heap.string("/Documents/missing"),name,value,4,0,0),-1);assert.equal(errno(),2);
+  await call("_lseek",fd,0,0,0);cpu.write(value,new Uint8Array(4));assert.equal(await call("_read",fd,value,4),4);
+  assert.deepEqual(cpu.read(value,4),Uint8Array.of(7,8,9,10));await files.closeFiles();
+});
