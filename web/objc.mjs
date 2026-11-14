@@ -1,3 +1,4 @@
+import {launchApplication} from "../src/runtime/ios/uikit/application/launch.ts";
 import {installStringCharacters,decodeCharacterBytes} from "../src/runtime/ios/foundation/text/characters.ts";
 import {MovieNotification,MovieUserInfo} from "../src/runtime/ios/media/movie-playback.ts";
 import {installXMLParser} from "../src/runtime/ios/foundation/xml/bindings.ts";
@@ -589,30 +590,12 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('AVAudioSession', true, 'sharedInstance', () => avSession ??= alloc(names.get('AVAudioSession')));
   method('AVAudioSession', false, 'setActive:error:', (_, a) => Number(audio?.setSessionActive(!!a(0)) === 0));
   async function applicationMain(a) {
-    const cls = a(2) ? names.get(text(a(2))) : names.get('UIApplication');
-    const delegateName = a(3) ? text(a(3)) : null;
-    onLifecycle('UIKit application launch', {delegate: delegateName?.slice(0, 192)});
-    if (!cls || !subclass(cls, names.get('UIApplication'))) throw Error('Unknown UIApplication principal class');
-    if (application) throw Error('UIApplicationMain called twice');
-    async function instantiate(ptr) { return send(await send(ptr, 'alloc'), 'init'); }
-    application = await instantiate(cls);
-    if (delegateName) {
-      const delegateClass = names.get(delegateName);
-      if (!delegateClass) throw Error('Unknown UIApplication delegate ' + delegateName);
-      await send(application, 'setDelegate:', [await instantiate(delegateClass)]);
-    }
-    const responder = await send(application, 'delegate');
-    if (responder) {
-      onLifecycle('UIKit delegate launch callbacks');
-      await send(responder, 'application:willFinishLaunchingWithOptions:', [application, 0], true);
-      if (lookup(read(responder), 'application:didFinishLaunchingWithOptions:')) {
-        await send(responder, 'application:didFinishLaunchingWithOptions:', [application, 0]);
-      } else await send(responder, 'applicationDidFinishLaunching:', [application], true);
-    }
-    input.connect();
-    await lifecycle.start(visibility);
-    onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
+    const principalName=a(2)?text(a(2)):null,delegateName=a(3)?text(a(3)):null;
     try {
+      await launchApplication({resolveClass:name=>names.get(name),isApplicationClass:cls=>subclass(cls,names.get('UIApplication')),
+        currentApplication:()=>application,setApplication:pointer=>{application=pointer;},responds:(p,name)=>!!lookup(read(p),name),send,
+        pushPool:poolPush,popPool:poolPop,connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
+      onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
       while (input.hasWindow() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
         const time = await nextRefresh();

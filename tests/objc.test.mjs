@@ -80,6 +80,7 @@ test('UIApplication forwards visibility changes and notifications through guest 
     calls.push([readString(x.cpu,args[1]),await x.send(args[2],'applicationState')]);
     if(pc===callback.active && ++active===1) {
       timer=await x.send(x.cls('NSTimer'),'scheduledTimerWithTimeInterval:target:selector:userInfo:repeats:',0,0,args[0],x.sel('tick:'),0,1);
+      await x.send(timer,'retain');
     }
     if(pc===callback.active && active===2)await x.send(timer,'invalidate');
     if(pc===callback.background)visibility.show(true);
@@ -103,6 +104,7 @@ test('UIApplication forwards visibility changes and notifications through guest 
     ['UIApplicationWillEnterForegroundNotification',1],['applicationWillEnterForeground:',1],
     ['applicationDidBecomeActive:',0],['UIApplicationDidBecomeActiveNotification',0],
   ]);
+  await x.send(timer,'release');
 });
 
 test('Darwin returns a retained directory array and exports NSString constants through data slots', async t => {
