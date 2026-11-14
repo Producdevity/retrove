@@ -1,3 +1,4 @@
+import {installFixedFunction} from "../src/runtime/graphics/fixed-function/imports.ts";
 import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
 import { read32, readString, write32 } from './memory.mjs';
 import { decodePVRTC } from './pvrtc.mjs';
@@ -15,7 +16,7 @@ const encoder = new TextEncoder();
 function values(arg, count) { return Array.from({ length: count }, (_, i) => arg(i)); }
 function signed(value) { return value | 0; }
 
-export function glesImports(cpu, heap, getContext, diagnostic) {
+export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{}} = {}) {
   const api = {};
   const objects = new GraphicsObjects();
   const strings = new Map();
@@ -463,5 +464,6 @@ export function glesImports(cpu, heap, getContext, diagnostic) {
   bind('GetBufferParameteriv',a => write32(cpu,a(2),gl().getBufferParameter(a(0),a(1))));
   bind('GetTexParameteriv',a => write32(cpu,a(2),gl().getTexParameter(a(0),a(1))));
   bind('GetTexParameterfv',a => writeNumber(a(2),gl().getTexParameter(a(0),a(1)),'float'));
+  onClose(installFixedFunction({api,gl,currentAPI,currentContext,boundArray:()=>array,read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),string:s=>heap.string(s),error:setError}));
   return api;
 }

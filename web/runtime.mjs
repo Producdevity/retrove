@@ -37,7 +37,7 @@ const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', '
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
-  let cpu, heap, threads, audio, queues, sounds, objc, closeFiles, image;
+  let cpu, heap, threads, audio, queues, sounds, objc, closeFiles, closeGraphics, image;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
@@ -180,7 +180,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, queues.funcs, sounds.funcs, audioFiles(cpu,heap,nested), commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic));
+      dispatch.funcs, cg.funcs, audio.funcs, queues.funcs, sounds.funcs, audioFiles(cpu,heap,nested), commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
@@ -394,7 +394,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     throw error;
   } finally {
     clearInterval(heartbeat);
-    try { objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeFiles?.(); }
+    try { closeGraphics?.(); objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeFiles?.(); }
     finally { try { threads?.close(); } finally { cpu?.close(); } }
   }
 }

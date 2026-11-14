@@ -1,3 +1,4 @@
+import {RenderingAPI} from "../src/runtime/graphics/fixed-function/host.ts";
 import {installAccelerometer} from "../src/runtime/ios/uikit/motion/accelerometer.ts";
 import {installStringSearch} from "../src/runtime/ios/foundation/string-search.ts";
 import {DataField,installDataFactories} from "../src/runtime/ios/foundation/data.ts";
@@ -398,9 +399,11 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
   }
   threads?.onExit?.(id=>{lastDispatch.delete(id);return clearContext(id);});
-  method('EAGLContext', false, 'renderbufferStorage:fromDrawable:', (self, a) => {
+  method('EAGLContext', false, 'renderbufferStorage:fromDrawable:', async (self, a) => {
     if (currentContext() !== self || !a(1) || !subclass(read(a(1)), names.get('CAEAGLLayer'))) return 0;
-    return drawable.allocate(a(0), a(1));
+    const target=a(0),layer=a(1),properties=await send(layer,'drawableProperties');
+    const format=properties?await send(properties,'objectForKey:',[string('EAGLDrawablePropertyColorFormat')]):0;
+    return drawable.allocate(target, layer, format?text(format):'RGBA8');
   });
   method('EAGLContext', false, 'presentRenderbuffer:', (self, a) => {
     const started = performance.now();
@@ -410,9 +413,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       return result;
     } finally { onPresent(result, performance.now() - started); }
   });
-  const contexts = new Map();
+  const contexts = new Map(), contextAPIs = new Map();
   const initContext = (self, a) => {
-    if (a(0) !== 2) throw Error('Only EAGLRenderingAPIOpenGLES2 is supported');
+    if (a(0) !== RenderingAPI.OpenGLES1 && a(0) !== RenderingAPI.OpenGLES2) throw Error('Unsupported EAGL rendering API');
+    contextAPIs.set(self,a(0));
     graphics();
     contexts.set(self, retain(a(1)) || alloc(names.get('EAGLSharegroup')));
     return self;
@@ -420,10 +424,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('EAGLContext', false, 'initWithAPI:', (self, a) => initContext(self, i => i === 0 ? a(0) : 0));
   method('EAGLContext', false, 'initWithAPI:sharegroup:', initContext);
   method('EAGLContext', false, 'sharegroup', self => contexts.get(self) ?? 0);
-  method('EAGLContext', false, 'API', () => 2);
+  method('EAGLContext', false, 'API', self => contextAPIs.get(self) ?? 0);
   method('EAGLContext', false, 'dealloc', async self => {
     await releaseFromHost(contexts.get(self));
-    contexts.delete(self);
+    contexts.delete(self);contextAPIs.delete(self);
     destroy(self);
   });
   method('EAGLContext', true, 'setCurrentContext:', async (_, a) => {
@@ -563,7 +567,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     method('UIApplication',false,name,(_,a)=>{statusBarHidden=!!a(0);});
   method('UIApplication',false,'isStatusBarHidden',()=>Number(statusBarHidden));
   method('UIApplication',false,'statusBarOrientation',()=>statusOrientation);
-  method('UIApplication',false,'setStatusBarOrientation:animated:',(_,a)=>{statusOrientation=a(0);});
+  for(const name of ['setStatusBarOrientation:','setStatusBarOrientation:animated:'])
+    method('UIApplication',false,name,(_,a)=>{statusOrientation=a(0);});
   method('UIApplication',false,'setApplicationSupportsShakeToEdit:',(_,a)=>{shakeToEdit=!!a(0);});
   method('UIApplication',false,'applicationSupportsShakeToEdit',()=>Number(shakeToEdit));
   method('UIApplication',false,'setApplicationIconBadgeNumber:',(_,a)=>{badge=a(0)|0;});
@@ -690,7 +695,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     'UIKeyboardWillShowNotification', 'UIKeyboardFrameEndUserInfoKey', 'UIScreenDidConnectNotification',
     'UIScreenDidDisconnectNotification', 'NSPOSIXErrorDomain', 'NSCocoaErrorDomain', 'NSFilePosixPermissions'])
     exportedStringNames.set('_' + name, name);
-  for (const [name, value] of [['kEAGLColorFormatRGBA8','RGBA8'],['kEAGLDrawablePropertyColorFormat','EAGLDrawablePropertyColorFormat'],
+  for (const [name, value] of [['kEAGLColorFormatRGB565','RGB565'],['kEAGLColorFormatRGBA8','RGBA8'],['kEAGLDrawablePropertyColorFormat','EAGLDrawablePropertyColorFormat'],
     ['kEAGLDrawablePropertyRetainedBacking','EAGLDrawablePropertyRetainedBacking'],['AVAudioSessionInterruptionTypeKey','AVAudioSessionInterruptionTypeKey'],
     ['AVAudioSessionRouteChangeReasonKey','AVAudioSessionRouteChangeReasonKey']]) exportedStringNames.set('_'+name,value);
   for(const name of ['GCControllerDidConnectNotification','GCControllerDidDisconnectNotification','GKPlayerAuthenticationDidChangeNotificationName'])
@@ -813,7 +818,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
     _NSStringFromSelector: a => a(0) ? string(readString(cpu, a(0))) : 0,
   };
-  return { funcs, resolveData, install, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump,
+  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump,
     audioReasonDictionary(key,value){return autorelease(foundationObjects.dictionary(names.get('NSDictionary'),[[string(key),foundationObjects.number(value)]]));},
     async audioSessionNotification(notification,key,value){
       const info=this.audioReasonDictionary(key,value);

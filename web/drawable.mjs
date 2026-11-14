@@ -1,16 +1,17 @@
+import {drawableStorageFormat} from "../src/runtime/graphics/drawable-format.ts";
 // A CAEAGLLayer owns a renderbuffer. WebGL 1 presents the default framebuffer,
 // so copy the bound color renderbuffer into a texture and draw it to the canvas.
 export function eaglDrawable(context) {
   const storage = new WeakMap();
   let blit, readFramebuffer;
 
-  function allocate(target, drawable) {
+  function allocate(target, drawable, colorFormat) {
     const gl = context();
     if (!drawable || target !== gl.RENDERBUFFER) return 0;
     const rb = gl.getParameter(gl.RENDERBUFFER_BINDING);
     if (!rb) return 0;
     const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-    gl.renderbufferStorage(target, gl.blitFramebuffer ? gl.RGBA8 : gl.RGBA4, width, height);
+    gl.renderbufferStorage(target, drawableStorageFormat(gl,colorFormat), width, height);
     storage.set(rb, { width, height });
     return 1;
   }
