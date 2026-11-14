@@ -1,3 +1,5 @@
+import {openAL} from "../src/runtime/audio/openal/imports.ts";
+import {WebAudioOutput} from "../src/runtime/audio/openal/output.ts";
 import {guestMutexFunctions} from '../src/runtime/ios/threads/guest-mutex.ts';
 import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
@@ -13,7 +15,7 @@ import {commonCrypto} from './commoncrypto.mjs';
 import {createCPU} from './cpu.mjs';
 import {prepareApplication} from '../src/runtime/ios/profiles/index.ts';
 import {parseMachO, loadMachO, prepareStartup} from './macho.mjs';
-import {Heap, read32, write32} from './memory.mjs';
+import {Heap, read32, readString, write32} from './memory.mjs';
 import {systemImports} from './libsystem.mjs';
 import {glesImports} from './gles.mjs';
 import {audioQueues} from './audio-queue.mjs';
@@ -37,7 +39,7 @@ const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', '
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
-  let cpu, heap, threads, audio, queues, sounds, objc, closeFiles, closeGraphics, image;
+  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeGraphics, image;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
@@ -69,7 +71,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
-      execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+      execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
     phase = message;
@@ -159,6 +161,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     closeFiles = sys.closeFiles;
     queues = audioQueues(cpu,heap,nested,audioContext);
     audio = audioImports(cpu, heap, nested, audioContext);
+    al=openAL({read:(p,n)=>cpu.read(p,n),readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),text:p=>readString(cpu,p),string:s=>heap.string(s),allocate:n=>heap.zero(n),free:p=>heap.free(p),
+      output:()=>{const context=audioContext();return !context||context.state==='closed'?null:new WebAudioOutput(context);},gate:(name,fn)=>hostGate({name,library:'OpenAL'},fn)});
     objc = objcImports(cpu, heap, ipa, graphics, nested, signal, service, {
       threads, sys, audio, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
       onLifecycle: milestone,
@@ -180,7 +184,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, queues.funcs, sounds.funcs, audioFiles(cpu,heap,nested), commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
+      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, audioFiles(cpu,heap,nested), commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
@@ -394,7 +398,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     throw error;
   } finally {
     clearInterval(heartbeat);
-    try { closeGraphics?.(); objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeFiles?.(); }
+    try { closeGraphics?.(); al?.close(); objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeFiles?.(); }
     finally { try { threads?.close(); } finally { cpu?.close(); } }
   }
 }
