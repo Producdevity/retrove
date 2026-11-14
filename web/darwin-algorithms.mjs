@@ -1,3 +1,4 @@
+import {randomImports} from "../src/runtime/ios/libc/random.ts";
 import {move, read32, write32} from './memory.mjs';
 
 export function darwinAlgorithms(cpu, callGuest) {
@@ -22,6 +23,7 @@ export function darwinAlgorithms(cpu, callGuest) {
     for (let end=count-1;end>0;end--) {swap(0,end);await down(0,end);}
   }
   return {
+    ...randomImports(),
     _bsearch: async a=>{
       const key=a(0),base=a(1),count=a(2),width=a(3),compare=a(4);
       if (!width) return 0;
