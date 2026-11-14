@@ -1,3 +1,5 @@
+import {crypt} from "../src/runtime/ios/crypto/crypt.ts";
+import {write32} from "./memory.mjs";
 import {md5, sha1} from './vendor/noble-hashes/legacy.js';
 import {sha224, sha256, sha384, sha512} from './vendor/noble-hashes/sha2.js';
 
@@ -46,6 +48,7 @@ export function commonCrypto(cpu, heap) {
     cpu.write(address, outer.update(inner.digest()).digest());
   }
   return {
+    _CCCrypt:crypt({read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),writeWord:(p,v)=>write32(cpu,p,v)}),
     _CC_SHA1: a => {
       const output = a(2) || (staticSHA1 ??= heap.alloc(20));
       cpu.write(output, feed(sha1.create(), a(0), a(1)).digest()); return output;
