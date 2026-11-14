@@ -38,3 +38,8 @@ export function zoneCopySelector(selector: string): string | undefined {
       return undefined;
   }
 }
+
+export interface StructureMethod {
+  (self: number, arguments_: GuestArguments, destination: number): void | Promise<void>;
+  stret: true;
+}

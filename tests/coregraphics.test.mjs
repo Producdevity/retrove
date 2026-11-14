@@ -52,3 +52,21 @@ test('normalized UIKit pixels expose straight RGBA metadata and retain their RGB
  assert.ok(f._CGImageGetColorSpace(args(image)));assert.equal(live.size,2);assert.deepEqual([...cg.pixels(image).rgba],[10,20,30,40]);
  await f._CGImageRelease(args(image));assert.equal(live.size,0);assert.equal(f._CGImageGetAlphaInfo(args(0)),0);
 });
+test('Quartz drawing colors, paths and color-space models operate on the selected context',async()=>{
+ const {cg}=fixture(),f=cg.funcs,calls=[];
+ const canvas={save:()=>{},restore:()=>{},beginPath:()=>calls.push('begin'),rect:(...v)=>calls.push(['rect',...v]),lineTo:(...v)=>calls.push(['line',...v]),clip:()=>calls.push('clip'),getTransform:()=>({a:1,b:0,c:0,d:1,e:0,f:0}),fill:()=>calls.push('fill'),stroke:()=>calls.push('stroke')};
+ const float=value=>new Uint32Array(new Float32Array([value]).buffer)[0];
+ await cg.withContext(canvas,async()=>{
+  const context=f._UIGraphicsGetCurrentContext();
+  f._CGContextSetGrayFillColor(args(context,float(0.5),float(0.25)));
+  assert.equal(canvas.fillStyle,'rgba(127.5,127.5,127.5,0.25)');
+  f._CGContextSetRGBStrokeColor(args(context,float(1),float(0),float(0.5),float(1)));
+  assert.equal(canvas.strokeStyle,'rgba(255,0,127.5,1)');
+  f._CGContextBeginPath(args(context));f._CGContextAddRect(args(context,...[2,3,4,5].map(float)));f._CGContextFillPath(args(context));
+ });
+ assert.deepEqual(calls,['begin',['rect',2,3,4,5],'fill','begin']);
+ const rgb=f._CGColorSpaceCreateDeviceRGB(),gray=f._CGColorSpaceCreateDeviceGray();
+ assert.equal(f._CGColorSpaceGetModel(args(rgb)),1);assert.equal(f._CGColorSpaceGetModel(args(gray)),0);
+ assert.equal(f._CGColorSpaceGetNumberOfComponents(args(rgb)),3);
+ await f._CGColorSpaceRelease(args(rgb));await f._CGColorSpaceRelease(args(gray));
+});

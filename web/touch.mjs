@@ -1,3 +1,5 @@
+import {WebViews} from "../src/runtime/ios/uikit/web-view.ts";
+import {installTextFields} from "../src/runtime/ios/uikit/text-field/bindings.ts";
 import {installLayerFactory,installLayerTree} from "../src/runtime/ios/uikit/layer.ts";
 import {installTouchViewProperties,touchConflict} from "../src/runtime/ios/uikit/touch/view-policy.ts";
 import {installViewOrdering} from "../src/runtime/ios/uikit/view/hierarchy.ts";
@@ -80,6 +82,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       views.delete(self);
     }
     imageViews.removeView(self);
+    webViews.remove(self);
     await deallocObject(self);
   };
   method('UIView',false,'dealloc',deallocateView);
@@ -90,7 +93,17 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
     touchInside:(set,view)=>{const touch=touches.get(items(set)[0]);if(!touch)return false;const [x,y]=convertPoint(touch.point,touch.window,view),[bx,by,w,h]=data(view).bounds;return x>=bx&&y>=by&&x<bx+w&&y<by+h;}};
+  const fieldLayout=self=>{
+    if(!window)return;
+    let alpha=1;for(let p=self;p;p=data(p).parent){const value=data(p);if(value.hidden)return;alpha*=value.alpha;if(p===window)break;if(!value.parent)return;}
+    const value=data(self),[bx,by,w,h]=value.bounds,screen=displayBounds(window),bounds=mediaHost?.getBoundingClientRect();
+    if(!bounds||!w||!h||!screen[2]||!screen[3])return;
+    const p=displayPoint([bx,by],self,window),qx=displayPoint([bx+1,by],self,window),qy=displayPoint([bx,by+1],self,window),sx=bounds.width/screen[2],sy=bounds.height/screen[3];
+    return {left:(p[0]-screen[0])*sx+'px',top:(p[1]-screen[1])*sy+'px',width:w+'px',height:h+'px',opacity:String(alpha),transform:'matrix('+[(qx[0]-p[0])*sx,(qx[1]-p[1])*sy,(qy[0]-p[0])*sx,(qy[1]-p[1])*sy,0,0].join(',')+')'};
+  };
   const controls=installControls(controlHost);installButtons({...controlHost,adjustImage:(pointer,brightness,opacity)=>{data(pointer).imageAdjustment={brightness,opacity};},imageSize:imageViews.size,labelSize:textViews.size},controls);
+  const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});
+  const textFields=installTextFields({...controlHost,selector,mount:mediaHost,font:p=>textViews.font(p),layout:fieldLayout,enabled:p=>controls.get(p).enabled,dispatch:(p,events)=>controls.dispatch(p,events)});
   installLayerFactory(uiHost);
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
   method('CALayer',false,'dealloc',async self=>{
@@ -433,6 +446,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   async function pump() {
     if(window)await layout(window);
     await imageViews.render(window);
+    await textFields.pump();
+    webViews.render();
     for(const e of queue.takeTurn()) {
       let t=active.get(e.id);
       if(e.type==='pointerdown') {
@@ -479,5 +494,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
+  return {webViews,snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();textFields.close();webViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
 }

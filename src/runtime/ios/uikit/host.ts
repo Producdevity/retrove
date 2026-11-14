@@ -1,5 +1,5 @@
 import type { IpaArchive } from "../../../../web/ipa.mjs";
-import type { FoundationHost, GuestArguments, HostResult } from "../objc/host";
+import type { FoundationHost, GuestArguments, HostResult, StructureMethod } from "../objc/host";
 
 export type Rectangle = [number, number, number, number];
 export interface ViewState {
@@ -9,10 +9,7 @@ export interface ViewState {
   needsDisplay: boolean;
   needsLayout: boolean;
 }
-export interface StructureMethod {
-  (self: number, arguments_: GuestArguments, destination: number): void | Promise<void>;
-  stret: true;
-}
+export type { StructureMethod } from "../objc/host";
 export interface UIKitHost extends FoundationHost {
   structure(
     className: string,

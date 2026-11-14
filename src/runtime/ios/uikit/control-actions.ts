@@ -9,6 +9,10 @@ export const ControlEvent = {
   UpInside: 64,
   UpOutside: 128,
   Cancel: 256,
+  EditingDidBegin: 0x10000,
+  EditingChanged: 0x20000,
+  EditingDidEnd: 0x40000,
+  EditingDidEndOnExit: 0x80000,
 } as const;
 interface Action {
   readonly id: number;

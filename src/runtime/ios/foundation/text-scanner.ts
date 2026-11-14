@@ -2,6 +2,9 @@ import { CharacterSet, decimalValue } from "./character-set";
 const INT32_MAX = 0x7fffffff;
 const INT32_MIN_MAGNITUDE = 0x80000000;
 const DECIMAL_RADIX = 10;
+const HEX_RADIX = 16;
+const UINT32_MAX = 0xffffffff;
+const HEX_PREFIX_LENGTH = 2;
 
 export class TextScanner {
   private position = 0;
@@ -37,6 +40,23 @@ export class TextScanner {
     if (cursor === start) return null;
     this.position = cursor;
     return negative ? -magnitude : magnitude;
+  }
+
+  hexInteger(): number | null {
+    let cursor = this.skip(this.position);
+    if (/^0[xX][0-9a-fA-F]/.test(this.source.slice(cursor))) cursor += HEX_PREFIX_LENGTH;
+    const start = cursor;
+    let magnitude = 0;
+    while (cursor < this.source.length && /^[0-9a-fA-F]$/.test(this.source.charAt(cursor))) {
+      magnitude = Math.min(
+        UINT32_MAX,
+        magnitude * HEX_RADIX + Number.parseInt(this.source.charAt(cursor), HEX_RADIX),
+      );
+      cursor++;
+    }
+    if (cursor === start) return null;
+    this.position = cursor;
+    return magnitude;
   }
 
   characters(set: CharacterSet, invert = false): string | null {

@@ -52,3 +52,22 @@ test("failed scans preserve position and case sensitivity can be changed", () =>
   expect(scanner.string("beta")).toBeNull();
   expect(scanner.string("BETA")).toBe("BETA");
 });
+
+for (const [source, value, location] of [
+  [" 0xff!", 255, 5],
+  ["-1", null, 0],
+  ["+FF", null, 0],
+  ["0x", 0, 1],
+  ["0xg", 0, 1],
+  ["  ff", 255, 4],
+  ["FFFFFFFFF", 4294967295, 9],
+  ["١٢", null, 0],
+  ["0XAB", 171, 4],
+  [" ff 00", 255, 3],
+  ["0x 12", 0, 1],
+] as const)
+  test(`matches Foundation hexadecimal scanning for ${source}`, () => {
+    const scanner = new TextScanner(source);
+    expect(scanner.hexInteger()).toBe(value);
+    expect(scanner.location).toBe(location);
+  });

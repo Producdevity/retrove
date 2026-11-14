@@ -68,6 +68,12 @@ function installScanMethods(
     if (destination) host.write(destination, value >>> 0);
     return 1;
   });
+  host.method(FoundationClass.Scanner, false, "scanHexInt:", (self, args) => {
+    const value = objects.get(self).scanner.hexInteger();
+    if (value === null) return 0;
+    if (args(Argument.First)) host.write(args(Argument.First), value);
+    return 1;
+  });
   host.method(FoundationClass.Scanner, false, "scanCharactersFromSet:intoString:", (self, args) =>
     stringResult(
       objects.get(self).scanner.characters(sets.get(args(Argument.First))),

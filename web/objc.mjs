@@ -1,3 +1,4 @@
+import {installImplementationLookup} from "../src/runtime/ios/objc/implementations.ts";
 import {securityImports} from "../src/runtime/ios/security/bindings.ts";
 import {SecuritySymbols,KEYCHAIN_FILE} from "../src/runtime/ios/security/constants.ts";
 import {encodeBinaryPlist} from "../src/runtime/ios/foundation/archives/plist-writer.ts";
@@ -254,6 +255,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return (async()=>{for(const obj of linked?.values()??[])if(obj.policy)await releaseFromHost(obj.value);for(const imp of destructors)await callGuest(imp,[self,selector('.cxx_destruct')]);destroy(self);})();
   });
   method('NSObject', false, 'hash', self => self >>> 2);
+  installImplementationLookup({method,isa:read,selector:p=>readString(cpu,p),lookup,gate:(name,fn)=>{if(!hostGate)throw Error('Host IMP gates are unavailable');return hostGate({name:'IMP '+name,library:'Foundation'},fn);}});
   installRootProxy({hostClass,copyMethod:(target,source,meta,name)=>{const sourceClass=names.get(source),targetClass=names.get(target);const implementation=classes.get(meta?read(sourceClass):sourceClass).methods.get(name);if(!implementation)throw Error('Missing root proxy method '+name);classes.get(meta?read(targetClass):targetClass).methods.set(name,implementation);}});
   method('NSAutoreleasePool', false, 'init', self => { owned.get(self).token = poolPush(); return self; });
   const drain = async self => { const obj = owned.get(self); if (obj.token) await poolPop(obj.token); destroy(self); };
@@ -560,7 +562,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(_,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);return await foundationObjects.pollConnections(loop,mode)||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let dispatchService,cf;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
-    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
+    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,webViews:input.webViews,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
   cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
     retain,release:releaseFromHost,autorelease,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
   const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData,decodeText,makeString,entries:foundationObjects.archiveEntries,isKind});

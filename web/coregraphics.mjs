@@ -1,3 +1,6 @@
+import {colorSpaceImports} from "../src/runtime/graphics/core-graphics/color-space.ts";
+import {pathImports} from "../src/runtime/graphics/core-graphics/path-imports.ts";
+import {drawingStateImports} from "../src/runtime/graphics/core-graphics/drawing-state.ts";
 import {bitmapImports,bitmapImageMetadata} from "../src/runtime/graphics/core-graphics/bitmap-imports.ts";
 import {imageMetadataImports,rgbaImageMetadata,ImageComponents} from "../src/runtime/graphics/core-graphics/image-metadata.ts";
 // Quartz objects live independently of Objective-C objects and retain their backing storage.
@@ -143,6 +146,9 @@ export function coreGraphics(cpu, heap, objc) {
     } finally {c.restore();}
   }
   const funcs = {
+    ...drawingStateImports({context}),
+    ...colorSpaceImports({components:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined}),
+    ...pathImports({context,reset:p=>{const object=objects.get(p);if(object?.kind==='context')object.bounds=null;},bounds:(p,x,y,w,h)=>{const object=objects.get(p);if(object?.kind==='context')addBounds(object,deviceBounds(object.canvas,x,y,w,h));},draw:(p,mode)=>funcs._CGContextDrawPath(i=>[p,mode][i]??0)}),
     ...bitmapImports({
       read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),allocate:n=>heap.zero(n),free:p=>heap.free(p),
       components:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined,

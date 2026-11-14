@@ -1,15 +1,16 @@
 import { Argument } from "../objc/host";
 import { floatFromBits, floatBits, GeometryField, WORD_BYTES } from "../abi/scalars";
 import { CONTROL_CLASS, type Controls } from "./control-host";
-import { structureMethod } from "./host";
+import { structureMethod, objectResult } from "./host";
 import { Buttons, type ButtonHost } from "./button-state";
 const BUTTON_CLASS = "UIButton";
 export function installButtons(host: ButtonHost, controls: Controls): void {
-  const klass = host.hostClass(BUTTON_CLASS, CONTROL_CLASS);
+  host.hostClass(BUTTON_CLASS, CONTROL_CLASS);
   const buttons = new Buttons(host, controls);
   installImageAdjustments(host, buttons, controls);
-  host.method(BUTTON_CLASS, true, "buttonWithType:", async (_self, args) => {
-    const pointer = host.alloc(klass);
+  host.method(BUTTON_CLASS, true, "buttonWithType:", async (klass, args) => {
+    const pointer = objectResult(await host.send(host.alloc(klass), "init"));
+    if (!pointer) return 0;
     const state = await buttons.get(pointer);
     state.kind = args(Argument.First);
     return host.autorelease(pointer);

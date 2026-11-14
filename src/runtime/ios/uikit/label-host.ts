@@ -1,6 +1,6 @@
 import { Argument } from "../objc/host";
 import { GeometryField, WORD_BYTES, floatBits, floatFromBits } from "../abi/scalars";
-import { Fonts } from "./fonts";
+import { Fonts, type Font } from "./fonts";
 import { LabelDrawing } from "./label-drawing";
 import { Labels } from "./label-state";
 import { lineBreak } from "./text-layout";
@@ -57,6 +57,7 @@ function installProperties(host: UIKitHost, labels: Labels): void {
 }
 export function installLabels(host: UIKitHost): {
   has(pointer: number): boolean;
+  font(pointer: number): Font;
   size(pointer: number): [number, number];
   draw(pointer: number, context: CanvasRenderingContext2D): void;
   close(): void;
@@ -100,6 +101,7 @@ export function installLabels(host: UIKitHost): {
   );
   return {
     has: (pointer) => labels.has(pointer),
+    font: (pointer: number) => fonts.get(pointer),
     size: (pointer) => drawing.size(pointer),
     draw: (pointer, context) => drawing.draw(pointer, context),
     close: () => {

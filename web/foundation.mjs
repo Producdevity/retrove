@@ -29,7 +29,7 @@ import {formatDarwin} from './format.mjs';
 import {readString} from './memory.mjs';
 
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
-  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries}) {
+  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries,webViews}) {
   const dicts = new Map(), numbers = new Map();
   const enumeration=new FastEnumeration({read,write,allocate:bytes=>heap.zero(bytes),free:pointer=>heap.free(pointer)});
   const bits = new DataView(new ArrayBuffer(8));
@@ -318,6 +318,19 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('UIWebView',false,'request',s=>webLoads.get(s)?.req??0);
   method('UIWebView',false,'stopLoading',s=>{const l=webLoads.get(s);if(l)l.cancelled=true;});
   method('UIWebView',false,'isLoading',s=>Number(!!webLoads.get(s)?.loading));
+  method('UIWebView',false,'loadHTMLString:baseURL:',(self,a)=>{
+    const html=text(a(0)),base=urls.get(a(1))?.href??'about:blank',previous=webLoads.get(self);
+    if(previous)previous.cancelled=true;
+    const item={req:0,loading:true};webLoads.set(self,item);
+    mainRequests.push(async()=>{
+      if(item.cancelled)return;
+      await send(webDelegates.get(self),'webViewDidStartLoad:',[self],true);
+      webViews.load(self,html,base,()=>mainRequests.push(async()=>{
+        if(item.cancelled)return;
+        item.loading=false;await send(webDelegates.get(self),'webViewDidFinishLoad:',[self],true);
+      }));
+    });
+  });
   method('UIWebView',false,'loadRequest:',(s,a)=>{
     const req=a(0),previous=webLoads.get(s);
     if(previous)previous.cancelled=true;
