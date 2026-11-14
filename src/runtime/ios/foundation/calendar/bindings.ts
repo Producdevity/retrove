@@ -1,3 +1,4 @@
+import { composeGregorian } from "./composition";
 import { REFERENCE_DATE_UNIX_SECONDS } from "../dates";
 import type { FoundationHost } from "../../objc/host";
 import {
@@ -12,6 +13,7 @@ import { systemZone } from "./zone";
 import type { TimeZone } from "./zone";
 interface CalendarHost extends FoundationHost {
   referenceTime(pointer: number): number;
+  createDate(seconds: number): number;
 }
 const CALENDAR_CLASS = "NSCalendar",
   COMPONENTS_CLASS = "NSDateComponents",
@@ -53,6 +55,11 @@ export function installCalendars(host: CalendarHost): void {
     const pointer = host.alloc(componentClass);
     components.set(pointer, value);
     return host.autorelease(pointer);
+  });
+  host.method(CALENDAR_CLASS, false, "dateFromComponents:", (self, args) => {
+    const value = components.get(args(0));
+    if (!value) throw new Error("NSCalendar requires initialized NSDateComponents.");
+    return host.createDate(composeGregorian(value, calendar(self)));
   });
   host.method(CALENDAR_CLASS, false, "dealloc", (self) => {
     calendars.delete(self);

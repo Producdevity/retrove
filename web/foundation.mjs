@@ -232,7 +232,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSString',false,'caseInsensitiveCompare:',(s,a)=>Math.sign(text(s).toLowerCase().localeCompare(text(a(0)).toLowerCase())));
   const dates=installDates({hostClass,method,alloc,destroy,retain,autorelease,isDate:p=>isKind(p,'NSDate')});
   function date(t){return dates.create(t);}
-  installCalendars({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,referenceTime:dates.referenceTime});
+  installCalendars({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,referenceTime:dates.referenceTime,createDate:dates.create});
   hostClass('UIPasteboard','NSObject');
   const boardsByName=new Map(), boards=new Map();
   function pasteboard(name,create) {
