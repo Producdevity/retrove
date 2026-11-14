@@ -682,6 +682,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   ]);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
+    'UIApplicationLaunchOptionsLocalNotificationKey',
     'UIApplicationWillTerminateNotification', 'UIDeviceOrientationDidChangeNotification', 'UIKeyboardWillHideNotification',
     'UIKeyboardWillShowNotification', 'UIKeyboardFrameEndUserInfoKey', 'UIScreenDidConnectNotification',
     'UIScreenDidDisconnectNotification', 'NSPOSIXErrorDomain', 'NSCocoaErrorDomain', 'NSFilePosixPermissions'])

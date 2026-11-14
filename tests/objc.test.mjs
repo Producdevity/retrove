@@ -542,3 +542,12 @@ test('zero-offset property access changes only isa without retaining or autorele
   await x.f('_objc_autoreleasePoolPop', pool);
   assert.equal(x.f('_objc_getProperty', 0, 0, 0, 1), 0);
 });
+
+
+test('UIKit exports local-notification launch key as a stable NSString data symbol',async t=>{
+ const x=await fixture(t),name='_UIApplicationLaunchOptionsLocalNotificationKey';
+ const symbol=x.objc.resolveData(name);
+ assert.ok(symbol);assert.equal(x.objc.resolveData(name),symbol);
+ const value=x.read(symbol);
+ assert.equal(readString(x.cpu,await x.send(value,'UTF8String')),'UIApplicationLaunchOptionsLocalNotificationKey');
+});
