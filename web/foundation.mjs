@@ -1,3 +1,4 @@
+import {FastEnumeration} from "../src/runtime/ios/foundation/fast-enumeration.ts";
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
 import {installUserDefaults} from '../src/runtime/ios/foundation/user-defaults.ts';
 import {installValues} from '../src/runtime/ios/foundation/values.ts';
@@ -8,6 +9,7 @@ import {readString} from './memory.mjs';
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
   read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom}) {
   const dicts = new Map(), numbers = new Map();
+  const enumeration=new FastEnumeration({read,write,allocate:bytes=>heap.zero(bytes),free:pointer=>heap.free(pointer)});
   const bits = new DataView(new ArrayBuffer(8));
   const singleton = name => {
     let value = 0;
@@ -18,6 +20,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     if (!dict) dicts.set(s, dict = new Map());
     const k = isKind(key, 'NSString') ? text(key) : key;
     const prev = dict.get(k);
+    if(value||prev)enumeration.changed(s);
     if (!value) { dict.delete(k); } else dict.set(k, [retain(key), retain(value)]);
     if (prev) return (async()=>{await release(prev[0]);await release(prev[1]);})();
   };
@@ -83,12 +86,13 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSDictionary',false,'allValues',s=>autorelease(array(Array.from(dicts.get(s)?.values()??[],pair=>pair[1]))));
   method('NSDictionary',false,'allKeys',s=>autorelease(array(Array.from(dicts.get(s)?.values()??[],p=>p[0]))));
   method('NSDictionary',false,'count',s=>dicts.get(s)?.size??0);
+  method('NSDictionary',false,'countByEnumeratingWithState:objects:count:',(s,a)=>enumeration.read(s,a(0),a(1),a(2),Array.from(dicts.get(s)?.values()??[],pair=>pair[0])));
   method('NSDictionary',false,'copy',s=>dictionary(names.get('NSDictionary'),dicts.get(s)?.values()??[]));
   method('NSDictionary',false,'mutableCopy',s=>dictionary(names.get('NSMutableDictionary'),dicts.get(s)?.values()??[]));
   for(const name of ['setObject:forKey:','setObject:forKeyedSubscript:','setValue:forKey:']) method('NSMutableDictionary',false,name,(s,a)=>associated(s,a(1),a(0)));
   method('NSMutableDictionary',false,'removeObjectForKey:',(s,a)=>associated(s,a(0),0));
   method('NSDictionary',false,'dealloc',async s=>{
-    const entries=dicts.get(s); dicts.delete(s);
+    const entries=dicts.get(s); dicts.delete(s);enumeration.destroy(s);
     for(const [k,v] of entries?.values()??[]) {await release(k);await release(v);}
     destroy(s);
   });
