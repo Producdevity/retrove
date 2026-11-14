@@ -1,3 +1,4 @@
+import {installObjectAllocation} from "../src/runtime/ios/objc/allocation.ts";
 import {BundleKey} from "../src/runtime/ios/foundation/bundle.ts";
 import {installCStringConstructors} from "../src/runtime/ios/foundation/c-strings.ts";
 import {RenderingAPI} from "../src/runtime/graphics/fixed-function/host.ts";
@@ -207,9 +208,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
     return ptr;
   }
-  method('NSObject', true, 'alloc', allocateObject);
-  method('NSObject', true, 'allocWithZone:', allocateObject);
-  method('NSObject', true, 'new',async cls=>send(await send(cls,'alloc'),'init'));
+  installObjectAllocation({method,allocate:allocateObject,send});
   method('NSObject', true, 'class', self => self);
   method('NSObject', false, 'class', self => read(self));
   for (const meta of [false, true]) {
