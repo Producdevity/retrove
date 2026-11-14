@@ -7,7 +7,7 @@ import {installCStringConstructors} from "../src/runtime/ios/foundation/c-string
 import {RenderingAPI} from "../src/runtime/graphics/fixed-function/host.ts";
 import {installAccelerometer} from "../src/runtime/ios/uikit/motion/accelerometer.ts";
 import {installStringSearch} from "../src/runtime/ios/foundation/string-search.ts";
-import {DataField,installDataFactories} from "../src/runtime/ios/foundation/data.ts";
+import {DataField,installDataFactories,installStringDataEncoding} from "../src/runtime/ios/foundation/data.ts";
 import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
 import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.ts";
 import {encodeFoundation} from "../src/runtime/ios/foundation/archives/foundation-encoder.ts";
@@ -362,6 +362,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSString',false,'dataUsingEncoding:allowLossyConversion:',(s,a)=>{
     if(a(0)!==4)return 0;const p=utf8(s),n=encoder.encode(text(s)).length;return autorelease(createData(p,n));
   });
+  installStringDataEncoding({method,send});
   let bundle;
   const mainBundle=()=>bundle??=alloc(names.get('NSBundle'));
   method('NSBundle', true, 'mainBundle', mainBundle);

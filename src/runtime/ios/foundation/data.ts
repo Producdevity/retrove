@@ -32,3 +32,12 @@ export function installDataFactories(host: DataHost): void {
     host.write(self, previous, bytes);
   });
 }
+
+interface StringDataHost extends Pick<FoundationHost, "method"> {
+  send(pointer: number, selector: string, args: number[]): Promise<number>;
+}
+export function installStringDataEncoding(host: StringDataHost): void {
+  host.method("NSString", false, "dataUsingEncoding:", (self, args) =>
+    host.send(self, "dataUsingEncoding:allowLossyConversion:", [args(Argument.First), 0]),
+  );
+}
