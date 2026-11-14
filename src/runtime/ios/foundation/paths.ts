@@ -1,4 +1,4 @@
-import type { FoundationHost } from "../objc/host";
+import { Argument, type FoundationHost } from "../objc/host";
 interface PathHost {
   method: FoundationHost["method"];
   string: FoundationHost["string"];
@@ -23,4 +23,17 @@ export function installUrlPaths(host: PathHost): void {
       return host.string(read(url));
     });
   }
+}
+
+export function appendPathExtension(path: string, extension: string): string | undefined {
+  if (!extension) return path;
+  const base = path.replace(/\/+/g, "/").replace(/\/$/, "");
+  if (!base || extension.includes("/")) return undefined;
+  return base + "." + extension;
+}
+export function installStringPaths(host: Pick<FoundationHost, "method" | "string" | "text">): void {
+  host.method("NSString", false, "stringByAppendingPathExtension:", (self, args) => {
+    const result = appendPathExtension(host.text(self), host.text(args(Argument.First)));
+    return result === undefined ? 0 : host.string(result);
+  });
 }

@@ -99,3 +99,12 @@ test('incremental archives preserve escaped keys and conditional references with
   assert.equal(await x.send(decoder,'decodeIntForKey:',await string('__proto__')),19);
   await x.send(decoder,'finishDecoding');await x.send(decoder,'release');
 });
+
+test('inherited NSData factories preserve mutable receiver class and support appending aliased bytes', async t=>{
+  const x=await fixture(t), cls=x.cls('NSMutableData');
+  const empty=await x.send(cls,'data');assert.equal(x.read(empty),cls);assert.equal(await x.send(empty,'length'),0);
+  const source=await data(x,Uint8Array.of(1,2,3));
+  const mutable=await x.send(cls,'dataWithData:',source);assert.equal(x.read(mutable),cls);
+  await x.send(mutable,'appendBytes:length:',await x.send(mutable,'bytes'),3);
+  assert.deepEqual(x.cpu.read(await x.send(mutable,'bytes'),6),Uint8Array.of(1,2,3,1,2,3));
+});

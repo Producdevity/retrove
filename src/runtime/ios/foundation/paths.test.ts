@@ -1,0 +1,53 @@
+import { expect, test } from "vite-plus/test";
+import { appendPathExtension } from "./paths";
+
+const foundationCases: [string, string, string | null][] = [
+  ["", "txt", null],
+  ["", "", ""],
+  ["", "a/b", null],
+  ["", ".x", null],
+  ["/", "txt", null],
+  ["/", "", "/"],
+  ["/", "a/b", null],
+  ["/", ".x", null],
+  ["//", "txt", null],
+  ["//", "", "//"],
+  ["//", "a/b", null],
+  ["//", ".x", null],
+  ["/tmp/", "txt", "/tmp.txt"],
+  ["/tmp/", "", "/tmp/"],
+  ["/tmp/", "a/b", null],
+  ["/tmp/", ".x", "/tmp..x"],
+  ["scratch.old", "txt", "scratch.old.txt"],
+  ["scratch.old", "", "scratch.old"],
+  ["scratch.old", "a/b", null],
+  ["scratch.old", ".x", "scratch.old..x"],
+  [".hidden", "txt", ".hidden.txt"],
+  [".hidden", "", ".hidden"],
+  [".hidden", "a/b", null],
+  [".hidden", ".x", ".hidden..x"],
+  ["~", "txt", "~.txt"],
+  ["~", "", "~"],
+  ["~", "a/b", null],
+  ["~", ".x", "~..x"],
+  ["~/", "txt", "~.txt"],
+  ["~/", "", "~/"],
+  ["~/", "a/b", null],
+  ["~/", ".x", "~..x"],
+  ["~foo", "txt", "~foo.txt"],
+  ["~foo", "", "~foo"],
+  ["~foo", "a/b", null],
+  ["~foo", ".x", "~foo..x"],
+  ["a//b/", "txt", "a/b.txt"],
+  ["a//b/", "", "a//b/"],
+  ["a//b/", "a/b", null],
+  ["a//b/", ".x", "a/b..x"],
+  ["a/../b", "txt", "a/../b.txt"],
+  ["a/../b", "", "a/../b"],
+  ["a/../b", "a/b", null],
+  ["a/../b", ".x", "a/../b..x"],
+];
+test("appending path extensions matches native Foundation edge cases", () => {
+  for (const [path, extension, expected] of foundationCases)
+    expect(appendPathExtension(path, extension)).toBe(expected ?? undefined);
+});

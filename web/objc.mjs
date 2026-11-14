@@ -1,3 +1,4 @@
+import {DataField,installDataFactories} from "../src/runtime/ios/foundation/data.ts";
 import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
 import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.ts";
 import {encodeFoundation} from "../src/runtime/ios/foundation/archives/foundation-encoder.ts";
@@ -329,7 +330,6 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSData', false, 'initWithData:', (s,a)=>createData(read(a(0)+4),read(a(0)+8),s));
   method('NSData', false, 'length', self => read(self + 8));
   method('NSData', false, 'bytes', self => read(self + 4));
-  method('NSData', true, 'dataWithBytes:length:', (_, a) => autorelease(createData(a(0), a(1))));
   function resizeData(s,length) {
     const state=owned.get(s);if(!state)throw Error('Invalid NSMutableData');
     const prior=read(s+4),previous=read(s+8);
@@ -340,6 +340,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if(prior){heap.free(prior);state.buffers=state.buffers.filter(p=>p!==prior);}
     if(dst)state.buffers.push(dst);write(s+4,dst);write(s+8,length);
   }
+  installDataFactories({method,alloc,autorelease,create:createData,resize:resizeData,
+    bytes:p=>p?read(p+DataField.Bytes):0,length:p=>p?read(p+DataField.Length):0,
+    read:(source,length)=>cpu.read(source,length),write:(p,offset,bytes)=>cpu.write(read(p+DataField.Bytes)+offset,bytes)});
   method('NSMutableData',true,'dataWithLength:',(cls,a)=>{const s=alloc(cls);resizeData(s,a(0));return autorelease(s);});
   method('NSMutableData',true,'dataWithCapacity:',cls=>autorelease(alloc(cls)));
   method('NSMutableData',false,'mutableBytes',s=>read(s+4));
