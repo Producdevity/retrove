@@ -1,3 +1,4 @@
+import {installStringBytes} from "../src/runtime/ios/foundation/text/byte-constructors.ts";
 import {FoundationErrorSymbol} from "../src/runtime/ios/foundation/errors.ts";
 import {installAudioPlayers} from "../src/runtime/ios/media/audio-player.ts";
 import {decodePlayerAudio} from "../src/runtime/audio/player/decoder.ts";
@@ -290,9 +291,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const data=a(0),v=data?decodeText(cpu.read(read(data+4),read(data+8)),a(1)):null;
     if(v===null){destroy(s);return 0;}return makeString(v,s);
   });
-  method('NSString',false,'initWithBytes:length:encoding:',(s,a)=>{
-    const v=decodeText(cpu.read(a(0),a(1)),a(2));if(v===null){destroy(s);return 0;}return makeString(v,s);
-  });
+  installStringBytes({method,destroy,readBytes:(pointer,length)=>cpu.read(pointer,length),freeBytes:pointer=>heap.free(pointer),initialize:(pointer,value)=>makeString(value,pointer)});
   method('NSString',false,'initWithFormat:',(self,a)=>makeString(foundationObjects.formatted(a(0),i=>a(i+1)),self));
   method('NSString',false,'initWithFormat:arguments:',(self,a)=>{const args=a(1);return makeString(foundationObjects.formatted(a(0),i=>read(args+i*4)),self);});
   method('NSString',false,'initWithString:',(self,a)=>makeString(text(a(0)),self));
