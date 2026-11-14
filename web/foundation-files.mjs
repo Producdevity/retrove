@@ -1,10 +1,11 @@
+import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
 import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
 import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
 import {parsePlist} from './plist.mjs';
 import {readString} from './memory.mjs';
 
 // NSFileManager and libc share one filesystem, including current directory and saves.
-export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom}) {
+export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom,decodeText,makeString}) {
   const invoke=(name,...args)=>sys.funcs[name](i=>args[i]??0);
   hostClass('NSFileManager','NSObject');
   hostClass('NSError','NSObject',16);
@@ -35,9 +36,10 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
       return ok?type:0;
     } finally {heap.free(scratch);}
   }
+  const makeError=(code,domain)=>{const value=alloc(names.get('NSError'));write(value+4,code);const name=retain(string(domain));write(value+8,name);return autorelease(value);};
   installUrlResources({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,send,
     stat:async path=>await stat(utf8(path),0)?0:read(invoke('___error')),
-    error:(code,domain)=>{const value=alloc(names.get('NSError'));write(value+4,code);const name=retain(string(domain));write(value+8,name);return autorelease(value);}});
+    error:makeError});
   const dirs=new Map([[5,'/Library'],[9,'/Documents'],[13,'/Library/Caches'],[14,'/Library/Application Support']]);
   method('NSFileManager',false,'URLsForDirectory:inDomains:',async(_,a)=>{
     const path=dirs.get(a(0));const urls=(a(1)&1)&&path?[await send(names.get('NSURL'),'fileURLWithPath:',[string(path)])]:[];
@@ -90,6 +92,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
       return output;
     } finally {if(buffer)heap.free(buffer);heap.free(statbuf);await invoke('_close',fd);}
   }
+  installStringFiles({method,alloc,destroy,autorelease,write,contents,errno:()=>read(invoke('___error')),decode:decodeText,initialize:(p,v)=>makeString(v,p),error:makeError});
   method('NSDictionary',true,'dictionaryWithContentsOfURL:',async(_,a)=>{
     const u=a(0);if(!u||!await send(u,'isFileURL'))return 0;
     const bytes=await contents(await send(u,'path'));if(!bytes)return 0;
