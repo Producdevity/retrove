@@ -19,7 +19,8 @@ export class CharacterSet {
     return new CharacterSet((character) => !this.contains(character));
   }
   static characters(value: string): CharacterSet {
-    return new CharacterSet((character) => value.includes(character));
+    const characters = new Set(value);
+    return new CharacterSet((character) => characters.has(character));
   }
   static decimal(): CharacterSet {
     return new CharacterSet((character) => decimalValue(character) !== undefined);

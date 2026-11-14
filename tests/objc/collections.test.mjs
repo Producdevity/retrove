@@ -20,3 +20,11 @@ test('dictionary fast enumeration yields keys in bounded batches and exposes mut
   assert.notEqual(x.read(mutation),before);
   await x.send(dictionary,'release');assert.equal(x.heap.live.has(mutation),false);
 });
+
+test('NSString character-set search returns an ARM32 NSRange through objc_msgSend_stret',async t=>{
+ const x=await fixture(t),str=s=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(s));
+ const value=await str('a🎮bx'),set=await x.send(x.cls('NSCharacterSet'),'characterSetWithCharactersInString:',await str('🎮x'));
+ const range=x.heap.zero(12);x.write(range+8,0xcafebabe);
+ await x.f('_objc_msgSend_stret',range,value,x.sel('rangeOfCharacterFromSet:'),set);
+ assert.equal(x.read(range),1);assert.equal(x.read(range+4),2);assert.equal(x.read(range+8),0xcafebabe);
+});

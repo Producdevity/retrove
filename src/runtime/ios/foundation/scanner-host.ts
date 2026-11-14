@@ -98,7 +98,7 @@ function installScanMethods(
   );
 }
 
-export function installScanners(host: FoundationHost): void {
+export function installScanners(host: FoundationHost): CharacterSets {
   const sets = installCharacterSets(host);
   const objects = new ScannerObjects(host, sets);
   const classPointer = host.hostClass(FoundationClass.Scanner, FoundationClass.Object);
@@ -138,4 +138,5 @@ export function installScanners(host: FoundationHost): void {
   );
   host.method(FoundationClass.Scanner, false, "dealloc", (self) => objects.destroy(self));
   installScanMethods(host, objects, sets);
+  return sets;
 }

@@ -1,3 +1,4 @@
+import {installStringSearch} from "../src/runtime/ios/foundation/string-search.ts";
 import {DataField,installDataFactories} from "../src/runtime/ios/foundation/data.ts";
 import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
 import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.ts";
@@ -528,7 +529,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const input = touchUIKit({className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
-  installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
+  const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
+  installStringSearch({text,write,structureMethod:(selector,implementation)=>{implementation.stret=true;method('NSString',false,selector,implementation);}},characterSets);
   installLocks({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,send,
     currentThread:()=>threads?.funcs._pthread_self()??1,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
