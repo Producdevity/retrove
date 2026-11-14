@@ -51,11 +51,11 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   function number(value) {
     const n=alloc(names.get('NSNumber')); numbers.set(n,value); return autorelease(n);
   }
-  installNumbers({method,alloc,autorelease,get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
+  const releaseNumberType=installNumbers({method,alloc,autorelease,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
   const numberText=s=>{const value=numbers.get(s);return String(typeof value==='boolean'?Number(value):value);};
   for(const selector of ['stringValue','description'])method('NSNumber',false,selector,s=>string(numberText(s)));
   method('NSNumber',false,'copy',retain);
-  method('NSNumber',false,'dealloc',s=>{numbers.delete(s);destroy(s);});
+  method('NSNumber',false,'dealloc',s=>{releaseNumberType(s);numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
   installCollectionInitializers({method});
   installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});

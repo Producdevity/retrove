@@ -23,3 +23,12 @@ test('NSNumber float and double values use the guest soft-float ABI',async t=>{
  bits.setBigUint64(0,await x.send(number,'doubleValue'),true);assert.equal(bits.getFloat64(0,true),-123.25);
  bits.setUint32(0,await x.send(number,'floatValue'),true);assert.equal(bits.getFloat32(0,true),-123.25);
 });
+
+test('NSNumber exposes native type encodings and exact boxed bytes independently of NSValue',async t=>{
+ const x=await fixture(t),out=x.heap.alloc(16),cases=[
+  ['Bool',[1],'c','01'],['Char',[65],'c','41'],['Char',[255],'c','ff'],['UnsignedChar',[255],'s','ff00'],['Short',[0xfffffb2e],'s','2efb'],['UnsignedShort',[65535],'i','ffff0000'],['Int',[0x80000001],'i','01000080'],['UnsignedInt',[0xffffffff],'q','ffffffff00000000'],['LongLong',[1,0],'q','0100000000000000'],['LongLong',[0xffffffff,0xfffffffe],'q','fffffffffeffffff'],['UnsignedLongLong',[0xffffffff,0xffffffff],'Q','ffffffffffffffff'],['UnsignedLongLong',[1,0],'q','0100000000000000'],['Float',[0x3fa00000],'f','0000a03f'],['Float',[0x7f800000],'d','000000000000f07f'],['Double',[0,0x3ff40000],'d','000000000000f43f'],['Double',[0,0x80000000],'d','0000000000000080']];
+ for(const [suffix,args,type,hex] of cases){const number=await x.send(x.cls('NSNumber'),'numberWith'+suffix+':',...args),encoding=await x.send(number,'objCType');assert.equal(new TextDecoder().decode(x.cpu.read(encoding,type.length)),type);assert.equal(x.cpu.read(encoding+type.length,1)[0],0);assert.equal(await x.send(number,'objCType'),encoding);
+  x.cpu.write(out,new Uint8Array(16).fill(0xcc));await x.send(number,'getValue:',out);const expected=Buffer.from(hex,'hex');assert.deepEqual(x.cpu.read(out,expected.length),Uint8Array.from(expected));assert.equal(x.cpu.read(out+expected.length,16-expected.length).every(b=>b===0xcc),true);
+ }
+ x.heap.free(out);
+});
