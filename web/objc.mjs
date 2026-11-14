@@ -1,3 +1,4 @@
+import {installAccelerometer} from "../src/runtime/ios/uikit/motion/accelerometer.ts";
 import {installStringSearch} from "../src/runtime/ios/foundation/string-search.ts";
 import {DataField,installDataFactories} from "../src/runtime/ios/foundation/data.ts";
 import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
@@ -555,6 +556,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     scalar:p=>isKind(p,'NSString')&&!isKind(p,'NSMutableString')?text(p):foundationObjects.archiveNumber(p),
     builtin:encodeFoundation({text,data:p=>cpu.read(read(p+4),read(p+8)),date:foundationObjects.archiveDate,entries:foundationObjects.archiveEntries,items:input.items}),
     data:bytes=>autorelease(archivedData(bytes)),replaceData:(p,bytes)=>{resizeData(p,bytes.length);cpu.write(read(p+4),bytes);},writeFile:fileObjects.writeArchive});
+  const accelerometer=installAccelerometer({hostClass,method,alloc,destroy,release:releaseFromHost,send});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,getDispatch:()=>dispatchService});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])
@@ -606,6 +608,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
           await foundationObjects.pollMain();
           await scheduler.pump();
           if (lifecycle.active) await input.pump();
+          await accelerometer.pump(lifecycle.active);
           for (const [ptr, d] of [...displays]) {
             if (!lifecycle.active || !d.scheduled || d.paused || time + 0.5 < d.next) continue;
             const period = d.interval * refreshMs;
@@ -818,7 +821,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       await send(center,'postNotificationName:object:userInfo:',[string(notification),avSession??=alloc(names.get('AVAudioSession')),info]);
     },
     async fileURLPath(url) { return await send(url, 'isFileURL') ? text(await send(url, 'path')) : null; },
-    close() { lifecycle.close(); movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
+    close() { lifecycle.close(); accelerometer.close(); movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
     get lastSelector() {
     const latest=lastDispatch.get(threadId());if(!latest)return;
     const {cls:lastClass,method:lastMethod}=latest;
