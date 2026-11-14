@@ -1,3 +1,4 @@
+import {MovieLoading,MovieLoadState} from "../src/runtime/ios/media/movie-loading.ts";
 import {MoviePlayback,MovieNotification,MovieUserInfo} from '../src/runtime/ios/media/movie-playback.ts';
 // MPMoviePlayerController delivers notifications from the guest main thread.
 const finished = MovieNotification.PlaybackFinished;
@@ -11,7 +12,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
   let delivering = false;
   function state(self) {
     if (!players.has(self)) players.set(self, {view: alloc(names.get('UIView')), url: 0, rate: 1,
-      scaling: 1, autoplay: 1, controls: 1, repeat: 0, fullscreen: 0});
+      loading:new MovieLoading(), prepared:false, scaling: 1, autoplay: 1, controls: 1, repeat: 0, fullscreen: 0});
     return players.get(self);
   }
   function setResume(s, needed) {
@@ -19,6 +20,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     needsMovieResume([...players.values()].some(player => player.needsResume));
   }
   function reset(s) {
+    s.loading.reset();s.prepared=false;
     s.playback?.close();
     s.playback = null;
     s.video?.remove();
@@ -29,9 +31,10 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     const s = state(self), old = s.url;
     s.url = retain(a(0)); reset(s);
     await release(old);
+    await load(self);
     return self;
   }
-  async function prepare(self) {
+  async function load(self) {
     const s = state(self);
     if (!s.url || s.video || s.reason !== undefined || s.reported) return;
     const path = text(await send(s.url, 'path')).replace(/^\/+/, '');
@@ -60,6 +63,9 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
         finish(1);
       },
     });
+    const updateLoad=(waiting=false)=>{if(s.video===video)s.loading.update(video.readyState,waiting);};
+    for(const name of ['loadedmetadata','loadeddata','canplay','canplaythrough','playing'])video.addEventListener(name,()=>updateLoad());
+    for(const name of ['waiting','stalled'])video.addEventListener(name,()=>updateLoad(true));
     video.addEventListener('ended', () => finish(0));
     video.addEventListener('error', () => {
       if (s.video !== video) return;
@@ -74,12 +80,13 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       video.src = s.blobURL = URL.createObjectURL(blob);
       mediaHost.append(video);
       diagnostic('info', 'movie', 'Opened movie from bundle', {path, bytes: blob.size});
-      if (s.autoplay || s.wantsPlay) playElement(s);
+      if ((s.prepared && s.autoplay) || s.wantsPlay) playElement(s);
     } catch (err) {
       diagnostic('warn', 'movie', 'Movie asset read failed', {path, message: String(err)});
       finish(1);
     }
   }
+  async function prepare(self) {const s=state(self);s.prepared=true;await load(self);if(s.autoplay||s.wantsPlay)playElement(s);}
   function playElement(s) {
     if (s.video?.src) s.playback.play();
   }
@@ -89,7 +96,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
   method(cls, false, 'view', s => state(s).view);
   method(cls, false, 'prepareToPlay', prepare);
   method(cls, false, 'play', async self => {
-    const s = state(self); s.wantsPlay = true;
+    const s = state(self); s.wantsPlay = true;s.prepared=true;
     if (!s.video) await prepare(self); else playElement(s);
   });
   method(cls, false, 'pause', self => { const s = state(self); s.wantsPlay = false; s.playback?.pause(); });
@@ -98,8 +105,8 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     const v = state(self).video;
     return !v || v.ended ? 0 : v.paused ? 2 : 1;
   });
-  method(cls, false, 'loadState', self => (state(self).video?.readyState ?? 0) >= 2 ? 3 : 0);
-  method(cls, false, 'isPreparedToPlay', self => Number((state(self).video?.readyState ?? 0) >= 2));
+  method(cls, false, 'loadState', self => state(self).loading.state);
+  method(cls, false, 'isPreparedToPlay', self => Number(state(self).prepared && (state(self).loading.state & MovieLoadState.Playable)!==0));
   for (const [getter, setter, field] of [
     ['scalingMode','setScalingMode:','scaling'], ['controlStyle','setControlStyle:','controls'],
     ['repeatMode','setRepeatMode:','repeat'], ['shouldAutoplay','setShouldAutoplay:','autoplay'],
@@ -151,7 +158,12 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       delivering = true;
       try {
         for (const [self,s] of players) {
-          if (s.reason === undefined || s.reported) continue;
+          for(const notification of s.loading.take()){
+            if(players.get(self)!==s)break;
+            const center=await send(names.get('NSNotificationCenter'),'defaultCenter');
+            await send(center,'postNotificationName:object:userInfo:',[string(notification),self,0]);
+          }
+          if (players.get(self)!==s || s.reason === undefined || s.reported) continue;
           s.reported = true;
           const reason = await send(names.get('NSNumber'), 'numberWithInt:', [s.reason]);
           const info = await send(names.get('NSDictionary'), 'dictionaryWithObject:forKey:', [reason,string(reasonKey)]);
