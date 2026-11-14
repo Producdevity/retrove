@@ -569,3 +569,11 @@ test('process and device versions describe the same virtual iOS platform',async 
  assert.equal(await text(await x.send(process,'operatingSystemVersionString')),name+' '+version);
  assert.equal(version,'7.1');
 });
+
+test('manual property changes accept valid keys while observer registration remains unsupported',async t=>{
+ const x=await fixture(t),object=await x.send(x.cls('NSObject'),'new'),key=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('errorTrace'));
+ const count=await x.send(object,'retainCount');
+ assert.equal(await x.send(object,'respondsToSelector:',x.sel('addObserver:forKeyPath:options:context:')),0);
+ await x.send(object,'willChangeValueForKey:',key);await x.send(object,'didChangeValueForKey:',key);assert.equal(await x.send(object,'retainCount'),count);
+ await assert.rejects(x.send(object,'willChangeValueForKey:',0),/Expected NSString/);await x.send(object,'release');
+});

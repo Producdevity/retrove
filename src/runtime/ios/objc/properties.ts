@@ -1,4 +1,4 @@
-import type { GuestArguments } from "./host";
+import type { FoundationHost, GuestArguments } from "./host";
 
 const AccessorArgument = {
   Self: 0,
@@ -97,4 +97,14 @@ export function structCopyImports(
       }
     },
   };
+}
+
+export function installUnobservedPropertyChanges(
+  host: Pick<FoundationHost, "method" | "text">,
+): void {
+  // Observer registration is unavailable; manual notifications have no recipients.
+  for (const selector of ["willChangeValueForKey:", "didChangeValueForKey:"])
+    host.method("NSObject", false, selector, (_self, args) => {
+      host.text(args(0));
+    });
 }

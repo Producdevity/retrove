@@ -25,7 +25,7 @@ import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiv
 import {archiveFoundation} from "../src/runtime/ios/foundation/archives/foundation.ts";
 import {parsePlist} from "./plist.mjs";
 import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
-import {propertyAccessors,structCopyImports} from "../src/runtime/ios/objc/properties.ts";
+import {propertyAccessors,structCopyImports,installUnobservedPropertyChanges} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
@@ -269,6 +269,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const bytes=cpu.read(read(self+8),utf16?len*2:len);return utf16 ? decodeCharacterBytes(bytes) : decoders.utf8.decode(bytes);
   }
   const string = s => autorelease(makeString(s));
+  installUnobservedPropertyChanges({method,text});
   const utf8Cache = new Map();
   function makeUTF16(bytes, self = alloc(names.get('NSString'))) {
     const obj=owned.get(self);
