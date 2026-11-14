@@ -1,3 +1,4 @@
+import {installPlatformVersions} from "../src/runtime/ios/platform.ts";
 import {ErrorInfo} from "../src/runtime/ios/foundation/errors.ts";
 import {installURLConnections} from "../src/runtime/ios/foundation/url-connection.ts";
 import {RunLoopMode} from "../src/runtime/ios/foundation/ports.ts";
@@ -418,8 +419,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     read:()=>globalThis.localStorage?.getItem(preferenceDomain+'.vendor-id')??null,
     save:value=>globalThis.localStorage?.setItem(preferenceDomain+'.vendor-id',value)});
   method('UIDevice',true,'currentDevice',singleton('UIDevice'));
-  method('UIDevice',false,'systemVersion',()=>string('7.1'));
-  method('UIDevice',false,'systemName',()=>string('iPhone OS'));
+  installPlatformVersions({method,string});
   method('UIDevice',false,'model',()=>string('iPhone'));
   method('UIDevice',false,'userInterfaceIdiom',()=>0);
   let orientationRequests=0;

@@ -561,3 +561,11 @@ test('legacy movie notification imports are stable NSString objects',async t=>{
   const object=x.read(symbol);assert.equal(readString(x.cpu,await x.send(object,'UTF8String')),name);
  }
 });
+
+test('process and device versions describe the same virtual iOS platform',async t=>{
+ const x=await fixture(t),device=await x.send(x.cls('UIDevice'),'currentDevice'),process=await x.send(x.cls('NSProcessInfo'),'processInfo');
+ const text=async p=>readString(x.cpu,await x.send(p,'UTF8String'));
+ const name=await text(await x.send(device,'systemName')),version=await text(await x.send(device,'systemVersion'));
+ assert.equal(await text(await x.send(process,'operatingSystemVersionString')),name+' '+version);
+ assert.equal(version,'7.1');
+});
