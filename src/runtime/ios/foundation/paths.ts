@@ -4,15 +4,36 @@ interface PathHost {
   string: FoundationHost["string"];
   urls: ReadonlyMap<number, URL>;
 }
+function normalizedPath(path: string): string {
+  const collapsed = path.replace(/\/+/g, "/");
+  return collapsed.length > 1 ? collapsed.replace(/\/$/, "") : collapsed;
+}
+export function stringLastPathComponent(path: string): string {
+  const value = normalizedPath(path);
+  return value === "/" ? value : value.slice(value.lastIndexOf("/") + 1);
+}
+export function stringPathExtension(path: string): string {
+  const component = stringLastPathComponent(path),
+    separator = component.lastIndexOf(".");
+  return separator > 0 && component.slice(0, separator).replaceAll(".", "")
+    ? component.slice(separator + 1)
+    : "";
+}
+export function deletePathExtension(path: string): string {
+  const value = normalizedPath(path),
+    extension = stringPathExtension(value);
+  return extension ? value.slice(0, value.length - extension.length - 1) : value;
+}
+export function deleteLastPathComponent(path: string): string {
+  const value = normalizedPath(path),
+    separator = value.lastIndexOf("/");
+  return separator === 0 ? "/" : separator < 0 ? "" : value.slice(0, separator);
+}
 export function lastPathComponent(url: URL): string {
-  const path = decodeURIComponent(url.pathname).replace(/\/+$/, "");
-  if (!path) return url.pathname ? "/" : "";
-  return path.slice(path.lastIndexOf("/") + 1);
+  return stringLastPathComponent(decodeURIComponent(url.pathname));
 }
 export function pathExtension(url: URL): string {
-  const component = lastPathComponent(url);
-  const separator = component.lastIndexOf(".");
-  return separator > 0 ? component.slice(separator + 1) : "";
+  return stringPathExtension(decodeURIComponent(url.pathname));
 }
 export function installUrlPaths(host: PathHost): void {
   const methods = { lastPathComponent, pathExtension };
@@ -54,6 +75,13 @@ interface StringPathHost extends Pick<
   items(pointer: number): readonly number[];
 }
 export function installStringPaths(host: StringPathHost): void {
+  for (const [selector, read] of Object.entries({
+    lastPathComponent: stringLastPathComponent,
+    pathExtension: stringPathExtension,
+    stringByDeletingPathExtension: deletePathExtension,
+    stringByDeletingLastPathComponent: deleteLastPathComponent,
+  }))
+    host.method("NSString", false, selector, (self) => host.string(read(host.text(self))));
   host.method("NSString", true, "pathWithComponents:", (_, args) =>
     host.string(pathWithComponents(host.items(args(0)).map((pointer) => host.text(pointer)))),
   );
