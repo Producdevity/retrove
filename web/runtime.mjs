@@ -72,7 +72,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
-      execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+      execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
     phase = message;
@@ -165,7 +165,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     al=openAL({read:(p,n)=>cpu.read(p,n),readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),text:p=>readString(cpu,p),string:s=>heap.string(s),allocate:n=>heap.zero(n),free:p=>heap.free(p),
       output:()=>{const context=audioContext();return !context||context.state==='closed'?null:new WebAudioOutput(context);},gate:(name,fn)=>hostGate({name,library:'OpenAL'},fn)});
     objc = objcImports(cpu, heap, ipa, graphics, nested, signal, service, {
-      threads, sys, audio, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
+      threads, sys, audio, audioOutput:audioContext, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
       onLifecycle: milestone,
       onPresent(presented, duration = 0) {
         graphicsMilliseconds += duration;
@@ -298,6 +298,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       if (mainRunLoopTurn && threads.funcs._pthread_main_np()) {
         await dispatch.pollMain();
         await objc.pumpMovies();
+        await objc.pumpAudioPlayers();
         await audio.pumpSession(objc);
         await sounds.pump();
         await queues.pump();

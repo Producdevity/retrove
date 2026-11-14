@@ -15,7 +15,7 @@ function streamASBD({rate,format,flags,packetBytes,packetFrames,frameBytes,chann
   [format,flags,packetBytes,packetFrames,frameBytes,channels,bits].forEach((n,i)=>v.setUint32(8+i*4,n,true));
   return b;
 }
-async function inspect(read, size) {
+export async function inspectAudioFile(read, size) {
   if (size<12)fail(unsupported);
   const head=await read(0,12), kind=text(head,0);
   const caf=kind==='caff',wave=kind==='RIFF'&&text(head,8)==='WAVE';
@@ -89,7 +89,7 @@ export function audioFiles(cpu,heap,guest,io) {
     else {if(!a(3)||read32(cpu,a(2))!==prop.length)return tag('!siz');cpu.write(a(3),prop);write32(cpu,a(2),prop.length);}
     return 0;
   }
-  const reading=audioFileReading({source:url=>audioURLSource(io,url),inspect:source=>inspect(source.read,source.size),
+  const reading=audioFileReading({source:url=>audioURLSource(io,url),inspect:source=>inspectAudioFile(source.read,source.size),
     register:file=>{files.set(++next,file);return next;},lookup:p=>files.get(p),remove:p=>files.delete(p),entries:()=>files.values(),clear:()=>files.clear(),
     readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),write:(p,b)=>cpu.write(p,b)});
   const api={
@@ -113,7 +113,7 @@ export function audioFiles(cpu,heap,guest,io) {
         }
         return b;
       };
-      try{const f=await inspect(read,size);files.set(++next,f);write32(cpu,out,next);return 0;}
+      try{const f=await inspectAudioFile(read,size);files.set(++next,f);write32(cpu,out,next);return 0;}
       catch(e){if(e.osStatus!==undefined)return e.osStatus;throw e;}
     },
     _AudioFileGetPropertyInfo:a=>property(a,true), _AudioFileGetProperty:a=>property(a,false),

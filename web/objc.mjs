@@ -1,3 +1,7 @@
+import {installAudioPlayers} from "../src/runtime/ios/media/audio-player.ts";
+import {decodePlayerAudio} from "../src/runtime/audio/player/decoder.ts";
+import {WebPlayerOutput} from "../src/runtime/audio/player/output.ts";
+import {inspectAudioFile} from "./audio-file.mjs";
 import {launchApplication} from "../src/runtime/ios/uikit/application/launch.ts";
 import {installStringCharacters,decodeCharacterBytes} from "../src/runtime/ios/foundation/text/characters.ts";
 import {MovieNotification,MovieUserInfo} from "../src/runtime/ios/media/movie-playback.ts";
@@ -42,7 +46,7 @@ const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder() };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
-  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, hostGate, cxx} = {}) {
+  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx} = {}) {
   const lastDispatch = new Map();
   const classes = new Map(), names = new Map(), selectors = new Map(), owned = new Map(), poolStacks = new Map();
   const read = address => read32(cpu, address);
@@ -570,6 +574,11 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     scalar:p=>isKind(p,'NSString')&&!isKind(p,'NSMutableString')?text(p):foundationObjects.archiveNumber(p),
     builtin:encodeFoundation({text,data:p=>cpu.read(read(p+4),read(p+8)),date:foundationObjects.archiveDate,entries:foundationObjects.archiveEntries,items:input.items}),
     data:bytes=>autorelease(archivedData(bytes)),replaceData:(p,bytes)=>{resizeData(p,bytes.length);cpu.write(read(p+4),bytes);},writeFile:fileObjects.writeArchive});
+  const audioPlayers=installAudioPlayers({hostClass,method,destroy,retain,release:releaseFromHost,write,send,error:fileObjects.error,
+    loadURL:async url=>url&&await send(url,'isFileURL')?fileObjects.contents(await send(url,'path')):undefined,
+    readData:p=>cpu.read(read(p+DataField.Bytes),read(p+DataField.Length)),
+    decode:async bytes=>{const context=audioOutput();if(!context||context.state==='closed')throw Error('Audio output is unavailable');
+      return {buffer:await decodePlayerAudio(bytes,context,source=>inspectAudioFile(source.read,source.size)),output:new WebPlayerOutput(context)};}});
   const accelerometer=installAccelerometer({hostClass,method,alloc,destroy,release:releaseFromHost,send});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,getDispatch:()=>dispatchService});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
@@ -596,7 +605,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
         currentApplication:()=>application,setApplication:pointer=>{application=pointer;},responds:(p,name)=>!!lookup(read(p),name),send,
         pushPool:poolPush,popPool:poolPop,connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
       onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
-      while (input.hasWindow() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || [...displays.values()].some(d => d.scheduled)) {
+      while (input.hasWindow() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
         const time = await nextRefresh();
         const token = poolPush();
@@ -604,6 +613,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
           await lifecycle.pump();
           await foundationObjects.pollMain();
           await scheduler.pump();
+          await audioPlayers.pump();
           if (lifecycle.active) await input.pump();
           await accelerometer.pump(lifecycle.active);
           for (const [ptr, d] of [...displays]) {
@@ -813,7 +823,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
     _NSStringFromSelector: a => a(0) ? string(readString(cpu, a(0))) : 0,
   };
-  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump,
+  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
     audioReasonDictionary(key,value){return autorelease(foundationObjects.dictionary(names.get('NSDictionary'),[[string(key),foundationObjects.number(value)]]));},
     async audioSessionNotification(notification,key,value){
       const info=this.audioReasonDictionary(key,value);
@@ -821,7 +831,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       await send(center,'postNotificationName:object:userInfo:',[string(notification),avSession??=alloc(names.get('AVAudioSession')),info]);
     },
     async fileURLPath(url) { return await send(url, 'isFileURL') ? text(await send(url, 'path')) : null; },
-    close() { lifecycle.close(); accelerometer.close(); movies.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
+    close() { lifecycle.close(); accelerometer.close(); movies.close(); audioPlayers.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
     get lastSelector() {
     const latest=lastDispatch.get(threadId());if(!latest)return;
     const {cls:lastClass,method:lastMethod}=latest;
