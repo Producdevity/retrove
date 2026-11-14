@@ -1,3 +1,4 @@
+import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
 import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
 import {installArrayCopies} from "../src/runtime/ios/foundation/arrays.ts";
 import {installDates} from "../src/runtime/ios/foundation/dates.ts";
@@ -385,6 +386,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   }
   const connections=new Map(), responses=new Map();
   hostClass('NSURLResponse','NSObject');
+  method('NSURLResponse',false,'copy',retain);
+  installURLCache({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,send});
   method('NSURLResponse',false,'URL',s=>responses.get(s)?.url??0);
   method('NSURLResponse',false,'expectedContentLength',s=>BigInt(responses.get(s)?.length??-1));
   method('NSURLResponse',false,'dealloc',async s=>{const r=responses.get(s);responses.delete(s);if(r)await release(r.url);destroy(s);});
