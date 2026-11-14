@@ -91,6 +91,15 @@ export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
     return archives;
   }
 
+  async clearFiles(): Promise<void> {
+    if (!this.storage.getDirectory) return;
+    const root = await this.storage.getDirectory();
+    try {
+      await root.removeEntry(ARCHIVE_DIRECTORY, { recursive: true });
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
+    }
+  }
   async remove(reference: ArchiveReference): Promise<void> {
     if (reference.kind === ArchiveKind.Database) return this.db.removeArchive(reference.key);
     const directory = await this.directory();

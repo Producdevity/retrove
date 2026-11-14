@@ -1,3 +1,4 @@
+import {GuestStorageKey} from "../src/storage/guest-keys.ts";
 import {installThreadInstances} from "../src/runtime/ios/foundation/thread-instances.ts";
 import {installLocalizedComparisons} from "../src/runtime/ios/foundation/text/localized-comparison.ts";
 import {installPaymentQueue} from "../src/runtime/ios/storekit/payment-queue.ts";
@@ -247,7 +248,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     unique:()=>crypto.randomUUID(),bytes:pointer=>cpu.read(read(pointer+4),read(pointer+8)),
     read:key=>globalThis.localStorage?.getItem(key)??null,save:(key,value)=>{if(value===null)globalThis.localStorage?.removeItem(key);else globalThis.localStorage?.setItem(key,value);}});
   const preferenceIdentifier=ipa.info.CFBundleIdentifier??ipa.bundlePath;
-  const preferenceDomain='bioshock.preferences.'+preferenceIdentifier;
+  const preferenceDomain=GuestStorageKey.Preferences+preferenceIdentifier;
   installUserDefaults({hostClass,method,text,string,singleton,property,unbox,identifier:preferenceIdentifier,
     globals:{AppleLanguages:languages(),AppleLocale:languages()[0].replaceAll('-','_')},
     storage:{
@@ -428,8 +429,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   const mainRequests=[];
   hostClass('UIDevice','NSObject');
   installDeviceIdentity({method,string,uuid:newUUID,uuidString,
-    read:()=>globalThis.localStorage?.getItem(preferenceDomain+'.vendor-id')??null,
-    save:value=>globalThis.localStorage?.setItem(preferenceDomain+'.vendor-id',value)});
+    read:()=>globalThis.localStorage?.getItem(preferenceDomain+GuestStorageKey.VendorSuffix)??null,
+    save:value=>globalThis.localStorage?.setItem(preferenceDomain+GuestStorageKey.VendorSuffix,value)});
   method('UIDevice',true,'currentDevice',singleton('UIDevice'));
   installPlatformVersions({method,string});
   method('UIDevice',false,'model',()=>string('iPhone'));

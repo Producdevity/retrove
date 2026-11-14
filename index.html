@@ -128,11 +128,21 @@
             <h2>Storage</h2>
             <p id="storage">Checking browser storage…</p>
             <p>
-              Imported apps and their saves are stored in this browser. Removing an IPA keeps its
-              saves. Clearing this site's data removes both.
+              Removing an IPA keeps its saves. Use Manage storage to delete apps, saves or
+              unfinished imports.
             </p>
             <button id="persist" hidden>Protect stored apps &amp; saves</button>
             <p id="persistence"></p>
+            <details id="manage-storage">
+              <summary>Manage storage</summary>
+              <div id="stored-apps"></div>
+              <p id="unused-storage"></p>
+              <div class="storage-actions">
+                <button id="clean-unused">Remove unfinished imports</button
+                ><button id="clear-apps" class="danger">Delete all apps &amp; saves</button>
+              </div>
+              <p id="storage-status" role="status"></p>
+            </details>
           </div>
           <div class="settings-group">
             <h2>Install Retrove</h2>
@@ -146,6 +156,8 @@
             <h2>About</h2>
             <p>A local runtime for your 32-bit iOS app collection.</p>
             <p class="secondary">Version 0.1.0</p>
+            <p id="build-id" class="secondary"></p>
+            <p><a href="/update.html">Check for updates</a></p>
             <div class="about-links">
               <a
                 class="icon-link"
@@ -169,9 +181,11 @@
       <div id="details-content"></div>
       <div class="dialog-actions">
         <button id="details-launch" class="primary">Open app</button
-        ><button id="remove" class="danger">Remove IPA</button>
+        ><button id="remove">Remove IPA</button
+        ><button id="delete-app-data" class="danger">Delete app &amp; data</button>
       </div>
       <p class="secondary">Removing the IPA keeps this app's saves.</p>
+      <p id="remove-status" role="status"></p>
     </dialog>
     <script type="module" src="/src/library/ui/main.ts"></script>
   </body>

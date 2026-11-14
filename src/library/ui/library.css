@@ -582,3 +582,66 @@ dialog::backdrop {
 #report-status:empty {
   display: none;
 }
+#manage-storage {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+#manage-storage summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.storage-app {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.storage-app > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.storage-app strong {
+  font-size: 14px;
+}
+.storage-app span {
+  font-size: 13px;
+}
+.storage-app button {
+  flex-shrink: 0;
+}
+.storage-actions,
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+#manage-storage.busy .storage-app button {
+  pointer-events: none;
+  opacity: 0.5;
+}
+#storage-status:empty {
+  display: none;
+}
+.confirm-dialog {
+  max-width: 400px;
+}
+.confirm-dialog h2 {
+  margin-top: 0;
+}
+.confirm-dialog p {
+  color: var(--secondary);
+  line-height: 1.5;
+}
+.update-page {
+  max-width: 600px;
+  margin: 8vh auto;
+  padding: 24px;
+}
+.update-page .brand {
+  margin-bottom: 24px;
+}

@@ -1,3 +1,5 @@
+import { confirmAction } from "../../ui/confirmation";
+import type { StorageManagement } from "../../storage/management/service";
 import type { InstalledApplication } from "../../domain/application";
 import type { ApplicationLibrary } from "../service";
 import { action, element, node } from "../../ui/dom";
@@ -8,6 +10,7 @@ import "./save-actions.css";
 
 export function appDetails(
   library: ApplicationLibrary,
+  manager: StorageManagement,
   launch: (app: InstalledApplication) => void,
   refresh: () => Promise<void>,
   failure: (error: unknown) => void,
@@ -15,6 +18,7 @@ export function appDetails(
   const dialog = element("app-details", HTMLDialogElement);
   const contents = element("details-content", HTMLDivElement);
   const remove = element("remove", HTMLButtonElement);
+  const erase = element("delete-app-data", HTMLButtonElement);
   const open = element("details-launch", HTMLButtonElement);
   const icons = new AppIcons();
   let selected: InstalledApplication | undefined;
@@ -36,18 +40,30 @@ export function appDetails(
       }
     }, failure),
   );
+  connectDelete(
+    erase,
+    () => selected,
+    manager,
+    dialog,
+    refresh,
+    failure,
+    (busy) => {
+      open.disabled = remove.disabled = erase.disabled = busy;
+    },
+  );
   dialog.addEventListener("close", () => {
     icons.clear();
     saves?.close();
     saves = undefined;
     selected = undefined;
-    open.disabled = remove.disabled = false;
+    open.disabled = remove.disabled = erase.disabled = false;
   });
   return (app) => {
     selected = app;
+    element("remove-status", HTMLParagraphElement).textContent = "";
     saves?.close();
     saves = new SaveActions(app, refresh, (busy) => {
-      open.disabled = remove.disabled = busy;
+      open.disabled = remove.disabled = erase.disabled = busy;
     });
     contents.replaceChildren(
       icons.create(app),
@@ -58,4 +74,41 @@ export function appDetails(
     contents.append(saves.element);
     dialog.showModal();
   };
+}
+
+function connectDelete(
+  erase: HTMLButtonElement,
+  selected: () => InstalledApplication | undefined,
+  manager: StorageManagement,
+  dialog: HTMLDialogElement,
+  refresh: () => Promise<void>,
+  failure: (error: unknown) => void,
+  busy: (value: boolean) => void,
+): void {
+  erase.addEventListener(
+    "click",
+    action(async () => {
+      const app = selected();
+      if (!app) return;
+      if (
+        !(await confirmAction({
+          title: `Delete ${app.name}?`,
+          description:
+            "Delete the IPA, saves and settings from this device? This cannot be undone.",
+          action: "Delete app & data",
+        }))
+      )
+        return;
+      busy(true);
+      try {
+        await manager.remove(app.id, true, (message) => {
+          element("remove-status", HTMLParagraphElement).textContent = message;
+        });
+        dialog.close();
+        await refresh();
+      } finally {
+        busy(false);
+      }
+    }, failure),
+  );
 }

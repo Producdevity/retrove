@@ -83,8 +83,8 @@ export class ApplicationLibrary {
     await this.environment.mutateArchive(id, async () => {
       const app = await this.records.get(id);
       if (!app) return;
+      await this.archives.remove(app.archive);
       await this.records.remove(id);
-      await this.removeArchive(app.archive);
     });
   }
 

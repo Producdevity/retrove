@@ -97,6 +97,33 @@ export class LibraryDatabase implements LibraryRepository {
     });
   }
 
+  async applicationKeys(): Promise<IDBValidKey[]> {
+    return transaction(await this.database(), [LibraryStore.Apps], "readonly", (tx) =>
+      requestResult(tx.objectStore(LibraryStore.Apps).getAllKeys()),
+    );
+  }
+  async archiveReferences(): Promise<ArchiveReference[]> {
+    return transaction(await this.database(), [LibraryStore.Apps], "readonly", async (tx) => {
+      const values: unknown = await requestResult(tx.objectStore(LibraryStore.Apps).getAll());
+      if (!Array.isArray(values))
+        throw new Error("The app index is unreadable. Use Delete all apps & saves to reset it.");
+      return values.map((value) => decodeApplication(value).archive);
+    });
+  }
+  async reset(): Promise<void> {
+    await transaction(
+      await this.database(),
+      [LibraryStore.Apps, LibraryStore.Archives],
+      "readwrite",
+      async (tx) => {
+        await Promise.all(
+          [LibraryStore.Apps, LibraryStore.Archives].map((name) =>
+            requestResult(tx.objectStore(name).clear()),
+          ),
+        );
+      },
+    );
+  }
   async close(): Promise<void> {
     if (this.connection) (await this.connection).close();
     this.connection = undefined;

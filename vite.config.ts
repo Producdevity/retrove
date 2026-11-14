@@ -21,6 +21,7 @@ export default defineConfig({
       input: {
         library: "index.html",
         player: "player.html",
+        update: "update.html",
         "service-worker": "src/pwa/worker.ts",
       },
       output: {

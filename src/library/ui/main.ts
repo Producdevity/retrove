@@ -1,3 +1,4 @@
+import { BUILD_ID } from "../../pwa/update-protocol";
 import "../../ui/appearance.css";
 import "./library.css";
 import { initializeAppearance } from "../../ui/appearance";
@@ -16,6 +17,7 @@ import { connectSettings } from "./settings";
 import { libraryJournal } from "../../diagnostics/journal";
 import { DiagnosticOperation, failedOperation, observed } from "../../diagnostics/operations";
 initializeAppearance();
+element("build-id", HTMLParagraphElement).textContent = `Build ${BUILD_ID}`;
 libraryJournal.record(DiagnosticOperation.Session, {
   build: String(import.meta.env.VITE_RETROVE_REVISION),
   browser: navigator.userAgent,
@@ -31,7 +33,7 @@ const failure = (cause: unknown): void => {
   element("error-logs", HTMLButtonElement).hidden = false;
   error.hidden = false;
 };
-const { library, recover } = browserLibrary(failure);
+const { library, recover, storage: management } = browserLibrary(failure);
 const list = element("apps", HTMLDivElement);
 const search = element("search", HTMLInputElement);
 const count = element("library-count", HTMLParagraphElement);
@@ -42,7 +44,7 @@ let apps: InstalledApplication[] = [];
 const launch = (app: InstalledApplication): void => {
   location.href = `/player.html?app=${encodeURIComponent(app.id)}`;
 };
-const storage = connectSettings(failure);
+const storage = connectSettings(failure, management, () => refresh());
 const refresh = async (): Promise<void> => {
   await observed(DiagnosticOperation.Maintenance, recover).catch(failure);
   apps = (await observed(DiagnosticOperation.Refresh, () => library.list())).sort((left, right) =>
@@ -51,7 +53,7 @@ const refresh = async (): Promise<void> => {
   render();
   await observed(DiagnosticOperation.Settings, storage);
 };
-const details = appDetails(library, launch, refresh, failure);
+const details = appDetails(library, management, launch, refresh, failure);
 function render(): void {
   icons.clear();
   const query = search.value.toLowerCase();

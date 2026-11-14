@@ -5,7 +5,8 @@ export async function registerOfflineShell(report: (message: string) => void): P
     updateViaCache: "none",
   });
   const pending = (): void => {
-    if (registration.waiting) report("An update is ready. Close all Retrove windows to apply it.");
+    if (registration.waiting)
+      report("An update is ready. Use Check for updates in Settings to apply it.");
   };
   pending();
   registration.addEventListener("updatefound", () => {

@@ -1,3 +1,5 @@
+import { connectStorageManagement } from "./storage/management";
+import type { StorageManagement } from "../../storage/management/service";
 import { action, element } from "../../ui/dom";
 import { connectAppearance } from "../../ui/appearance";
 import { formatBytes } from "../../ui/format";
@@ -7,8 +9,13 @@ interface InstallEvent extends Event {
 function isInstallEvent(event: Event): event is InstallEvent {
   return "prompt" in event && typeof event.prompt === "function";
 }
-export function connectSettings(failure: (error: unknown) => void): () => Promise<void> {
+export function connectSettings(
+  failure: (error: unknown) => void,
+  manager: StorageManagement,
+  changed: () => Promise<void>,
+): () => Promise<void> {
   connectAppearance(failure);
+  const refreshManagement = connectStorageManagement(manager, changed, failure);
   const persist = element("persist", HTMLButtonElement);
   const usage = element("storage", HTMLParagraphElement);
   const persistence = element("persistence", HTMLParagraphElement);
@@ -16,6 +23,7 @@ export function connectSettings(failure: (error: unknown) => void): () => Promis
   const help = element("install-help", HTMLParagraphElement);
   let prompt: InstallEvent | undefined;
   const refresh = async (): Promise<void> => {
+    await refreshManagement();
     const estimate = await navigator.storage.estimate();
     usage.textContent = `${formatBytes(estimate.usage ?? 0)} used of ${formatBytes(estimate.quota ?? 0)} available to this browser.`;
     const supported = typeof navigator.storage.persist === "function";

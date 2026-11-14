@@ -1,9 +1,7 @@
+import { SaveDatabase } from "./names";
 import { requestResult, transaction } from "../../storage/database";
 import { homeDirectories, SaveStore } from "./records";
 import { saveStores, type SaveStores } from "./stores";
-const DATABASE_PREFIX = "ios-runtime.files:";
-const DATABASE_VERSION = 1;
-const LEASE_PREFIX = "ios-runtime.open-files:";
 interface Environment {
   readonly factory: IDBFactory;
   readonly locks: LockManager | null;
@@ -28,7 +26,10 @@ export class SaveStorage {
   }
   async database(): Promise<IDBDatabase> {
     if (this.connection) return this.connection;
-    const open = this.environment.factory.open(DATABASE_PREFIX + this.namespace, DATABASE_VERSION);
+    const open = this.environment.factory.open(
+      SaveDatabase.Prefix + this.namespace,
+      SaveDatabase.Version,
+    );
     open.onupgradeneeded = () => {
       const paths = open.result.createObjectStore(SaveStore.Paths);
       open.result.createObjectStore(SaveStore.Inodes, { autoIncrement: true });
@@ -59,7 +60,7 @@ export class SaveStorage {
   private async acquireLease(db: IDBDatabase): Promise<void> {
     const manager = this.environment.locks;
     if (!manager) return;
-    const name = LEASE_PREFIX + this.namespace;
+    const name = SaveDatabase.LeasePrefix + this.namespace;
     await manager.request(name, { ifAvailable: true }, async (exclusive) => {
       if (!exclusive) return;
       await this.transact(db, "readwrite", async ({ inodes, chunks }) => {

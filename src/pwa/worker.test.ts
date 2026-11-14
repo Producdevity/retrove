@@ -30,6 +30,8 @@ async function worker(failInstall = false) {
     handlers.set(name, handler),
   );
   vi.stubGlobal("fetch", network);
+  vi.stubGlobal("clients", { matchAll: async () => [], claim: async () => {} });
+  vi.stubGlobal("skipWaiting", async () => {});
   vi.stubGlobal("caches", {
     open: async () => ({
       addAll: async (paths: string[]) => {

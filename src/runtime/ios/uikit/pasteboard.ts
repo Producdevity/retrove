@@ -1,7 +1,8 @@
+import { GuestStorageKey } from "../../../storage/guest-keys";
 import { isRecord } from "../../../domain/validation";
 import type { FoundationHost } from "../objc/host";
 const CLASS = "UIPasteboard";
-const PREFIX = "bioshock.pasteboard.";
+const PREFIX = GuestStorageKey.Pasteboard;
 const GENERAL = "com.apple.UIKit.pboard.general";
 const TEXT_TYPE = "public.utf8-plain-text";
 const TYPE_SUFFIX = ".types";

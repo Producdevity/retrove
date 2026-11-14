@@ -38,3 +38,14 @@ export async function collectOrphanArchives(
     return removed;
   });
 }
+
+export function withArchiveMaintenance<T>(
+  operation: () => Promise<T>,
+  locks: LockManager = navigator.locks,
+): Promise<T> {
+  if (!locks) throw new Error("This browser cannot safely coordinate archive storage.");
+  return locks.request(ARCHIVE_LOCK, { ifAvailable: true }, (lock) => {
+    if (!lock) throw new Error("Finish imports in other Retrove windows before continuing.");
+    return operation();
+  });
+}

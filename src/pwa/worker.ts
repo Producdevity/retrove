@@ -1,7 +1,17 @@
+import { installWorkerUpdates } from "./worker-update";
+import { SHELL_CACHE_PREFIX } from "./update-protocol";
+declare const clients: {
+  matchAll(options: {
+    type: "window";
+    includeUncontrolled: boolean;
+  }): Promise<readonly { url: string }[]>;
+  claim(): Promise<void>;
+};
+declare function skipWaiting(): Promise<void>;
 import { navigationResponse, shellDocument } from "./navigation";
 declare const __RETROVE_ASSETS__: readonly string[];
 declare const __RETROVE_VERSION__: string;
-const CACHE_PREFIX = "retrove.shell:";
+const CACHE_PREFIX = SHELL_CACHE_PREFIX;
 const cacheName = CACHE_PREFIX + __RETROVE_VERSION__;
 const assets = new Set(__RETROVE_ASSETS__);
 interface LifetimeEvent extends Event {
@@ -33,8 +43,14 @@ async function install(): Promise<void> {
   }
 }
 async function activate(): Promise<void> {
-  for (const name of await caches.keys())
-    if (name.startsWith(CACHE_PREFIX) && name !== cacheName) await caches.delete(name);
+  const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
+  const keepOld =
+    windows.length > 1 ||
+    windows.some((client) => new URL(client.url).pathname.startsWith("/player"));
+  if (!keepOld)
+    for (const name of await caches.keys())
+      if (name.startsWith(CACHE_PREFIX) && name !== cacheName) await caches.delete(name);
+  await clients.claim();
 }
 async function respond(request: Request, pathname: string): Promise<Response> {
   const cache = await caches.open(cacheName);
@@ -54,4 +70,23 @@ globalThis.addEventListener("fetch", (event) => {
   if (url.origin !== location.origin) return;
   const pathname = shellDocument(url.pathname);
   if (assets.has(pathname)) event.respondWith(respond(event.request, pathname));
+  else if (pathname.startsWith("/assets/") || pathname.startsWith("/runtime/"))
+    event.respondWith(
+      (async () => {
+        for (const name of await caches.keys())
+          if (name.startsWith(CACHE_PREFIX)) {
+            const response = await (await caches.open(name)).match(pathname);
+            if (response) return response;
+          }
+        return fetch(event.request);
+      })(),
+    );
 });
+
+installWorkerUpdates(
+  {
+    windows: () => clients.matchAll({ type: "window", includeUncontrolled: true }),
+    skipWaiting: () => skipWaiting(),
+  },
+  (handler) => globalThis.addEventListener("message", handler),
+);

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f6fa" />
+    <title>Update Retrove</title>
+    <link rel="icon" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  </head>
+  <body>
+    <main class="update-page">
+      <a class="brand" href="/"
+        ><img src="/icons/icon.svg" alt="" width="34" height="34" />Retrove</a
+      >
+      <div class="settings-group">
+        <h1>Update Retrove</h1>
+        <p id="update-build"></p>
+        <p id="update-status" role="status">Checking for an update…</p>
+        <div class="storage-actions">
+          <button id="apply-update" class="primary" disabled>Apply update</button
+          ><a href="/">Return to library</a>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/pwa/update-page.ts"></script>
+  </body>
+</html>
