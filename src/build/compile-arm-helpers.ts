@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const ROOTS = ["src/runtime/ios/libc/guest-libc", "src/runtime/ios/threads/guest-mutex"];
+const ROOTS = [
+  "src/runtime/ios/libc/guest-libc",
+  "src/runtime/ios/threads/guest-mutex",
+  "src/runtime/ios/compiler-rt/vfp",
+];
 const HEX_RADIX = 16;
 const JSON_INDENT = 2;
 const directory = mkdtempSync(join(tmpdir(), "retrove-libc-"));

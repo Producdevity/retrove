@@ -1,3 +1,4 @@
+import {vfpBuiltins} from "../src/runtime/ios/compiler-rt/vfp.ts";
 import {openAL} from "../src/runtime/audio/openal/imports.ts";
 import {WebAudioOutput} from "../src/runtime/audio/openal/output.ts";
 import {guestMutexFunctions} from '../src/runtime/ios/threads/guest-mutex.ts';
@@ -210,11 +211,12 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     cpu.map(STACK_TOP - STACK_SIZE, STACK_SIZE, 3);
     cpu.trapRange(GATES, RETURN - 1, (_, at) => { pending = at; });
     const nativeLibc = guestLibc(cpu,heap,{memcpy:hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy),divide:hostGate({name:"___umodsi3",library:"libSystem"},funcs.___umodsi3)});
+    const nativeVFP=vfpBuiltins(cpu,heap);
     const nativeMutexes = guestMutexFunctions(cpu,heap,{budget:cpu.budget,
       lock:hostGate({name:"_pthread_mutex_lock",library:"libSystem"},funcs._pthread_mutex_lock),
       unlock:hostGate({name:"_pthread_mutex_unlock",library:"libSystem"},funcs._pthread_mutex_unlock)});
     const load = loadMachO(image, memory, b => {
-      const data = nativeLibc.get(b.name) ?? nativeMutexes.get(b.name) ?? threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
+      const data = nativeLibc.get(b.name) ?? nativeVFP.get(b.name) ?? nativeMutexes.get(b.name) ?? threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
         ?? objc.resolveData(b.name) ?? dispatch.data.get(b.name) ?? cg.data.get(b.name);
       if (data != null) return data;
       const fn = funcs[b.name];
