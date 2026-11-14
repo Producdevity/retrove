@@ -1,3 +1,5 @@
+import {IOSPlatform} from "../src/runtime/ios/platform.ts";
+import {unameImports} from "../src/runtime/ios/libc/uname.ts";
 import {read32, readString, write32} from './memory.mjs';
 
 const PAGE = 4096, HOST = 1;
@@ -12,7 +14,7 @@ export function darwinSystem(cpu, heap, errno) {
   const limits = new Map([[3, [4n << 20n, 4n << 20n]], [8, [256n, 10240n]]]);
   const env = new Map();
   const failure = code => { write32(cpu, errno, code); return -1; };
-  const model = text.encode('iPhone5,1\0');
+  const model = text.encode(IOSPlatform.Model+'\0');
   const read64 = address => BigInt(read32(cpu, address)) | (BigInt(read32(cpu, address+4)) << 32n);
   function write64(address, n) { write32(cpu, address, Number(n & 0xffffffffn)); write32(cpu, address+4, Number(n >> 32n)); }
   function ctl(name, output, count, replacement, replacementSize) {
@@ -44,6 +46,7 @@ export function darwinSystem(cpu, heap, errno) {
     return 0;
   }
   return {
+    ...unameImports({write:(p,b)=>cpu.write(p,b),fail:failure}),
     _sysconf: a => {
       switch (a(0)) {
         case 1: return 262144; // ARG_MAX
@@ -98,7 +101,7 @@ export function darwinSystem(cpu, heap, errno) {
       return env.get(key);
     },
     _gethostname: a => {
-      const bytes = text.encode('localhost\0');
+      const bytes = text.encode(IOSPlatform.NodeName+'\0');
       if (!a(0)) return failure(14);
       cpu.write(a(0), bytes.subarray(0,a(1)));
       return a(1) < bytes.length ? failure(63) : 0;

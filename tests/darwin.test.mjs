@@ -141,3 +141,12 @@ test('ARMv7 backtrace walks the r7 chain and returns one freeable symbol buffer'
   assert.match(readString(cpu,read32(cpu,names+8)),/fun \+ 72/);
   heap.free(names);
 });
+
+test('Darwin uname writes the complete native five-field structure and preserves adjacent memory',()=>{
+ const {cpu,heap}=memory(),errno=heap.zero(4),f=darwinSystem(cpu,heap,errno),p=4096;cpu.write(p-1,new Uint8Array(1282).fill(0xab));
+ assert.equal(f._uname(args(p)),0);
+ assert.deepEqual(Array.from({length:5},(_,i)=>readString(cpu,p+i*256)),['Darwin','localhost','14.0.0','Retrove iOS compatibility runtime','iPhone5,1']);
+ assert.equal(cpu.read(p-1,1)[0],0xab);assert.equal(cpu.read(p+1280,1)[0],0xab);
+ for(let i=0;i<5;i++){const bytes=cpu.read(p+i*256,256),nul=bytes.indexOf(0);assert.ok(nul>0);assert.equal(bytes.slice(nul).some(Boolean),false);}
+ assert.equal(f._uname(args(0)),-1);assert.equal(read32(cpu,errno),14);
+});
