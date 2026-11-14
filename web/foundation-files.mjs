@@ -1,3 +1,4 @@
+import {installFileAttributes} from "../src/runtime/ios/foundation/file-attributes.ts";
 import {installErrors,ERROR_INSTANCE_BYTES,ErrorField} from "../src/runtime/ios/foundation/errors.ts";
 import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
@@ -7,7 +8,7 @@ import {parsePlist} from './plist.mjs';
 import {readString} from './memory.mjs';
 
 // NSFileManager and libc share one filesystem, including current directory and saves.
-export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom,decodeText,makeString}) {
+export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom,decodeText,makeString,entries,isKind}) {
   const invoke=(name,...args)=>sys.funcs[name](i=>args[i]??0);
   hostClass('NSFileManager','NSObject');
   hostClass('NSError','NSObject',ERROR_INSTANCE_BYTES);
@@ -31,6 +32,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     } finally {heap.free(scratch);}
   }
   const makeError=(code,domain)=>{const value=alloc(names.get('NSError'));write(value+ErrorField.Code,code);const name=retain(string(domain));write(value+ErrorField.Domain,name);return autorelease(value);};
+  installFileAttributes({method,text,write,entries,isKind,send,error:makeError,setMetadata:(path,update)=>sys.setMetadata(path,update)});
   installUrlResources({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,send,
     stat:async path=>await stat(utf8(path),0)?0:read(invoke('___error')),
     error:makeError});
@@ -46,13 +48,16 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     try {return path?string(readString(cpu,path)):0;} finally {if(path)heap.free(path);}
   });
   method('NSFileManager',false,'changeCurrentDirectoryPath:',async(_,a)=>Number(!!a(0)&&await invoke('_chdir',utf8(a(0)))===0));
-  method('NSFileManager',false,'createDirectoryAtPath:withIntermediateDirectories:attributes:error:',async(_,a)=>{
+  method('NSFileManager',false,'createDirectoryAtPath:attributes:',(self,a)=>send(self,'createDirectoryAtPath:withIntermediateDirectories:attributes:error:',[a(0),0,a(1),0]));
+  method('NSFileManager',false,'createDirectoryAtPath:withIntermediateDirectories:attributes:error:',async(self,a)=>{
     const path=text(a(0)), parents=a(1), error=a(3), segments=path.split('/').filter(Boolean);
     const prefix=path.startsWith('/')?'/':'';
     for(let i=parents?1:segments.length;i<=segments.length;i++){
       const p=heap.string(prefix+segments.slice(0,i).join('/'));
       try {
-        if(await invoke('_mkdir',p,0o755)!==0 && !(parents&&((await stat(p,0))&0xf000)===0x4000))return failure(error);
+        const created=await invoke('_mkdir',p,0o755)===0;
+        if(!created && !(parents&&((await stat(p,0))&0xf000)===0x4000))return failure(error);
+        if(created&&a(2)&&!await send(self,'setAttributes:ofItemAtPath:error:',[a(2),string(prefix+segments.slice(0,i).join('/')),error]))return 0;
       } finally {heap.free(p);}
     }
     return 1;
@@ -148,6 +153,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     if(dest===source||dest.startsWith(source+'/'))return failure(err);
     return await copyTree(source,dest)?1:failure(err);
   });
+  method('NSFileManager',false,'contentsAtPath:',(_,a)=>send(names.get('NSData'),'dataWithContentsOfFile:',[a(0)]));
   method('NSFileManager',false,'createFileAtPath:contents:attributes:',async(_,a)=>{
     const d=a(1),path=utf8(a(0)),fd=await invoke('_open',path,0x601);
     if(fd<0)return 0;

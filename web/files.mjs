@@ -335,6 +335,18 @@ export function fileImports(cpu, ipa, heap, errno, log,
     return {device: 2, inode, mode: 0o100000 | (node.permissions ?? 0o644), size: node.size,
       links: node.linked ? 1 : 0, modified: node.modified ?? 0, created: node.created ?? 0};
   }
+  async function setMetadata(address, update) {
+    const path=locate(address);
+    if(path.bundle) {await pathStat(path);error(E.ROFS);}
+    if(!path.home)error(E.PERM);
+    return run('readwrite',async({paths,inodes})=>{
+      const item=await paths.get(path.home);
+      if(!item)error(E.NOENT);
+      if(item.dir) {Object.assign(item,update);await paths.put(path.home,item);}
+      else {const node=await inodes.get(item.inode);Object.assign(node,update);await inodes.put(item.inode,node);}
+      return 0;
+    });
+  }
   async function descriptorStat(fd) {
     if (fd < 3 && !fds.has(fd) && !closedStandard.has(fd)) return {device: 3, inode: fd, mode: 0o20666, size: 0};
     const file = fdFor(fd);
@@ -348,7 +360,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
     return run("readonly", async ({paths, inodes}) => {
       const item = await paths.get(p.home);
       if (!item) error(E.NOENT);
-      if (item.dir) return {device: 2, inode: homeInode(p.home, item), mode: 0o40000 | (item.permissions ?? 0o755), links: 2, size: 0};
+      if (item.dir) return {device: 2, inode: homeInode(p.home, item), mode: 0o40000 | (item.permissions ?? 0o755), links: 2, size: 0, modified:item.modified??0,created:item.created??0};
       return saveStat(item.inode, await inodes.get(item.inode));
     });
   }
@@ -545,19 +557,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
     _removexattr: checked(async a => { const path=locate(a(0)); await pathStat(path); error(path.bundle ? E.ROFS : 93); }),
     _unlink: checked(a => remove(a(0), false)), _rmdir: checked(a => remove(a(0), true)),
     _rename: checked(a => rename(a(0), a(1))),
-    _chmod:checked(async a=>{
-      const path=locate(a(0));
-      if(path.bundle) {await pathStat(path);error(E.ROFS);}
-      if(!path.home)error(E.PERM);
-      return run('readwrite',async({paths,inodes})=>{
-        const item=await paths.get(path.home);
-        if(!item)error(E.NOENT);
-        const permissions=a(1)&0o7777;
-        if(item.dir) {item.permissions=permissions;await paths.put(path.home,item);}
-        else {const node=await inodes.get(item.inode);node.permissions=permissions;await inodes.put(item.inode,node);}
-        return 0;
-      });
-    }),
+    _chmod:checked(a=>setMetadata(a(0),{permissions:a(1)&0o7777})),
     _fopen:checked(async a=>{
       const {access,flags}=streamMode(a(1));
       return newStream(await open(a(0),flags),access);
@@ -667,6 +667,12 @@ export function fileImports(cpu, ipa, heap, errno, log,
     _fileno: checked(a => streamFor(a(0)).fd),
     _fclose: checked(async a => { const ptr = a(0),fd=streamFor(ptr).fd; await close(fd); streams.delete(ptr); if(fd>=3)heap.free(ptr); return 0; })
   };
+  Object.defineProperty(funcs, "setMetadata", {value:async(path,update)=>{
+    const pointer=heap.string(path);
+    try{await setMetadata(pointer,update);return 0;}
+    catch(e){if(e instanceof FileError)return e.errno;throw e;}
+    finally{heap.free(pointer);}
+  }});
   Object.defineProperty(funcs, "writeBytes", {value:writeBytes});
   Object.defineProperty(funcs, "descriptors", {value:{
     get:fd=>fds.get(fd),close,

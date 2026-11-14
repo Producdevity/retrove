@@ -555,7 +555,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop});
   const cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
     retain,release:releaseFromHost,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
-  const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData,decodeText,makeString});
+  const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData,decodeText,makeString,entries:foundationObjects.archiveEntries,isKind});
   const archivedData=(bytes,self)=>{
     const source=heap.alloc(Math.max(1,bytes.length));
     try {cpu.write(source,bytes);return createData(source,bytes.length,self);}finally{heap.free(source);}
@@ -707,7 +707,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['AVAudioSessionRouteChangeReasonKey','AVAudioSessionRouteChangeReasonKey']]) exportedStringNames.set('_'+name,value);
   for(const name of ['GCControllerDidConnectNotification','GCControllerDidDisconnectNotification','GKPlayerAuthenticationDidChangeNotificationName'])
     exportedStringNames.set('_'+name,name);
-  for(const name of ['NSFileModificationDate','NSFileSystemFreeSize','NSFileSystemSize','NSMetadataItemFSContentChangeDateKey',
+  for(const name of ['NSFileModificationDate','NSFileCreationDate','NSFileSystemFreeSize','NSFileSystemSize','NSMetadataItemFSContentChangeDateKey',
     'NSMetadataItemFSNameKey','NSMetadataItemURLKey','NSMetadataQueryDidFinishGatheringNotification','NSMetadataQueryDidUpdateNotification',
     'NSMetadataQueryUbiquitousDocumentsScope','NSMetadataUbiquitousItemDownloadingStatusKey','NSMetadataUbiquitousItemHasUnresolvedConflictsKey',
     'NSMetadataUbiquitousItemIsDownloadingKey','NSMetadataUbiquitousItemIsUploadedKey','NSMetadataUbiquitousItemIsUploadingKey',

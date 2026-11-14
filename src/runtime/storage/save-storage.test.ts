@@ -150,3 +150,25 @@ test("renamed directories retain their original virtual inode identity", async (
     await reopened.close();
   }
 });
+
+test("file and directory metadata survive reopen, including fractional and pre-epoch timestamps", async () => {
+  const env = environment();
+  const storage = new SaveStorage("test.timestamps", env);
+  const metadata = { permissions: 0o640, created: -500, modified: 315532800125.5 };
+  const id = await storage.run("readwrite", async ({ paths, inodes }) => {
+    await paths.put("Documents/theme", { dir: true, ...metadata });
+    const id = await inodes.add({ size: 0, linked: true, refs: 0, ...metadata });
+    await paths.put("Documents/theme/file", { inode: id });
+    return id;
+  });
+  await storage.close();
+  const reopened = new SaveStorage("test.timestamps", env);
+  try {
+    await reopened.run("readonly", async ({ paths, inodes }) => {
+      expect(await paths.get("Documents/theme")).toEqual({ dir: true, ...metadata });
+      expect(await inodes.get(id)).toMatchObject(metadata);
+    });
+  } finally {
+    await reopened.close();
+  }
+});

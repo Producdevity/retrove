@@ -196,5 +196,5 @@ export function systemImports(cpu, heap, ipa, log, threadID = () => 1, diagnosti
     ...fileFuncs
   };
   funcs._memmove = funcs._memcpy;
-  return {data, funcs, finalizers, closeFiles:fileFuncs.closeFiles};
+  return {data, funcs, finalizers, setMetadata:fileFuncs.setMetadata,closeFiles:fileFuncs.closeFiles};
 }

@@ -10,6 +10,8 @@ export const homeDirectories = [
   "tmp",
 ];
 export interface PathEntry {
+  created?: number;
+  modified?: number;
   original?: string;
   dir?: boolean;
   inode?: number;
@@ -43,6 +45,12 @@ export function chunkKey(value: unknown): ChunkKey {
     throw new Error("Invalid save chunk key.");
   return [inodeKey(value[0]), nonnegativeInteger(value[1], "chunk index")];
 }
+const MAX_TIMESTAMP = 8_640_000_000_000_000;
+function timestamp(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > MAX_TIMESTAMP)
+    throw new Error("Invalid guest file timestamp.");
+  return value;
+}
 export function pathEntry(value: unknown): PathEntry {
   if (!isRecord(value)) throw new Error("Invalid guest file entry.");
   const entry: PathEntry = {};
@@ -55,6 +63,8 @@ export function pathEntry(value: unknown): PathEntry {
   if (!entry.dir && entry.inode === undefined) throw new Error("Guest file has no inode.");
   if (value.permissions !== undefined)
     entry.permissions = nonnegativeInteger(value.permissions, "file permissions");
+  for (const field of ["created", "modified"] as const)
+    if (value[field] !== undefined) entry[field] = timestamp(value[field]);
   return entry;
 }
 export function inode(value: unknown): Inode {
@@ -68,9 +78,11 @@ export function inode(value: unknown): Inode {
     if (typeof value.dir !== "boolean") throw new Error("Invalid inode directory flag.");
     entry.dir = value.dir;
   }
-  for (const field of ["size", "permissions", "created", "modified"] as const)
+  for (const field of ["size", "permissions"] as const)
     if (value[field] !== undefined) entry[field] = nonnegativeInteger(value[field], field);
   if (!entry.dir && entry.size === undefined) throw new Error("Guest file inode has no size.");
+  for (const field of ["created", "modified"] as const)
+    if (value[field] !== undefined) entry[field] = timestamp(value[field]);
   return entry;
 }
 export function chunk(value: unknown): Uint8Array {
