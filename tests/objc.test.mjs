@@ -524,3 +524,57 @@ test('NSUserDefaults registers volatile fallbacks without overwriting saved sett
   const restoredKey=await next.send(next.cls('NSString'),'stringWithUTF8String:',next.heap.string('sound'));
   assert.equal(await next.send(restored,'objectForKey:',restoredKey),0);
 });
+
+
+test('legacy and specialized Objective-C property ABIs preserve ownership and getter lifetime', async t => {
+  const x = await fixture(t);
+  const owner = x.heap.zero(12), offset = 4;
+  const first = await x.send(x.cls('NSObject'), 'new');
+  const second = await x.send(x.cls('NSObject'), 'new');
+  await x.f('_objc_setProperty', owner, 0, offset, first, 1, 0);
+  assert.equal(x.read(owner + offset), first);
+  assert.equal(await x.send(first, 'retainCount'), 2);
+  await x.f('_objc_setProperty', owner, 0, offset, first, 0, 0);
+  assert.equal(await x.send(first, 'retainCount'), 2);
+  await x.f('_objc_setProperty_nonatomic', owner, 0, second, offset);
+  assert.equal(await x.send(first, 'retainCount'), 1);
+  const pool = x.f('_objc_autoreleasePoolPush');
+  assert.equal(x.f('_objc_getProperty', owner, 0, offset, 1), second);
+  await x.f('_objc_setProperty_atomic', owner, 0, 0, offset);
+  assert.equal(await x.send(second, 'retainCount'), 2);
+  await x.f('_objc_autoreleasePoolPop', pool);
+  assert.equal(await x.send(second, 'retainCount'), 1);
+});
+
+test('property copies dispatch zone-aware guest methods before replacing the old value', async t => {
+  const calls = [];
+  let copied;
+  const x = await fixture(t, (pc, args) => { calls.push([pc, args]); return copied; });
+  const cls = x.instance('Copyable', [['copyWithZone:', 0x6100], ['mutableCopyWithZone:', 0x6200]]);
+  x.install({'__objc_classlist':[cls]});
+  const original = await x.send(cls, 'alloc');
+  const owner = x.heap.zero(12), offset = 4;
+  copied = await x.send(x.cls('NSObject'), 'new');
+  await x.f('_objc_setProperty', owner, 0, offset, original, 1, 1);
+  assert.equal(x.read(owner + offset), copied);
+  assert.equal(await x.send(copied, 'retainCount'), 1);
+  const oldCopy = copied;
+  copied = await x.send(x.cls('NSObject'), 'new');
+  await x.f('_objc_setProperty', owner, 0, offset, original, 0, 2);
+  assert.equal(x.read(owner + offset), copied);
+  assert.equal(x.heap.live.has(oldCopy), false);
+  assert.deepEqual(calls.map(([pc, args]) => [pc, args[0], args[2]]), [[0x6100, original, 0], [0x6200, original, 0]]);
+  assert.equal(await x.send(original, 'retainCount'), 1);
+});
+
+
+test('zero-offset property access changes only isa without retaining or autoreleasing classes', async t => {
+  const x = await fixture(t);
+  const owner = x.heap.zero(8), cls = x.cls('NSObject');
+  await x.f('_objc_setProperty', owner, 0, 0, cls, 1, 1);
+  assert.equal(x.read(owner), cls);
+  const pool = x.f('_objc_autoreleasePoolPush');
+  assert.equal(x.f('_objc_getProperty', owner, 0, 0, 1), cls);
+  await x.f('_objc_autoreleasePoolPop', pool);
+  assert.equal(x.f('_objc_getProperty', 0, 0, 0, 1), 0);
+});

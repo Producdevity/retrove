@@ -27,3 +27,14 @@ export const FoundationClass = {
   CharacterSet: "NSCharacterSet",
   Scanner: "NSScanner",
 } as const;
+
+export function zoneCopySelector(selector: string): string | undefined {
+  switch (selector) {
+    case "copy":
+      return "copyWithZone:";
+    case "mutableCopy":
+      return "mutableCopyWithZone:";
+    default:
+      return undefined;
+  }
+}

@@ -1,3 +1,5 @@
+import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
+import {propertyAccessors} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
@@ -65,7 +67,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   }
   function method(cls, meta, name, fn) {
     const ptr = names.get(cls);
-    classes.get(meta ? read(ptr) : ptr).methods.set(name, fn);
+    const methods=classes.get(meta ? read(ptr) : ptr).methods;
+    methods.set(name, fn);
+    const zoned=zoneCopySelector(name);
+    if(zoned)methods.set(zoned,fn);
   }
   function lookup(start, name) {
     const seen = new Set();
@@ -703,18 +708,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return m[1] === 'CLASS' ? cls : read(cls);
   }
   const associations=new Map(), monitors=new Map();
-  const setProperty=copy=>async a=>{
-    const base=a(0),slot=base+a(3),replacement=a(2);
-    if(!copy && read(slot)===replacement)return;
-    const value=copy?await send(replacement,'copy'):retain(replacement);
-    const old=read(slot);write(slot,value);await releaseFromHost(old);
-  };
   let uncaughtHandler=0;
   const funcs = {
     ...cg.funcs, ...cf.funcs, ...cfNetwork({cpu,read,write,hostClass,method,names,alloc,destroy,text,callGuest,heap,array:input.array,dataFrom:createData,release:releaseFromHost}),
-    _objc_getProperty:a=>{const v=read(a(0)+a(2));return a(3)?autorelease(retain(v)):v;},
-    _objc_setProperty_atomic:setProperty(false), _objc_setProperty_nonatomic:setProperty(false),
-    _objc_setProperty_atomic_copy:setProperty(true), _objc_setProperty_nonatomic_copy:setProperty(true),
+    ...propertyAccessors({read,write,retain,release:releaseFromHost,autorelease,send}),
     _objc_setAssociatedObject:async a=>{
       const owner=a(0),key=a(1),object=a(2),policy=a(3)&255;
       if(!owner)return;

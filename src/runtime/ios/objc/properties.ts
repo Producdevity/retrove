@@ -1,0 +1,72 @@
+import type { GuestArguments } from "./host";
+
+const AccessorArgument = {
+  Self: 0,
+  Offset: 2,
+  Value: 3,
+  Copy: 5,
+  SpecializedValue: 2,
+  SpecializedOffset: 3,
+  GetterAtomic: 3,
+} as const;
+const CopyPolicy = { Retain: 0, Copy: 1, MutableCopy: 2 } as const;
+const BYTE_MASK = 0xff;
+
+interface PropertyHost {
+  read(address: number): number;
+  write(address: number, value: number): void;
+  retain(pointer: number): number;
+  release(pointer: number): Promise<void>;
+  autorelease(pointer: number): number;
+  send(pointer: number, selector: string, arguments_: number[]): Promise<number>;
+}
+
+export function propertyAccessors(host: PropertyHost) {
+  async function set(self: number, offset: number, replacement: number, policy: number) {
+    if (offset === 0) {
+      if (self) host.write(self, replacement);
+      return;
+    }
+    const slot = (self + (offset | 0)) >>> 0;
+    let value: number;
+    if (policy === CopyPolicy.Retain) {
+      if (host.read(slot) === replacement) return;
+      value = host.retain(replacement);
+    } else {
+      const selector = policy === CopyPolicy.MutableCopy ? "mutableCopyWithZone:" : "copyWithZone:";
+      value = await host.send(replacement, selector, [0]);
+    }
+    // Guest threads are cooperative: the slot exchange must not yield.
+    const previous = host.read(slot);
+    host.write(slot, value);
+    await host.release(previous);
+  }
+  const specialized = (policy: number) => (args: GuestArguments) =>
+    set(
+      args(AccessorArgument.Self),
+      args(AccessorArgument.SpecializedOffset),
+      args(AccessorArgument.SpecializedValue),
+      policy,
+    );
+  return {
+    _objc_getProperty(args: GuestArguments) {
+      const self = args(AccessorArgument.Self);
+      const offset = args(AccessorArgument.Offset);
+      if (offset === 0) return self ? host.read(self) : 0;
+      const value = host.read((self + (offset | 0)) >>> 0);
+      return args(AccessorArgument.GetterAtomic) ? host.autorelease(host.retain(value)) : value;
+    },
+    _objc_setProperty(args: GuestArguments) {
+      return set(
+        args(AccessorArgument.Self),
+        args(AccessorArgument.Offset),
+        args(AccessorArgument.Value),
+        args(AccessorArgument.Copy) & BYTE_MASK,
+      );
+    },
+    _objc_setProperty_atomic: specialized(CopyPolicy.Retain),
+    _objc_setProperty_nonatomic: specialized(CopyPolicy.Retain),
+    _objc_setProperty_atomic_copy: specialized(CopyPolicy.Copy),
+    _objc_setProperty_nonatomic_copy: specialized(CopyPolicy.Copy),
+  };
+}
