@@ -176,5 +176,5 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     remove:path=>pathCall(path,p=>invoke('_unlink',p)),
     async write(fd,bytes){const p=heap.alloc(bytes.length);try{cpu.write(p,bytes);return await invoke('_write',fd,p,bytes.length);}finally{heap.free(p);}}
   };
-  return {contents,writeArchive:(path,bytes)=>writeArchiveFile(archiveWriter,text(path),bytes)};
+  return {contents,error:makeError,writeArchive:(path,bytes)=>writeArchiveFile(archiveWriter,text(path),bytes)};
 }

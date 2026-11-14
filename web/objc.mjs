@@ -1,3 +1,5 @@
+import {installXMLParser} from "../src/runtime/ios/foundation/xml/bindings.ts";
+import {XML_ERROR_DOMAIN} from "../src/runtime/ios/foundation/xml/types.ts";
 import {decodeText} from "../src/runtime/ios/foundation/text/encoding.ts";
 import {installPercentEscapes} from "../src/runtime/ios/foundation/text/percent-escape-host.ts";
 import {installStringReplacement} from "../src/runtime/ios/foundation/text/replacement-host.ts";
@@ -548,6 +550,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const source=heap.alloc(Math.max(1,bytes.length));
     try {cpu.write(source,bytes);return createData(source,bytes.length,self);}finally{heap.free(source);}
   };
+  installXMLParser({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,
+    dataLength:p=>read(p+DataField.Length),readData:(p,n)=>cpu.read(read(p+DataField.Bytes),n),
+    data:bytes=>autorelease(archivedData(bytes)),dictionary:attributes=>foundationObjects.property(attributes),
+    error:(code,domain)=>fileObjects.error(code,domain),diagnostic:(message,code)=>diagnostic?.('warn','xml',message,{code})});
   installUnarchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
     parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},send,
     scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
@@ -687,6 +693,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
+  exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
