@@ -25,3 +25,17 @@ test('Darwin SHA-1 and all HMAC variants match native digests, including copied 
     assert.deepEqual(Buffer.from(bytes.slice(1200,1200+expected.length)),createHmac(name,key).update(msg.subarray(0,11)).digest());
   }
 });
+
+
+test('CommonCrypto single-shot digests match native hashes, support overlap and isolate static result buffers',()=>{
+ const bytes=new Uint8Array(100000);let end=1024;
+ const cpu={read:(p,n)=>bytes.slice(p,p+n),write:(p,data)=>bytes.set(data,p)},api=commonCrypto(cpu,{alloc:n=>{const p=end;end+=n;return p;}});
+ const call=(name,...args)=>api[name](i=>args[i]??0),pointers=new Set();
+ const payload=Buffer.from(Array.from({length:65539},(_,i)=>i*31));
+ for(const [symbol,algorithm] of [['_CC_MD5','md5'],['_CC_SHA1','sha1'],['_CC_SHA224','sha224'],['_CC_SHA256','sha256'],['_CC_SHA384','sha384'],['_CC_SHA512','sha512']]){
+  bytes.set(payload,4096);const expected=createHash(algorithm).update(payload).digest(),staticOutput=call(symbol,4096,payload.length,0);
+  assert.deepEqual(Buffer.from(bytes.slice(staticOutput,staticOutput+expected.length)),expected);assert.equal(pointers.has(staticOutput),false);pointers.add(staticOutput);
+  assert.equal(call(symbol,0,0,0),staticOutput);assert.deepEqual(Buffer.from(bytes.slice(staticOutput,staticOutput+expected.length)),createHash(algorithm).digest());
+  assert.equal(call(symbol,4096,payload.length,4096),4096);assert.deepEqual(Buffer.from(bytes.slice(4096,4096+expected.length)),expected);
+ }
+});

@@ -1,3 +1,4 @@
+import {singleShotDigests} from "../src/runtime/ios/crypto/single-shot.ts";
 import {crypt} from "../src/runtime/ios/crypto/crypt.ts";
 import {write32} from "./memory.mjs";
 import {md5, sha1} from './vendor/noble-hashes/legacy.js';
@@ -8,7 +9,7 @@ const algorithms = [sha1, md5, sha256, sha384, sha512, sha224];
 // iOS CCHmacContext is 384 bytes and callers may copy an active context.
 const contextBytes = 272;
 export function commonCrypto(cpu, heap) {
-  let staticSHA1;
+  const hashes={md5,sha1,sha224,sha256,sha384,sha512};
   function feed(hash, address, length) {
     for (let i = 0; i < length; i += 65536)
       hash.update(cpu.read(address + i, Math.min(length - i, 65536)));
@@ -48,11 +49,8 @@ export function commonCrypto(cpu, heap) {
     cpu.write(address, outer.update(inner.digest()).digest());
   }
   return {
+    ...singleShotDigests({read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),allocate:n=>heap.alloc(n),create:name=>hashes[name].create()}),
     _CCCrypt:crypt({read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),writeWord:(p,v)=>write32(cpu,p,v)}),
-    _CC_SHA1: a => {
-      const output = a(2) || (staticSHA1 ??= heap.alloc(20));
-      cpu.write(output, feed(sha1.create(), a(0), a(1)).digest()); return output;
-    },
     _CCHmac: a => { const h=initialize(a(0),a(1),a(2)); feed(h.inner,a(3),a(4)); finish(h,a(5)); },
     _CCHmacInit: a => store(a(0),initialize(a(1),a(2),a(3))),
     _CCHmacUpdate: a => { const h=read(a(0)); feed(h.inner,a(1),a(2)); store(a(0),h); },
