@@ -38,3 +38,8 @@ test('UIKit dispatches accelerometer samples through the main loop with owned do
  await x.send(sensor,'setUpdateInterval:',bits.getUint32(0,true),bits.getUint32(4,true));
  bits.setBigUint64(0,await x.send(sensor,'updateInterval'),true);assert.equal(bits.getFloat64(0,true),.25);
 });
+
+test('accelerometer accepts an idle infinite interval and zero without aborting application launch',async t=>{
+ const x=await fixture(t),sensor=await x.send(x.cls('UIAccelerometer'),'sharedAccelerometer'),bits=new DataView(new ArrayBuffer(8));
+ for(const value of [Infinity,0,.02]){bits.setFloat64(0,value,true);await x.send(sensor,'setUpdateInterval:',bits.getUint32(0,true),bits.getUint32(4,true));bits.setBigUint64(0,await x.send(sensor,'updateInterval'),true);assert.equal(bits.getFloat64(0,true),value);}
+});

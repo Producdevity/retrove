@@ -1,3 +1,5 @@
+import {installStringLongLong} from "../src/runtime/ios/foundation/text/integer-value.ts";
+import {installThreadWaits} from "../src/runtime/ios/foundation/thread-waits.ts";
 import {GuestStorageKey} from "../src/storage/guest-keys.ts";
 import {installThreadInstances} from "../src/runtime/ios/foundation/thread-instances.ts";
 import {installLocalizedComparisons} from "../src/runtime/ios/foundation/text/localized-comparison.ts";
@@ -53,7 +55,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     for (const [key, value] of pairs) if (key && value) associated(ptr,key,value);
     return ptr;
   }
-  installArrayMethods({method,autorelease,items,array,send});
+  installArrayMethods({method,autorelease,items,array,send,retain,release,selectorName:p=>readString(cpu,p)});
   installStringPaths({method,string,text,array,autorelease,items});
   installValues({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value)});
   hostClass('NSNumber','NSValue');
@@ -197,6 +199,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     return string(at===0?'/':at<0?'':path.slice(0,at));
   });
   method('NSString',false,'componentsSeparatedByString:',(s,a)=>autorelease(array(text(s).split(text(a(0))).map(string))));
+  installStringLongLong({method,text});
   for(const [name,convert] of [['intValue',v=>parseInt(v,10)|0],['integerValue',v=>parseInt(v,10)|0],['boolValue',v=>Number(/^[yYtT1-9]/.test(v.trim()))],
     ['floatValue',v=>{bits.setFloat32(0,parseFloat(v)||0,true);return bits.getUint32(0,true);}],
     ['doubleValue',v=>{bits.setFloat64(0,parseFloat(v)||0,true);return bits.getBigUint64(0,true);}]])
@@ -444,6 +447,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     return ({'portrait-primary':1,'portrait-secondary':2,'landscape-primary':3,'landscape-secondary':4})[globalThis.screen?.orientation?.type]??0;
   });
   hostClass('NSThread','NSObject');
+  installThreadWaits({now:()=>performance.now(),wallTime:()=>Date.now(),send,classMethod:(name,fn)=>method('NSThread',true,name,(_,args)=>fn(args))});
   const threadObjects=new Map(), threadNames=new Map();
   function thread(id) {
     if(!threadObjects.has(id)){const pointer=alloc(names.get('NSThread'));threadObjects.set(id,pointer);threadInstances.register(pointer);}

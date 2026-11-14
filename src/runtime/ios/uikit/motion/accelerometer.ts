@@ -44,8 +44,8 @@ export function installAccelerometer(
     bits.setUint32(0, args(Argument.First), true);
     bits.setUint32(WORD_BYTES, args(Argument.Second), true);
     const value = bits.getFloat64(0, true);
-    if (!Number.isFinite(value) || value <= 0)
-      throw new Error("UIAccelerometer update interval must be positive.");
+    if (Number.isNaN(value) || value < 0)
+      throw new Error("UIAccelerometer update interval must be non-negative.");
     interval = value;
   });
   for (const property of ["x", "y", "z", "timestamp"] as const) {

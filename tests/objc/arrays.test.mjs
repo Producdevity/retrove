@@ -47,3 +47,16 @@ test('NSMutableArray bulk append snapshots self-aliasing input and retains every
  assert.equal(await x.send(value,'retainCount'),3);await x.send(array,'removeAllObjects');assert.equal(await x.send(value,'retainCount'),1);
  await x.send(value,'release');
 });
+test('array selector broadcasts retain the complete snapshot while callbacks remove its elements',async t=>{
+ let array;const calls=[];
+ const x=await fixture(t,async(_pc,values)=>{
+  calls.push(values[0]);assert.equal(x.heap.live.has(values[0]),true);
+  if(calls.length===1)while(await x.send(array,'count'))await x.send(array,'removeLastObject');
+  return 0;
+ });
+ const cls=x.instance('BroadcastTarget',[['act',0x5501]]);x.install({'__objc_classlist':[cls]});
+ array=await x.send(x.cls('NSMutableArray'),'alloc');await x.send(array,'init');
+ const values=[];for(let i=0;i<3;i++){const value=await x.send(cls,'alloc');values.push(value);await x.send(array,'addObject:',value);await x.send(value,'release');}
+ await x.send(array,'makeObjectsPerformSelector:',x.sel('act'));
+ assert.deepEqual(calls,values);assert.ok(values.every(value=>!x.heap.live.has(value)));await x.send(array,'release');
+});

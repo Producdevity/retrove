@@ -1,3 +1,6 @@
+import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
+import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
+import {invocationForwarding} from "../src/runtime/ios/objc/invocation/forwarding.ts";
 import {installImplementationLookup} from "../src/runtime/ios/objc/implementations.ts";
 import {securityImports} from "../src/runtime/ios/security/bindings.ts";
 import {SecuritySymbols,KEYCHAIN_FILE} from "../src/runtime/ios/security/constants.ts";
@@ -5,6 +8,7 @@ import {encodeBinaryPlist} from "../src/runtime/ios/foundation/archives/plist-wr
 import {installRootProxy} from "../src/runtime/ios/objc/root-proxy.ts";
 import {NibLoader} from "../src/runtime/ios/uikit/nib/instantiate.ts";
 import {connectOutlet} from "../src/runtime/ios/objc/outlets.ts";
+import {protocolMethodImports} from "../src/runtime/ios/objc/protocol-methods.ts";
 import {protocolImports} from "../src/runtime/ios/objc/protocols.ts";
 import {installStringBytes} from "../src/runtime/ios/foundation/text/byte-constructors.ts";
 import {FoundationErrorSymbol} from "../src/runtime/ios/foundation/errors.ts";
@@ -152,6 +156,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const implementation = lookup(start, name);
     if (typeof implementation === 'number') return { jump: implementation };
     if (!implementation) {
+      const target=lookup(start,'forwardingTargetForSelector:')?await send(self,'forwardingTargetForSelector:',[arg(r+1)]):0;
+      if(target && target!==self)return dispatch(index=>index===r?target:arg(index),'normal',stret);
+      if(lookup(start,'forwardInvocation:'))return forwardInvocation(self,arg(r+1),index=>arg(index+r+2),stret?arg(0):undefined);
       const info = classes.get(start);
       throw Error('Unimplemented Objective-C method ' + (info?.isMeta ? '+' : '-') + '[' + info?.name + ' ' + name + ']');
     }
@@ -497,6 +504,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (typeof imp === 'number') return callGuest(imp, [self, selector(name), ...args]);
     if (imp) return imp(self, i => args[i] ?? 0);
     if (optional) return 0;
+    const target=lookup(cls,'forwardingTargetForSelector:')?await send(self,'forwardingTargetForSelector:',[selector(name)]):0;
+    if(target && target!==self)return send(target,name,args);
+    if(lookup(cls,'forwardInvocation:'))return forwardInvocation(self,selector(name),i=>args[i]??0);
     throw Error('Unimplemented Objective-C method [' + classes.get(cls).name + ' ' + name + ']');
   }
   function getRunLoop(thread = threads?.funcs._pthread_self() ?? 1) {
@@ -647,7 +657,31 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   }
 
   const protocols=protocolImports({read,cString:p=>readString(cpu,p),string,text});
+  for(const meta of [false,true])method("NSObject",meta,"conformsToProtocol:",(self,args)=>Number(protocols.conforms(meta?self:read(self),args(0))));
   const methodTypes=new Map();
+  const signatureStrings=new Map();
+  const permanentString=value=>{if(!signatureStrings.has(value))signatureStrings.set(value,heap.string(value));return signatureStrings.get(value);};
+  const {invocations}=installInvocations({hostClass,method,alloc,autorelease,destroy,retain,release:releaseFromHost,
+    cString:p=>readString(cpu,p),permanentString,
+    methodEncoding:(self,sel,instance)=>{const imp=lookup(instance?self:read(self),readString(cpu,sel));return methodTypes.get(imp);},
+    bytes:(p,n)=>cpu.read(p,n),writeBytes:(p,bytes)=>cpu.write(p,bytes),allocate:zero,free:p=>heap.free(p),
+    call:async(target,sel,args,signature)=>{
+      const type=signature.result,structure=type.kind==='{'&&type.size>4,output=structure?zero(type.size):0;
+      const name=readString(cpu,sel),imp=lookup(read(target),name);
+      const resultBytes=new Uint8Array(type.size);
+      try {
+        let value;
+        if(typeof imp==='number')value=await callGuest(imp,structure?[output,target,sel,...args]:[target,sel,...args],!structure&&type.size>4);
+        else if(imp){if(Boolean(imp.stret)!==structure)throw Error('Invocation return ABI mismatch for '+name);value=structure?await imp(target,i=>args[i]??0,output):await imp(target,i=>args[i]??0);}
+        else value=await forwardInvocation(target,sel,i=>args[i]??0,structure?output:undefined);
+        if(structure)return cpu.read(output,type.size);
+        const bits=BigInt.asUintN(64,BigInt(value??0));
+        for(let index=0;index<resultBytes.length;index++)resultBytes[index]=Number((bits>>BigInt(index*8))&255n);
+        return resultBytes;
+      }finally{if(output)heap.free(output);}
+    }
+  });
+  const forwardInvocation=invocationForwarding({has:(self,name)=>Boolean(lookup(read(self),name)),send,release:releaseFromHost},invocations);
   function loadMethods(ptr, table) {
     if (!ptr) return;
     const stride = read(ptr) & 0xffff, count = read(ptr + 4);
@@ -837,7 +871,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _objc_getClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _objc_lookUpClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _object_getClass: a => a(0) ? read(a(0)) : 0,
-    ...protocols.funcs,...security,
+    ...reflectionImports({read,cString:permanentString}),...protocols.funcs,...protocolMethodImports({read,write,cString:p=>readString(cpu,p),selector}),...security,
     _class_getSuperclass: a => a(0) ? read(a(0) + 4) : 0,
     _objc_retain: a => retain(a(0)), _objc_release: a => release(a(0)),
     _objc_autorelease: a => autorelease(a(0)),

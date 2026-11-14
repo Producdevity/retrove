@@ -1,6 +1,8 @@
 import type { FoundationHost, HostResult } from "../objc/host";
+import { NOT_FOUND } from "./string-search";
 const ARRAY_CLASS = "NSArray";
-interface ArrayHost extends Pick<FoundationHost, "method" | "autorelease"> {
+interface ArrayHost extends Pick<FoundationHost, "method" | "autorelease" | "retain" | "release"> {
+  selectorName(pointer: number): string;
   items(pointer: number): readonly number[];
   array(items: readonly number[]): number;
   send(pointer: number, selector: string, args: number[]): Promise<HostResult>;
@@ -10,6 +12,37 @@ function word(value: HostResult): number {
   return value;
 }
 export function installArrayMethods(host: ArrayHost): void {
+  for (const [selector, withObject] of [
+    ["makeObjectsPerformSelector:", false],
+    ["makeObjectsPerformSelector:withObject:", true],
+  ] as const)
+    host.method(ARRAY_CLASS, false, selector, async (self, args) => {
+      if (!args(0)) throw new Error("Array selector is nil.");
+      const name = host.selectorName(args(0)),
+        values: number[] = [];
+      try {
+        const count = word(await host.send(self, "count", []));
+        for (let index = 0; index < count; index++)
+          values.push(host.retain(word(await host.send(self, "objectAtIndex:", [index]))));
+        for (const value of values) await host.send(value, name, withObject ? [args(1)] : []);
+      } finally {
+        for (const value of values) await host.release(value);
+      }
+    });
+  for (const [selector, identity] of [
+    ["indexOfObject:", false],
+    ["indexOfObjectIdenticalTo:", true],
+  ] as const)
+    host.method(ARRAY_CLASS, false, selector, async (self, args) => {
+      const count = word(await host.send(self, "count", [])),
+        object = args(0);
+      for (let index = 0; index < count; index++) {
+        const value = word(await host.send(self, "objectAtIndex:", [index]));
+        if (value === object || (!identity && word(await host.send(value, "isEqual:", [object]))))
+          return index;
+      }
+      return NOT_FOUND;
+    });
   host.method("NSMutableArray", false, "addObjectsFromArray:", async (self, args) => {
     const values = [...host.items(args(0))];
     for (const value of values) await host.send(self, "addObject:", [value]);
