@@ -1,3 +1,5 @@
+import {BundleKey} from "../src/runtime/ios/foundation/bundle.ts";
+import {installCStringConstructors} from "../src/runtime/ios/foundation/c-strings.ts";
 import {RenderingAPI} from "../src/runtime/graphics/fixed-function/host.ts";
 import {installAccelerometer} from "../src/runtime/ios/uikit/motion/accelerometer.ts";
 import {installStringSearch} from "../src/runtime/ios/foundation/string-search.ts";
@@ -25,7 +27,7 @@ import {foundation} from './foundation.mjs';
 import { touchUIKit } from './touch.mjs';
 import {moviePlayers} from './movie.mjs';
 import { eaglDrawable } from './drawable.mjs';
-import { read32, readString, write32 } from './memory.mjs';
+import { read32, readString, readCStringBytes, write32 } from './memory.mjs';
 
 const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder(), utf16: new TextDecoder('utf-16le') };
@@ -271,7 +273,6 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (!utf8Cache.has(self)) utf8Cache.set(self, heap.string(text(self)));
     return utf8Cache.get(self);
   };
-  method('NSString', true, 'stringWithUTF8String:', (cls, a) => a(0) ? autorelease(makeString(readString(cpu, a(0)),alloc(cls))) : 0);
   function decodeText(bytes,encoding){
     if(encoding===1 && bytes.some(n=>n>127))return null;
     const names={1:'utf-8',4:'utf-8',10:'utf-16le',0x90000100:'utf-16be',0x94000100:'utf-16le'};
@@ -297,7 +298,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSMutableString',false,'appendFormat:',(s,a)=>{makeString(text(s)+foundationObjects.formatted(a(0),i=>a(i+1)),s);});
   method('NSMutableString',false,'copy',s=>makeString(text(s)));
   method('NSString',false,'mutableCopy',s=>makeString(text(s),alloc(names.get('NSMutableString'))));
-  method('NSString', false, 'initWithUTF8String:', (self, a) => a(0) ? makeString(readString(cpu, a(0)), self) : 0);
+  installCStringConstructors({method,alloc,autorelease,destroy,bytes:p=>readCStringBytes(cpu,p),decode:decodeText,initialize:(p,v)=>makeString(v,p),utf8});
   method('NSString', false, 'length', self => text(self).length);
   method('NSString', false, 'UTF8String', utf8);
   method('NSString', false, 'fileSystemRepresentation', utf8);
@@ -688,6 +689,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
+  for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
     'UIApplicationLaunchOptionsLocalNotificationKey',

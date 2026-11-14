@@ -194,17 +194,6 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     if(!a(0)||!bytes||bytes.length+terminator>a(1))return 0;
     cpu.write(a(0),bytes);cpu.write(a(0)+bytes.length,new Uint8Array(terminator));return 1;
   });
-  function fromCString(ptr,encoding){
-    if(!ptr)return 0;
-    if([1,4,5].includes(encoding)){
-      if(encoding===5){const bytes=[];for(let at=ptr;;at++){const v=cpu.read(at,1)[0];if(!v)break;bytes.push(v);}return Array.from(bytes,c=>String.fromCharCode(c)).join('');}
-      return readString(cpu,ptr);
-    }
-    return null;
-  }
-  method('NSString',true,'stringWithCString:encoding:',(_,a)=>{
-    const value=fromCString(a(0),a(1));return typeof value==='string'?string(value):0;
-  });
   method('NSString',false,'lengthOfBytesUsingEncoding:',(s,a)=>encoded(s,a(0))?.length??0);
   method('NSString',false,'compare:',(s,a)=>Math.sign(text(s).localeCompare(text(a(0)))));
   method('NSString',false,'compare:options:',(s,a)=>{
