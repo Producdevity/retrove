@@ -1,3 +1,4 @@
+import {installDates} from "../src/runtime/ios/foundation/dates.ts";
 import {installNumbers} from "../src/runtime/ios/foundation/numbers.ts";
 import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
 import {FastEnumeration} from "../src/runtime/ios/foundation/fast-enumeration.ts";
@@ -220,24 +221,9 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSString',false,'uppercaseString',s=>string(text(s).toUpperCase()));
   method('NSString',false,'lowercaseString',s=>string(text(s).toLowerCase()));
   method('NSString',false,'caseInsensitiveCompare:',(s,a)=>Math.sign(text(s).toLowerCase().localeCompare(text(a(0)).toLowerCase())));
-  hostClass('NSDate','NSObject');hostClass('NSTimeZone','NSObject');
-  const times=new Map(), now=()=>Date.now()/1000;
-  const putDouble=v=>{bits.setFloat64(0,v,true);return bits.getBigUint64(0,true);};
-  const getDouble=(lo,hi)=>{bits.setUint32(0,lo,true);bits.setUint32(4,hi,true);return bits.getFloat64(0,true);};
-  function date(t){const p=alloc(names.get('NSDate'));times.set(p,t);return autorelease(p);}
-  method('NSDate',true,'date',()=>date(now()));
-  const distantDates = {distantPast:-62135769600,distantFuture:64092211200};
-  for(const [selector,time] of Object.entries(distantDates)) {
-    let value; method('NSDate',true,selector,()=>value??=retain(date(time)));
-  }
-  method('NSDate',false,'init',s=>{times.set(s,now());return s;});
-  method('NSDate',false,'timeIntervalSince1970',s=>putDouble(times.get(s)));
-  method('NSDate',false,'timeIntervalSinceReferenceDate',s=>putDouble(times.get(s)-978307200));
-  method('NSDate',false,'timeIntervalSinceDate:',(s,a)=>putDouble(times.get(s)-times.get(a(0))));
-  method('NSDate',false,'initWithTimeInterval:sinceDate:',(s,a)=>{times.set(s,getDouble(a(0),a(1))+times.get(a(2)));return s;});
-  method('NSDate',false,'dateByAddingTimeInterval:',(s,a)=>date(times.get(s)+getDouble(a(0),a(1))));
-  method('NSDate',false,'copy',retain);
-  method('NSDate',false,'dealloc',s=>{times.delete(s);destroy(s);});
+  const dates=installDates({hostClass,method,alloc,destroy,retain,autorelease,isDate:p=>isKind(p,'NSDate')});
+  function date(t){return dates.create(t);}
+  hostClass('NSTimeZone','NSObject');
   const localTimeZone=singleton('NSTimeZone');
   for(const selector of ['systemTimeZone','defaultTimeZone','localTimeZone'])method('NSTimeZone',true,selector,localTimeZone);
   method('NSTimeZone',false,'name',()=>string(Intl.DateTimeFormat().resolvedOptions().timeZone));
@@ -520,5 +506,5 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNotificationCenter',false,'postNotification:',(_,a)=>post(a(0)));
   method('NSNotificationCenter',false,'postNotificationName:object:',(_,a)=>post(notification(a(0),a(1),0)));
   method('NSNotificationCenter',false,'postNotificationName:object:userInfo:',(_,a)=>post(notification(a(0),a(1),a(2))));
-  return {archiveNumber:p=>numbers.get(p),archiveDate:p=>times.get(p)-978307200,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:(p,v)=>{times.set(p,v+978307200);},property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
+  return {archiveNumber:p=>numbers.get(p),archiveDate:dates.referenceTime,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:dates.setReferenceTime,property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
 }

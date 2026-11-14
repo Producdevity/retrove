@@ -9,3 +9,14 @@ export function floatBits(value: number): number {
   scratch.setFloat32(0, value, true);
   return scratch.getUint32(0, true);
 }
+
+const doubleScratch = new DataView(new ArrayBuffer(Float64Array.BYTES_PER_ELEMENT));
+export function doubleFromBits(low: number, high: number): number {
+  doubleScratch.setUint32(0, low, true);
+  doubleScratch.setUint32(WORD_BYTES, high, true);
+  return doubleScratch.getFloat64(0, true);
+}
+export function doubleBits(value: number): bigint {
+  doubleScratch.setFloat64(0, value, true);
+  return doubleScratch.getBigUint64(0, true);
+}
