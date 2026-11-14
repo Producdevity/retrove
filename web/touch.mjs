@@ -1,3 +1,6 @@
+import {installLayerProperties} from "../src/runtime/ios/uikit/layer-properties.ts";
+import {installAnimationGroups} from "../src/runtime/ios/uikit/animation/groups.ts";
+import {installTransactions} from "../src/runtime/ios/uikit/animation/transactions.ts";
 import {drawScrollIndicators} from "../src/runtime/ios/uikit/scroll/indicators.ts";
 import {installScrollViews} from "../src/runtime/ios/uikit/scroll/bindings.ts";
 import {ScrollTiming} from "../src/runtime/ios/uikit/scroll/state.ts";
@@ -29,7 +32,7 @@ const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:
   [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile}) {
+  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
@@ -59,7 +62,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   }
   const setFrame = (self, r) => {
     const v = data(self);
-    v.layoutAnimation=animation;
+    v.layoutAnimation=animation??animationGroups.context();
     if (v.bounds[2] !== r[2] || v.bounds[3] !== r[3]) {
       v.needsLayout=true;
       v.needsDisplay=true;
@@ -92,6 +95,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   };
   method('UIView',false,'dealloc',deallocateView);
   const uiHost={hostClass,method,structure:method,alloc,destroy,autorelease,retain,release:releaseFromHost,send,text,string,write,read,ipa,document:mediaHost?.ownerDocument,view:data,setFrame,deallocateView};
+  const animationGroups=installAnimationGroups({...uiHost,thread:()=>currentThread?.()??1,now:()=>performance.now(),selectorName});
   const alerts=installAlerts({...uiHost,responds:(p,name)=>!!p&&!!lookup(read(p),name)});
   textViews=installLabels(uiHost);
   pickerViews=installPickers({...uiHost,screenWidth:()=>phoneScreen.width,responds:(p,name)=>!!p&&!!lookup(read(p),name),
@@ -110,7 +114,10 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});
   const textFields=installTextFields({...controlHost,selector,mount:mediaHost,font:p=>textViews.font(p),layout:fieldLayout,enabled:p=>controls.get(p).enabled,dispatch:(p,events)=>controls.dispatch(p,events)});
   scrollers=installScrollViews({...uiHost,parent:p=>data(p).parent,now:()=>performance.now(),isControl:p=>!!lookup(read(p),'sendActionsForControlEvents:'),local:(self,point)=>{const value=convertPoint(point,window,self),bounds=data(self).bounds;return [value[0]-bounds[0],value[1]-bounds[1]];},boundsChanged:self=>{const v=data(self);if(v.layer){setFrame(v.layer,[...v.bounds]);data(v.layer).bounds=[...v.bounds];}}});
-  installLayerFactory(uiHost);
+  const transactions=installTransactions({...uiHost,thread:()=>currentThread?.()??1,now:()=>performance.now()});
+  const layerGeometry=self=>data(data(self).backingView||self);
+  installLayerProperties({...uiHost,geometry:layerGeometry,changed:(self,opacity)=>{layerGeometry(self)[opacity?"opacityAnimation":"layoutAnimation"]=transactions.context();},pixels:p=>getCoreGraphics?.()?.pixels(p),retainImage:p=>getCoreGraphics().retain(p),releaseImage:async p=>{await getCoreGraphics().release(p);}});
+  installLayerFactory({...uiHost,view:layerGeometry,setFrame:(self,rect)=>{setFrame(data(self).backingView||self,rect);layerGeometry(self).layoutAnimation=transactions.context();return self;}});
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
   method('CALayer',false,'dealloc',async self=>{
     const v=views.get(self);
@@ -144,7 +151,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'setFrame:',(self,a) => { setFrame(self,readRect(a)); });
   method('UIView',false,'setBounds:',(self,a) => {
     const v=data(self), bounds=readRect(a), [x,y,w,h]=v.frame;
-    v.layoutAnimation=animation; v.bounds=bounds; v.needsDisplay=true; v.needsLayout=true;
+    v.layoutAnimation=animation??animationGroups.context(); v.bounds=bounds; v.needsDisplay=true; v.needsLayout=true;
     v.frame=[x+(w-bounds[2])/2,y+(h-bounds[3])/2,bounds[2],bounds[3]];
   });
   async function layout(view) {
@@ -174,13 +181,13 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'window',self => { let v=self; while(data(v).parent) v=data(v).parent; return v===window ? v : 0; });
   method('UIView',false,'setHidden:',(s,a)=>{ data(s).hidden=!!a(0); });
   method('UIView',false,'isHidden',s=>Number(data(s).hidden));
-  method('UIView',false,'setAlpha:',(s,a)=>{ data(s).alpha=float(a(0));data(s).opacityAnimation=animation; });
+  method('UIView',false,'setAlpha:',(s,a)=>{ data(s).alpha=float(a(0));data(s).opacityAnimation=animation??animationGroups.context(); });
   method('UIView',false,'alpha',s=>bits(data(s).alpha));
   installTouchViewProperties({method,state:data});
   method('UIView',true,'layerClass',()=>names.get('CALayer'));
   method('UIView',false,'layer',async self => {
     const v=data(self);
-    if (!v.layer){v.layer=await send(await send(await send(read(self),'layerClass'),'alloc'),'init');setFrame(v.layer,[...v.bounds]);data(v.layer).parent=self;}
+    if (!v.layer){v.layer=await send(await send(await send(read(self),'layerClass'),'alloc'),'init');setFrame(v.layer,[...v.bounds]);data(v.layer).parent=self;data(v.layer).backingView=self;}
     return v.layer;
   });
   method('UIWindow',false,'setScreen:',(s,a)=>{data(s).screen=a(0);});
@@ -201,9 +208,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     method(cls,false,getter,s=>data(s)[getter]??0);
     method(cls,false,setter,async(s,a)=>{const d=data(s),old=d[getter];d[getter]=retain(a(0));if(old)await releaseFromHost(old);});
   }
-  const center=(s,_,dest)=>{const [x,y,w,h]=data(s).frame;write(dest,bits(x+w/2));write(dest+4,bits(y+h/2));};
+  const center=(s,_,dest)=>{const v=data(s),[x,y,w,h]=v.frame,[ax,ay]=v.anchorPoint??[.5,.5];write(dest,bits(x+w*ax));write(dest+4,bits(y+h*ay));};
   center.stret=true;method('UIView',false,'center',center);
-  method('UIView',false,'setCenter:',(s,a)=>{const view=data(s),f=view.frame;view.layoutAnimation=animation;f[0]=float(a(0))-f[2]/2;f[1]=float(a(1))-f[3]/2;});
+  method('UIView',false,'setCenter:',(s,a)=>{const view=data(s),f=view.frame;view.layoutAnimation=animation??animationGroups.context();const [ax,ay]=view.anchorPoint??[.5,.5];f[0]=float(a(0))-f[2]*ax;f[1]=float(a(1))-f[3]*ay;});
   method('UIView',false,'subviews',s=>autorelease(collection('NSArray',data(s).children)));
   installViewOrdering({method,children:pointer=>data(pointer).children});
   method('UIView',false,'viewWithTag:',(s,a)=>{const target=a(0),walk=p=>data(p).tag===target?p:data(p).children.map(walk).find(Boolean)??0;return walk(s);});
@@ -280,14 +287,16 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     const [x,y,w,h]=view.frame, [bx,by,bw,bh]=view.bounds;
     const [a,b,c,d,tx,ty]=view.transform, det=a*d-b*c;
     if (!det) return [Infinity, Infinity];
-    const px=point[0]-(x+w/2+tx), py=point[1]-(y+h/2+ty);
-    return [bx+bw/2+(px*d-py*c)/det, by+bh/2+(py*a-px*b)/det];
+    const [ax,ay]=view.anchorPoint??[.5,.5];
+    const px=point[0]-(x+w*ax+tx), py=point[1]-(y+h*ay+ty);
+    return [bx+bw*ax+(px*d-py*c)/det, by+bh*ay+(py*a-px*b)/det];
   }
   function toParent(view, point) {
     const [x,y,w,h]=view.frame, [bx,by,bw,bh]=view.bounds;
     const [a,b,c,d,tx,ty]=view.transform;
-    const px=point[0]-bx-bw/2, py=point[1]-by-bh/2;
-    return rootToWindow(view,[x+w/2+tx+a*px+c*py, y+h/2+ty+b*px+d*py],false);
+    const [ax,ay]=view.anchorPoint??[.5,.5];
+    const px=point[0]-bx-bw*ax, py=point[1]-by-bh*ay;
+    return rootToWindow(view,[x+w*ax+tx+a*px+c*py, y+h*ay+ty+b*px+d*py],false);
   }
   function convertPoint(point, from, to) {
     for(let p=from;p&&p!==window;p=data(p).parent) point=toParent(data(p),point);
@@ -309,7 +318,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   }
   const transform=(s,_,dest)=>data(s).transform.forEach((v,i)=>write(dest+i*4,bits(v)));
   transform.stret=true; method('UIView',false,'transform',transform);
-  method('UIView',false,'setTransform:',(s,a)=>{data(s).transform=Array.from({length:6},(_,i)=>float(a(i)));data(s).layoutAnimation=animation;});
+  method('UIView',false,'setTransform:',(s,a)=>{data(s).transform=Array.from({length:6},(_,i)=>float(a(i)));data(s).layoutAnimation=animation??animationGroups.context();});
   for(const [name,fromSelf] of [['convertPoint:toView:',true],['convertPoint:fromView:',false]]) {
     const convert=(s,a,dest)=>convertPoint([float(a(0)),float(a(1))],fromSelf?s:a(2),fromSelf?a(2):s)
       .forEach((v,i)=>write(dest+i*4,bits(v)));
@@ -474,6 +483,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     if(!t.deferred)await deliverTouch(t,e,phase,name);
   }
   async function pump() {
+    await animationGroups.pump();
     await scrollers.pump();
     if(window)await layout(window);
     await imageViews.render(window);await textFields.pump();webViews.render();
@@ -492,6 +502,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       try{await sampleTouch(t,e,phase,name);}
       finally{if(phase>=TouchPhase.Ended){if(phase===TouchPhase.Ended&&!t.pan)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};active.delete(e.id);await releaseFromHost(t.ptr);await releaseFromHost(t.target);}}
     }
+    transactions.flush();
     for(const t of active.values())if(t.deferred&&(performance.now()/1000-t.down.time)*1000>=ScrollTiming.Delay){t.deferred=false;await deliverTouch(t,t.down,TouchPhase.Began,'touchesBegan:withEvent:');}
   }
   async function cancelTouches() {

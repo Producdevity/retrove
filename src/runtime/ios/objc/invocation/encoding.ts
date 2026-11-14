@@ -48,7 +48,7 @@ class TypeReader {
     while (/\d/.test(this.source[this.index] ?? "")) this.index++;
     return start === this.index ? undefined : Number(this.source.slice(start, this.index));
   }
-  type(depth = 0): EncodedType {
+  type(depth = 0, pointee = false): EncodedType {
     if (depth > MAX_NESTING) throw new Error("Objective-C type nesting limit exceeded.");
     const start = this.index;
     while (QUALIFIERS.includes(this.source[this.index] ?? "\0")) this.index++;
@@ -59,7 +59,7 @@ class TypeReader {
     if (POINTER_TYPES.includes(kind)) {
       size = WORD_BYTES;
       alignment = WORD_BYTES;
-      if (kind === "^") this.type(depth + 1);
+      if (kind === "^") this.type(depth + 1, true);
       if (kind === "@" && this.source[this.index] === "?") this.index++;
       else if (kind === "@" && this.source[this.index] === '"') this.quoted();
     } else if (kind === "[") {
@@ -72,6 +72,10 @@ class TypeReader {
     } else if (kind === "{") {
       while (this.index < this.source.length && !"=}".includes(this.source[this.index] ?? ""))
         this.index++;
+      if (this.source[this.index] === "}" && pointee) {
+        this.index++;
+        return { encoding: this.source.slice(start, this.index), kind, size: 0, alignment: 1 };
+      }
       if (this.source[this.index++] !== "=") throw new Error("Opaque Objective-C structure.");
       size = 0;
       alignment = 1;

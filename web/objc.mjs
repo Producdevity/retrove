@@ -1,3 +1,4 @@
+import {LayerGravitySymbols} from "../src/runtime/ios/uikit/image/content-gravity.ts";
 import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
 import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
 import {invocationForwarding} from "../src/runtime/ios/objc/invocation/forwarding.ts";
@@ -562,7 +563,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
   let quartz;
-  const input = touchUIKit({className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const input = touchUIKit({currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
@@ -662,11 +663,12 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const signatureStrings=new Map();
   const permanentString=value=>{if(!signatureStrings.has(value))signatureStrings.set(value,heap.string(value));return signatureStrings.get(value);};
   const {invocations}=installInvocations({hostClass,method,alloc,autorelease,destroy,retain,release:releaseFromHost,
-    cString:p=>readString(cpu,p),permanentString,
+    cString:p=>readString(cpu,p),cStringBytes:p=>readCStringBytes(cpu,p),permanentString,copyBlock:async p=>{if(!dispatchService)throw Error("Block runtime is unavailable");return dispatchService.copy(p);},releaseBlock:async p=>{if(!dispatchService)throw Error("Block runtime is unavailable");await dispatchService.release(p);},
     methodEncoding:(self,sel,instance)=>{const imp=lookup(instance?self:read(self),readString(cpu,sel));return methodTypes.get(imp);},
     bytes:(p,n)=>cpu.read(p,n),writeBytes:(p,bytes)=>cpu.write(p,bytes),allocate:zero,free:p=>heap.free(p),
     call:async(target,sel,args,signature)=>{
       const type=signature.result,structure=type.kind==='{'&&type.size>4,output=structure?zero(type.size):0;
+      await initialize(classes.get(read(target)).owner);
       const name=readString(cpu,sel),imp=lookup(read(target),name);
       const resultBytes=new Uint8Array(type.size);
       try {
@@ -746,6 +748,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
+  for(const [symbol,value]of Object.entries(LayerGravitySymbols))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);

@@ -139,6 +139,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const hostBounds=mediaHost.getBoundingClientRect();
     const aspect=hostBounds.width&&hostBounds.height && w&&h ? (hostBounds.height/h)/(hostBounds.width/w) : 1;
     const now=performance.now();
+    let order=1;
     const active=t=>t&&now<t.start+(t.duration+t.delay)*1000?t:null;
     function transitions(names,t) {return t?names.map(n=>n+' '+t.duration+'s '+t.curve+' '+t.delay+'s'):[];}
     async function visit(view,x,y,alpha,opacityTiming,layoutTiming) {
@@ -158,6 +159,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           mediaHost.append(node);nodes.set(view,node);state.needsDisplay=true;
         }
         shown.add(view);
+        node.style.zIndex=String(order++);
         const scale=state.contentScaleFactor?float(state.contentScaleFactor):1;
         const px=Math.max(1,Math.ceil(vw*scale)),py=Math.max(1,Math.ceil(vh*scale));
         if(node.width!==px||node.height!==py){node.width=px;node.height=py;state.needsDisplay=true;}
@@ -178,14 +180,15 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           if(layerContent) {
             const buffer=ctx.createImageData(layerContent.width,layerContent.height);buffer.data.set(layerContent.rgba);
             const layerCanvas=pixelCanvas(layerContent.width,layerContent.height);layerCanvas.getContext('2d').putImageData(buffer,0,0);
-            ctx.drawImage(layerCanvas,bx,by,vw,vh);
+            const scale=state.contentsScale?float(state.contentsScale):1;
+            ctx.drawImage(layerCanvas,...imageRect({width:layerContent.width/scale,height:layerContent.height/scale},state.contentMode,state.bounds));
           }
           if(hostDrawing)await drawHost(view,ctx);
           if(custom&&cg())await cg().withContext(ctx,()=>send(view,'drawRect:',state.bounds.map(bits)));
         }
       }
       if(state.layer)await visit(state.layer,x,y,alpha,opacityTiming,layoutTiming);
-      for(const child of [...state.children]) {
+      for(const child of [...state.children].sort((a,b)=>(data(a).zPosition??0)-(data(b).zPosition??0))) {
         const f=data(child).frame;
         await visit(child,x+f[0]-bx,y+f[1]-by,alpha,opacityTiming,layoutTiming);
       }

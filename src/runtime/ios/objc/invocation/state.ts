@@ -14,7 +14,9 @@ export interface InvocationHost extends Pick<
   writeBytes(pointer: number, bytes: Uint8Array): void;
   allocate(size: number): number;
   free(pointer: number): void;
-  cString(pointer: number): string;
+  cStringBytes(pointer: number): Uint8Array;
+  copyBlock(pointer: number): Promise<number>;
+  releaseBlock(pointer: number): Promise<void>;
   permanentString(value: string): number;
   call(
     target: number,
@@ -85,36 +87,70 @@ export class Invocations {
     if (bytes.length !== previous.length) throw new Error("Invalid NSInvocation argument size.");
     const value = bytes.slice();
     if (state.retained) {
-      await this.releaseArgument(state, index);
-      this.retainArgument(state, index, value);
+      const next: Invocation = { ...state, args: [...state.args], cStrings: new Map() };
+      next.args[index] = value;
+      await this.retainArgument(next, index, value);
+      try {
+        await this.releaseArgument(state, index);
+      } catch (error) {
+        await this.releaseArgument(next, index);
+        throw error;
+      }
+      const copy = next.cStrings.get(index);
+      if (copy) state.cStrings.set(index, copy);
     }
     state.args[index] = value;
   }
-  retainArgument(state: Invocation, index: number, bytes: Uint8Array): void {
-    const kind = state.type.arguments[index]?.kind,
+  async retainArgument(state: Invocation, index: number, bytes: Uint8Array): Promise<void> {
+    const type = state.type.arguments[index],
       pointer = loadWord(bytes);
-    if (kind === "@") this.host.retain(pointer);
-    if (kind === "*" && pointer) {
-      const data = new TextEncoder().encode(this.host.cString(pointer) + "\0"),
-        copy = this.host.allocate(data.length);
+    if (type?.kind === "@") {
+      if (type.encoding.endsWith("@?")) bytes.set(wordBytes(await this.host.copyBlock(pointer)));
+      else this.host.retain(pointer);
+    }
+    if (type?.kind === "*" && pointer) {
+      const source = this.host.cStringBytes(pointer),
+        data = new Uint8Array(source.length + 1);
+      data.set(source);
+      const copy = this.host.allocate(data.length);
       this.host.writeBytes(copy, data);
       bytes.set(wordBytes(copy));
       state.cStrings.set(index, copy);
     }
   }
   async releaseArgument(state: Invocation, index: number): Promise<void> {
-    if (state.type.arguments[index]?.kind === "@")
-      await this.host.release(loadWord(state.args[index] ?? new Uint8Array()));
+    const type = state.type.arguments[index],
+      pointer = loadWord(state.args[index] ?? new Uint8Array());
+    if (type?.kind === "@") {
+      if (type.encoding.endsWith("@?")) await this.host.releaseBlock(pointer);
+      else await this.host.release(pointer);
+    }
     const copy = state.cStrings.get(index);
     if (copy) {
       this.host.free(copy);
       state.cStrings.delete(index);
     }
   }
-  retainArguments(self: number): void {
+  async retainArguments(self: number): Promise<void> {
     const state = this.get(self);
     if (state.retained) return;
-    state.args.forEach((bytes, index) => this.retainArgument(state, index, bytes));
+    const next: Invocation = {
+      ...state,
+      args: state.args.map((bytes) => bytes.slice()),
+      cStrings: new Map(),
+    };
+    let owned = 0;
+    try {
+      for (const [index, bytes] of next.args.entries()) {
+        await this.retainArgument(next, index, bytes);
+        owned++;
+      }
+    } catch (error) {
+      for (let index = 0; index < owned; index++) await this.releaseArgument(next, index);
+      throw error;
+    }
+    state.args.splice(0, state.args.length, ...next.args);
+    for (const [index, copy] of next.cStrings) state.cStrings.set(index, copy);
     state.retained = true;
   }
   async destroy(self: number): Promise<void> {

@@ -59,3 +59,11 @@ test('protocol method descriptions search adopted protocols and distinguish requ
  assert.equal(x.f('_protocol_getMethodDescription',out,child,x.sel('fetch:'),1,1),out);assert.equal(x.read(out),x.sel('fetch:'));assert.equal(x.read(out+4),types);
  x.f('_protocol_getMethodDescription',out,child,x.sel('fetch:'),0,1);assert.deepEqual([x.read(out),x.read(out+4)],[0,0]);
 });
+test('retained invocation arguments handle self replacement and preserve non-UTF8 C strings',async t=>{
+ const x=await fixture(t),signature=await x.send(x.cls('NSMethodSignature'),'signatureWithObjCTypes:',x.heap.string('v@:@*'));
+ const inv=await x.send(x.cls('NSInvocation'),'invocationWithMethodSignature:',signature),object=await x.send(x.cls('NSObject'),'new'),buffer=x.heap.zero(4),raw=x.heap.zero(3);x.cpu.write(raw,new Uint8Array([255,128,0]));
+ x.write(buffer,object);await x.send(inv,'setArgument:atIndex:',buffer,2);x.write(buffer,raw);await x.send(inv,'setArgument:atIndex:',buffer,3);await x.send(inv,'retainArguments');await x.send(object,'release');x.heap.free(raw);
+ x.write(buffer,object);await x.send(inv,'setArgument:atIndex:',buffer,2);assert.equal(x.heap.live.has(object),true);assert.equal(await x.send(object,'retainCount'),1);
+ await x.send(inv,'getArgument:atIndex:',buffer,3);const copy=x.read(buffer);assert.deepEqual([...x.cpu.read(copy,3)],[255,128,0]);await x.send(inv,'setArgument:atIndex:',buffer,3);await x.send(inv,'getArgument:atIndex:',buffer,3);assert.deepEqual([...x.cpu.read(x.read(buffer),3)],[255,128,0]);
+ await x.send(inv,'release');assert.equal(x.heap.live.has(object),false);await x.send(signature,'release');x.heap.free(buffer);
+});

@@ -1,3 +1,4 @@
+import {currentMediaTime} from "../src/runtime/ios/uikit/animation/transactions.ts";
 import {affineImports} from "../src/runtime/graphics/core-graphics/affine.ts";
 // ARMv7 public CoreGraphics functions use the base AAPCS float register layout.
 export function geometry(cpu, heap) {
@@ -10,11 +11,12 @@ export function geometry(cpu, heap) {
     values.forEach((n,i)=>d.setFloat32(i*4,n,true));cpu.write(dest,new Uint8Array(d.buffer));return dest;
   };
   const constants=new Map();
-  for(const [name,values] of [['_CGRectZero',[0,0,0,0]],['_CGSizeZero',[0,0]],['_CGRectNull',[Infinity,Infinity,0,0]],
+  for(const [name,values] of [['_CGPointZero',[0,0]],['_CGRectZero',[0,0,0,0]],['_CGSizeZero',[0,0]],['_CGRectNull',[Infinity,Infinity,0,0]],
     ['_CGAffineTransformIdentity',[1,0,0,1,0,0]],['_UIWindowLevelAlert',[2000]]])
     constants.set(name,store(heap.zero(values.length*4),values));
   const edges=([x,y,w,h])=>[Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h)];
   const funcs={
+    _CACurrentMediaTime:()=>currentMediaTime(),
     ...affineImports(),
     _CGRectIsNull:a=>Number(decode(a(0))===Infinity || decode(a(1))===Infinity),
     _CGRectIsEmpty:a=>Number(decode(a(2))===0 || decode(a(3))===0 || decode(a(0))===Infinity),

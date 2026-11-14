@@ -6,7 +6,7 @@ const SIGNED_LONG_LONG = {
 export function stringLongLong(value: string): bigint {
   const match = /^[\t\n\v\f\r ]*([+-]?\d+)/.exec(value),
     digits = match?.[1];
-  if (!digits) return 0n;
+  if (!digits) return BigInt(0);
   const result = BigInt(digits);
   return result < SIGNED_LONG_LONG.Minimum
     ? SIGNED_LONG_LONG.Minimum
