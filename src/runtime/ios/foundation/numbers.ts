@@ -1,3 +1,4 @@
+import { numericEqual } from "./numeric-equality";
 import { floatBits, floatFromBits, WORD_BYTES } from "../abi/scalars";
 import type { FoundationHost, GuestArguments } from "../objc/host";
 const NUMBER_CLASS = "NSNumber";
@@ -22,6 +23,7 @@ const Types = [
 type NumberType = (typeof Types)[number];
 export type NumericValue = boolean | number | bigint;
 interface NumberHost extends Pick<FoundationHost, "method" | "alloc" | "autorelease"> {
+  isNumber(pointer: number): boolean;
   get(pointer: number): NumericValue;
   set(pointer: number, value: NumericValue): void;
   cString(value: string): number;
@@ -119,6 +121,10 @@ function boxedBytes(value: NumericValue, type: string): Uint8Array {
   return bytes;
 }
 export function installNumbers(host: NumberHost): (pointer: number) => void {
+  for (const selector of ["isEqual:", "isEqualToNumber:"])
+    host.method(NUMBER_CLASS, false, selector, (self, args) =>
+      Number(host.isNumber(args(0)) && numericEqual(host.get(self), host.get(args(0)))),
+    );
   const types = new Map<number, string>(),
     encodings = new Map<string, number>();
   const storage = (self: number): string => types.get(self) ?? inferredEncoding(host.get(self));

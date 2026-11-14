@@ -1,3 +1,4 @@
+import {installCollectionEquality} from "../src/runtime/ios/foundation/collection-equality.ts";
 import {installCalendars} from "../src/runtime/ios/foundation/calendar/bindings.ts";
 import {installDecimalNumbers} from "../src/runtime/ios/foundation/decimal/bindings.ts";
 import {installPlatformVersions} from "../src/runtime/ios/platform.ts";
@@ -53,7 +54,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   function number(value) {
     const n=alloc(names.get('NSNumber')); numbers.set(n,value); return autorelease(n);
   }
-  const releaseNumberType=installNumbers({method,alloc,autorelease,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
+  const releaseNumberType=installNumbers({isNumber:p=>numbers.has(p),method,alloc,autorelease,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
   const decimalNumbers=installDecimalNumbers({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),set:(p,v)=>{numbers.set(p,v);}});
   const numberText=s=>{const value=numbers.get(s);return decimalNumbers.text(s)??String(typeof value==='boolean'?Number(value):value);};
   for(const selector of ['stringValue','description'])method('NSNumber',false,selector,s=>string(numberText(s)));
@@ -61,6 +62,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNumber',false,'dealloc',s=>{decimalNumbers.forget(s);releaseNumberType(s);numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
   installCollectionInitializers({method});
+  installCollectionEquality({method,isKind,send,items,entries:p=>Array.from(dicts.get(p)?.values()??[])});
   installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});
   method('NSDictionary',true,'dictionary',cls=>autorelease(dictionary(cls,[])));
   method('NSMutableDictionary',true,'dictionaryWithCapacity:',cls=>autorelease(dictionary(cls,[])));
