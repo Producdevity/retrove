@@ -1,3 +1,4 @@
+import {installCalendars} from "../src/runtime/ios/foundation/calendar/bindings.ts";
 import {installDecimalNumbers} from "../src/runtime/ios/foundation/decimal/bindings.ts";
 import {installPlatformVersions} from "../src/runtime/ios/platform.ts";
 import {ErrorInfo} from "../src/runtime/ios/foundation/errors.ts";
@@ -231,11 +232,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSString',false,'caseInsensitiveCompare:',(s,a)=>Math.sign(text(s).toLowerCase().localeCompare(text(a(0)).toLowerCase())));
   const dates=installDates({hostClass,method,alloc,destroy,retain,autorelease,isDate:p=>isKind(p,'NSDate')});
   function date(t){return dates.create(t);}
-  hostClass('NSTimeZone','NSObject');
-  const localTimeZone=singleton('NSTimeZone');
-  for(const selector of ['systemTimeZone','defaultTimeZone','localTimeZone'])method('NSTimeZone',true,selector,localTimeZone);
-  method('NSTimeZone',false,'name',()=>string(Intl.DateTimeFormat().resolvedOptions().timeZone));
-  method('NSTimeZone',false,'secondsFromGMT',()=>new Date().getTimezoneOffset()*-60);
+  installCalendars({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,referenceTime:dates.referenceTime});
   hostClass('UIPasteboard','NSObject');
   const boardsByName=new Map(), boards=new Map();
   function pasteboard(name,create) {
