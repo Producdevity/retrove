@@ -6,12 +6,26 @@ const ERROR_CLASS = "NSError";
 const POSIX_ERROR_DOMAIN = "NSPOSIXErrorDomain";
 const URL_ERROR_DOMAIN = "NSURLErrorDomain";
 const URLError = { Offline: -1009, MissingFile: -1100 } as const;
-const ErrorInfo = {
+export const ErrorInfo = {
   Description: "NSLocalizedDescription",
   FailureReason: "NSLocalizedFailureReason",
   RecoverySuggestion: "NSLocalizedRecoverySuggestion",
   RecoveryOptions: "NSLocalizedRecoveryOptions",
   HelpAnchor: "NSHelpAnchor",
+  FailingURL: "NSErrorFailingURLKey",
+  FailingURLString: "NSErrorFailingURLStringKey",
+} as const;
+export const FoundationErrorSymbol = {
+  _NSLocalizedDescriptionKey: ErrorInfo.Description,
+  _NSLocalizedFailureReasonErrorKey: ErrorInfo.FailureReason,
+  _NSLocalizedRecoverySuggestionErrorKey: ErrorInfo.RecoverySuggestion,
+  _NSLocalizedRecoveryOptionsErrorKey: ErrorInfo.RecoveryOptions,
+  _NSHelpAnchorErrorKey: ErrorInfo.HelpAnchor,
+  _NSURLErrorFailingURLErrorKey: ErrorInfo.FailingURL,
+  _NSURLErrorFailingURLStringErrorKey: ErrorInfo.FailingURLString,
+  _NSErrorFailingURLStringKey: ErrorInfo.FailingURLString,
+  _NSURLErrorDomain: URL_ERROR_DOMAIN,
+  _NSOSStatusErrorDomain: "NSOSStatusErrorDomain",
 } as const;
 interface ErrorHost extends Pick<
   FoundationHost,

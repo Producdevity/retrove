@@ -1,3 +1,4 @@
+import {ErrorInfo} from "../src/runtime/ios/foundation/errors.ts";
 import {installURLConnections} from "../src/runtime/ios/foundation/url-connection.ts";
 import {RunLoopMode} from "../src/runtime/ios/foundation/ports.ts";
 import {installRequestOptions} from "../src/runtime/ios/foundation/url-request.ts";
@@ -334,7 +335,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
       item.loading=false;
       if(!u||u.href==='about:blank') await send(d,'webViewDidFinishLoad:',[s],true);
       else{
-        const e=offlineError();
+        const e=offlineError(-1009,requests.get(req));
         try{await send(d,'webView:didFailLoadWithError:',[s,e],true);}finally{await release(e);}
       }
     });
@@ -373,8 +374,9 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     });
   }
   hostClass('NSURLConnection','NSObject');
-  function offlineError(code=-1009) {
-    const err=alloc(names.get('NSError'));write(err+4,code);write(err+8,retain(string('NSURLErrorDomain')));return err;
+  function offlineError(code=-1009,url=0) {
+    const err=alloc(names.get('NSError'));write(err+4,code);write(err+8,retain(string('NSURLErrorDomain')));
+    if(url)write(err+12,dictionary(names.get('NSDictionary'),[[string(ErrorInfo.FailingURL),url],[string(ErrorInfo.FailingURLString),string(urls.get(url)?.href??'')]]));return err;
   }
   const responses=new Map();
   hostClass('NSURLResponse','NSObject');
@@ -385,9 +387,9 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSURLResponse',false,'dealloc',async s=>{const r=responses.get(s);responses.delete(s);if(r)await release(r.url);destroy(s);});
   async function loadRequest(req) {
     const url=requests.get(req),u=urls.get(url);
-    if(u?.protocol!=='file:')return {error:autorelease(offlineError())};
+    if(u?.protocol!=='file:')return {error:autorelease(offlineError(-1009,url))};
     const data=await send(names.get('NSData'),'dataWithContentsOfFile:',[string(decodeURIComponent(u.pathname))]);
-    if(!data)return {error:autorelease(offlineError(-1100))};
+    if(!data)return {error:autorelease(offlineError(-1100,url))};
     const response=alloc(names.get('NSURLResponse'));
     responses.set(response,{url:retain(url),length:await send(data,'length')});
     return {data,response:autorelease(response)};

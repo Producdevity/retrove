@@ -19,7 +19,11 @@ test('connections deliver offline failures only on their registered loop and mod
  let x,calls=0,deliveredMode;
  x=await setup(t,async(pc,args)=>{
   assert.equal(pc,0x6200);calls++;
-  assert.equal(await x.send(args[3],'code'),-1009);deliveredMode=await x.text(await x.send(x.loop,'currentMode'));
+  assert.equal(await x.send(args[3],'code'),-1009);
+  const info=await x.send(args[3],'userInfo'),key=x.read(x.objc.resolveData('_NSURLErrorFailingURLStringErrorKey'));
+  assert.equal(await x.text(await x.send(info,'objectForKey:',key)),'https://example.invalid/no-network');
+  const url=await x.send(info,'objectForKey:',x.read(x.objc.resolveData('_NSURLErrorFailingURLErrorKey')));
+  assert.equal(await x.text(await x.send(url,'absoluteString')),'https://example.invalid/no-network');deliveredMode=await x.text(await x.send(x.loop,'currentMode'));
  });
  const cls=x.instance('OfflineObserver',[['connection:didFailWithError:',0x6200]]);x.install({'__objc_classlist':[cls]});
  const delegate=await x.send(cls,'new'),mode=await x.str('NetworkMode'),other=await x.str('OtherMode'),future=await x.send(x.cls('NSDate'),'distantFuture');

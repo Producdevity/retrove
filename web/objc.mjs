@@ -1,3 +1,4 @@
+import {FoundationErrorSymbol} from "../src/runtime/ios/foundation/errors.ts";
 import {installAudioPlayers} from "../src/runtime/ios/media/audio-player.ts";
 import {decodePlayerAudio} from "../src/runtime/audio/player/decoder.ts";
 import {WebPlayerOutput} from "../src/runtime/audio/player/output.ts";
@@ -685,6 +686,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     });
   }
   const exportedStringNames = new Map([
+    ...Object.entries(FoundationErrorSymbol),
     ['_NSDefaultRunLoopMode', 'kCFRunLoopDefaultMode'], ['_kCFRunLoopDefaultMode', 'kCFRunLoopDefaultMode'],
     ['_NSRunLoopCommonModes', 'kCFRunLoopCommonModes'], ['_kCFRunLoopCommonModes', 'kCFRunLoopCommonModes'],
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],

@@ -25,3 +25,10 @@ test('NSError initializers keep signed codes, empty user info and explicit inval
  assert.equal(readString(x.cpu,await x.send(await x.send(error,'localizedDescription'),'UTF8String')),'The internet connection appears to be offline.');await x.send(error,'release');
  await assert.rejects(x.send(x.cls('NSError'),'errorWithDomain:code:userInfo:',0,1,0),/non-nil domain/);
 });
+
+test('Foundation error keys match native symbols and share the legacy URL-string alias',async t=>{
+ const x=await fixture(t),text=async p=>readString(x.cpu,await x.send(p,'UTF8String'));
+ const values={NSURLErrorFailingURLStringErrorKey:'NSErrorFailingURLStringKey',NSErrorFailingURLStringKey:'NSErrorFailingURLStringKey',NSURLErrorFailingURLErrorKey:'NSErrorFailingURLKey',NSLocalizedFailureReasonErrorKey:'NSLocalizedFailureReason',NSLocalizedRecoverySuggestionErrorKey:'NSLocalizedRecoverySuggestion',NSLocalizedRecoveryOptionsErrorKey:'NSLocalizedRecoveryOptions',NSHelpAnchorErrorKey:'NSHelpAnchor',NSOSStatusErrorDomain:'NSOSStatusErrorDomain'};
+ for(const [symbol,value] of Object.entries(values)){const p=x.objc.resolveData('_'+symbol);assert.ok(p,symbol);assert.equal(await text(x.read(p)),value);assert.equal(x.objc.resolveData('_'+symbol),p);}
+ assert.equal(x.objc.resolveData('_NSURLErrorFailingURLStringErrorKey'),x.objc.resolveData('_NSErrorFailingURLStringKey'));
+});
