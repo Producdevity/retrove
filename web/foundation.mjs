@@ -1,3 +1,4 @@
+import {installRequestHeaders} from "../src/runtime/ios/foundation/http-headers.ts";
 import {propertyValue} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installCollectionInitializers} from "../src/runtime/ios/foundation/collections.ts";
 import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
@@ -361,17 +362,12 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSURLRequest',false,'URL',s=>requests.get(s)??0);
   method('NSURLRequest',false,'dealloc',async s=>{
     const props=requestProperties.get(s),u=requests.get(s);
-    headers.delete(s);requests.delete(s);requestProperties.delete(s);
+    releaseHeaders(s);requests.delete(s);requestProperties.delete(s);
     for(const ptr of Object.values(props??{}))await release(ptr);
     if(u)await release(u);destroy(s);
   });
-  const requestProperties=new Map(), headers=new Map();
-  method('NSMutableURLRequest',false,'setValue:forHTTPHeaderField:',(s,a)=>{
-    const key=text(a(1)).toLowerCase();let map=headers.get(s);if(!map)headers.set(s,map=new Map());
-    if(a(0))map.set(key,text(a(0)));else map.delete(key);
-  });
-  method('NSURLRequest',false,'valueForHTTPHeaderField:',(s,a)=>{const v=headers.get(s)?.get(text(a(0)).toLowerCase());return v==null?0:string(v);});
-  method('NSURLRequest',false,'allHTTPHeaderFields',s=>property(Object.fromEntries(headers.get(s)??[])));
+  const requestProperties=new Map();
+  const releaseHeaders=installRequestHeaders({method,text,string,property,isString:p=>isKind(p,'NSString'),isDictionary:p=>isKind(p,'NSDictionary'),entries:p=>Array.from(dicts.get(p)?.values()??[])});
   for(const [getter,setter] of [['HTTPBody','setHTTPBody:'],['HTTPMethod','setHTTPMethod:']]){
     method('NSURLRequest',false,getter,s=>requestProperties.get(s)?.[getter]??(getter==='HTTPMethod'?string('GET'):0));
     method('NSMutableURLRequest',false,setter,async(s,a)=>{
