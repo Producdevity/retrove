@@ -1,3 +1,4 @@
+import {secureRandomImports} from "../src/runtime/ios/libc/secure-random.ts";
 import {randomImports} from "../src/runtime/ios/libc/random.ts";
 import {move, read32, write32} from './memory.mjs';
 
@@ -24,6 +25,7 @@ export function darwinAlgorithms(cpu, callGuest) {
   }
   return {
     ...randomImports(),
+    ...secureRandomImports({write:(pointer,bytes)=>cpu.write(pointer,bytes)}),
     _bsearch: async a=>{
       const key=a(0),base=a(1),count=a(2),width=a(3),compare=a(4);
       if (!width) return 0;
