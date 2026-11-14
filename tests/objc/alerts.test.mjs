@@ -1,0 +1,21 @@
+import { test } from 'vite-plus/test';
+import assert from 'node:assert/strict';
+import { fixture } from './fixture.mjs';
+import {readString} from '../../web/memory.mjs';
+test('UIAlertView copies its message and variadic titles, preserves indices and does not retain its delegate',async t=>{
+ const x=await fixture(t),alert=await x.send(x.cls('UIAlertView'),'alloc'),delegate=await x.send(x.cls('NSObject'),'new');
+ const text=async pointer=>readString(x.cpu,await x.send(pointer,'UTF8String'));
+ const str=async text=>x.send(x.cls('NSMutableString'),'stringWithUTF8String:',x.heap.string(text));
+ const title=await str('Review'),message=await str('Enjoying the game?'),cancel=await str('No thanks'),other=await str('Rate it');
+ const refs=await x.send(delegate,'retainCount');
+ assert.equal(await x.send(alert,'initWithTitle:message:delegate:cancelButtonTitle:otherButtonTitles:',title,message,delegate,cancel,other,0),alert);
+ for(const pointer of [title,message,cancel,other]) await x.send(pointer,'setString:',await str('Changed'));
+ assert.equal(await text(await x.send(alert,'title')),'Review');assert.equal(await text(await x.send(alert,'message')),'Enjoying the game?');
+ assert.equal(await x.send(alert,'numberOfButtons'),2);assert.equal(await x.send(alert,'cancelButtonIndex'),0);assert.equal(await x.send(alert,'firstOtherButtonIndex'),1);
+ assert.equal(await text(await x.send(alert,'buttonTitleAtIndex:',1)),'Rate it');assert.equal(await x.send(alert,'buttonTitleAtIndex:',100),0);
+ assert.equal(await x.send(delegate,'retainCount'),refs);assert.equal(await x.send(alert,'isVisible'),0);
+ assert.equal(await x.send(alert,'addButtonWithTitle:',await str('Later')),2);assert.equal(await x.send(alert,'firstOtherButtonIndex'),1);
+ await assert.rejects(x.send(alert,'setAlertViewStyle:',1),/text input styles/);
+ await x.send(alert,'release');assert.equal(x.heap.live.has(alert),false);await x.send(delegate,'release');
+ const plain=await x.send(x.cls('UIAlertView'),'new');assert.equal(await x.send(plain,'cancelButtonIndex'),-1);assert.equal(await x.send(plain,'firstOtherButtonIndex'),-1);await x.send(plain,'addButtonWithTitle:',0);assert.equal(await x.send(plain,'firstOtherButtonIndex'),-1);await x.send(plain,'release');
+});

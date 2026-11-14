@@ -607,7 +607,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
         currentApplication:()=>application,setApplication:pointer=>{application=pointer;},responds:(p,name)=>!!lookup(read(p),name),send,
         pushPool:poolPush,popPool:poolPop,connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
       onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
-      while (input.hasWindow() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
+      while (input.hasWindow() || input.hasAlerts() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
         const time = await nextRefresh();
         const token = poolPush();
@@ -616,6 +616,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
           await foundationObjects.pollMain();
           await scheduler.pump();
           await audioPlayers.pump();
+          await input.pumpAlerts();
           if (lifecycle.active) await input.pump();
           await accelerometer.pump(lifecycle.active);
           for (const [ptr, d] of [...displays]) {
@@ -826,7 +827,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
     _NSStringFromSelector: a => a(0) ? string(readString(cpu, a(0))) : 0,
   };
-  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
+  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAlerts:input.pumpAlerts, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
     audioReasonDictionary(key,value){return autorelease(foundationObjects.dictionary(names.get('NSDictionary'),[[string(key),foundationObjects.number(value)]]));},
     async audioSessionNotification(notification,key,value){
       const info=this.audioReasonDictionary(key,value);

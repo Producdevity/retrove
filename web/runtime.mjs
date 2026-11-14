@@ -298,6 +298,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       if (mainRunLoopTurn && threads.funcs._pthread_main_np()) {
         await dispatch.pollMain();
         await objc.pumpMovies();
+        await objc.pumpAlerts();
         await objc.pumpAudioPlayers();
         await audio.pumpSession(objc);
         await sounds.pump();

@@ -1,4 +1,5 @@
 import "./player.css";
+import "../runtime/ios/uikit/alerts/dialog.css";
 import { openIPA } from "../../web/ipa.mjs";
 import { Platform, type ApplicationId } from "../domain/application";
 import { errorMessage } from "../domain/validation";

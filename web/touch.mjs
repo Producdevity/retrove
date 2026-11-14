@@ -1,3 +1,4 @@
+import {installAlerts} from "../src/runtime/ios/uikit/alerts/bindings.ts";
 import {installPickers} from "../src/runtime/ios/uikit/picker/bindings.ts";
 import {PointerPhase, PointerQueue, TouchPhase} from '../src/runtime/ios/uikit/touch/pointer-queue.ts';
 import {InputMetrics, DropReason} from '../src/runtime/diagnostics/input-metrics.ts';
@@ -77,6 +78,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   };
   method('UIView',false,'dealloc',deallocateView);
   const uiHost={hostClass,method,structure:method,alloc,destroy,autorelease,retain,release:releaseFromHost,send,text,string,write,read,ipa,document:mediaHost?.ownerDocument,view:data,setFrame,deallocateView};
+  const alerts=installAlerts({...uiHost,responds:(p,name)=>!!p&&!!lookup(read(p),name)});
   textViews=installLabels(uiHost);
   pickerViews=installPickers({...uiHost,screenWidth:()=>phoneScreen.width,responds:(p,name)=>!!p&&!!lookup(read(p),name),
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
@@ -466,5 +468,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();},pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }
