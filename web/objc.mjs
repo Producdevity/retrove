@@ -20,7 +20,7 @@ import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiv
 import {archiveFoundation} from "../src/runtime/ios/foundation/archives/foundation.ts";
 import {parsePlist} from "./plist.mjs";
 import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
-import {propertyAccessors} from "../src/runtime/ios/objc/properties.ts";
+import {propertyAccessors,structCopyImports} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
@@ -742,6 +742,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   let uncaughtHandler=0;
   const funcs = {
     ...cg.funcs, ...cf.funcs, ...cfNetwork({cpu,read,write,hostClass,method,names,alloc,destroy,text,callGuest,heap,array:input.array,dataFrom:createData,release:releaseFromHost}),
+    ...structCopyImports({readBytes:(pointer,length)=>cpu.read(pointer,length),writeBytes:(pointer,bytes)=>cpu.write(pointer,bytes)}),
     ...propertyAccessors({read,write,retain,release:releaseFromHost,autorelease,send}),
     _objc_setAssociatedObject:async a=>{
       const owner=a(0),key=a(1),object=a(2),policy=a(3)&255;

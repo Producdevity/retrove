@@ -70,3 +70,31 @@ export function propertyAccessors(host: PropertyHost) {
     _objc_setProperty_nonatomic_copy: specialized(CopyPolicy.Copy),
   };
 }
+
+const StructArgument = { Destination: 0, Source: 1, Size: 2 } as const;
+const STRUCT_COPY_CHUNK_BYTES = 65536;
+interface StructCopyHost {
+  readBytes(pointer: number, length: number): Uint8Array;
+  writeBytes(pointer: number, bytes: Uint8Array): void;
+}
+export function structCopyImports(
+  host: StructCopyHost,
+): Record<string, (args: GuestArguments) => void> {
+  return {
+    _objc_copyStruct: (args) => {
+      const destination = args(StructArgument.Destination),
+        source = args(StructArgument.Source),
+        length = args(StructArgument.Size) | 0;
+      if (length < 0) throw new RangeError("Negative Objective-C struct copy size.");
+      if (!length || source === destination) return;
+      const backwards = destination > source && destination < source + length;
+      // Synchronous copies cannot yield to another cooperative guest thread.
+      for (let copied = 0; copied < length;) {
+        const count = Math.min(STRUCT_COPY_CHUNK_BYTES, length - copied),
+          offset = backwards ? length - copied - count : copied;
+        host.writeBytes(destination + offset, host.readBytes(source + offset, count));
+        copied += count;
+      }
+    },
+  };
+}
