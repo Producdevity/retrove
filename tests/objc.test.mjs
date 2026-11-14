@@ -435,7 +435,6 @@ test('UIColor grayscale construction and alpha replacement preserve independent 
   const replacement=await x.send(color,'colorWithAlphaComponent:',float(.25));
   assert.deepEqual([4,8,12,16].map(offset=>x.read(color+offset)),[.75,.75,.75,.5].map(float));
   assert.deepEqual([4,8,12,16].map(offset=>x.read(replacement+offset)),[.75,.75,.75,.25].map(float));
-  assert.equal(await x.send(color,'CGColor'),color);
   await x.f('_objc_autoreleasePoolPop',pool);
   assert.equal(x.heap.live.has(color),false);
   assert.equal(x.heap.live.has(replacement),false);

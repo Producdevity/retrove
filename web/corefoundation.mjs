@@ -17,7 +17,7 @@ function encoded(str, encoding) {
 }
 
 export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
-  retain,release,autorelease,text,makeString,makeUTF16,foundation,items,getRunLoop,threads}) {
+  retain,release,autorelease,text,makeString,makeUTF16,foundation,items,getRunLoop,threads,equal,hash}) {
   const collections = new Map(), constants = new Map(), loops = new Map();
   hostClass('CFMutableArray','NSMutableArray');
   hostClass('CFMutableDictionary','NSMutableDictionary');
@@ -25,7 +25,7 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
   hostClass('NSMutableString','NSString',16);
   const callbacks = {
     retain: a=>retain(a(1)), release: a=>release(a(1)), description: a=>makeString(foundation.description(a(0))),
-    equal: a=>send(a(0),'isEqual:',[a(1)]), hash: a=>send(a(0),'hash')
+    equal: a=>equal?equal(a(0),a(1)):send(a(0),'isEqual:',[a(1)]), hash: a=>hash?hash(a(0)):send(a(0),'hash')
   };
   function resolveData(name) {
     if (constants.has(name)) return constants.get(name);

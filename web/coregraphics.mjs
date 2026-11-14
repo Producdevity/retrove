@@ -1,3 +1,5 @@
+import {Colors} from "../src/runtime/graphics/core-graphics/colors/model.ts";
+import {colorImports} from "../src/runtime/graphics/core-graphics/colors/bindings.ts";
 import {colorSpaceImports} from "../src/runtime/graphics/core-graphics/color-space.ts";
 import {pathImports} from "../src/runtime/graphics/core-graphics/path-imports.ts";
 import {drawingStateImports} from "../src/runtime/graphics/core-graphics/drawing-state.ts";
@@ -15,11 +17,13 @@ export function coreGraphics(cpu, heap, objc) {
     return p;
   }
   function retain(p) {
+    if(colors.has(p))return colors.retain(p);
     const object = objects.get(p);
     if (object) object.refs++;
     return object ? p : 0;
   }
   async function release(p) {
+    if(colors.has(p))return colors.release(p);
     const object = objects.get(p);
     if (!object || --object.refs) return;
     objects.delete(p);
@@ -145,8 +149,10 @@ export function coreGraphics(cpu, heap, objc) {
       for(const [x,y,w] of spans)c.fillRect(x,y,w,1);
     } finally {c.restore();}
   }
+  const colors=new Colors({allocate:n=>heap.zero(n),free:p=>heap.free(p),read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),spaceComponents:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined,createSpace:components=>create('space',{components}),retainSpace:retain,releaseSpace:release});
   const funcs = {
-    ...drawingStateImports({context}),
+    ...colorImports({colors,text:p=>objc.stringText(p)}),
+    ...drawingStateImports({context,rgba:p=>colors.rgba(p)}),
     ...colorSpaceImports({components:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined}),
     ...pathImports({context,reset:p=>{const object=objects.get(p);if(object?.kind==='context')object.bounds=null;},bounds:(p,x,y,w,h)=>{const object=objects.get(p);if(object?.kind==='context')addBounds(object,deviceBounds(object.canvas,x,y,w,h));},draw:(p,mode)=>funcs._CGContextDrawPath(i=>[p,mode][i]??0)}),
     ...bitmapImports({
@@ -163,6 +169,7 @@ export function coreGraphics(cpu, heap, objc) {
     _CGColorSpaceCreateDeviceRGB: () => create('space', {components:3}),
     _CGColorSpaceCreateDeviceGray: () => create('space', {components:1}),
     _CGColorSpaceRelease: a => release(a(0)),
+    _CGColorSpaceRetain: a => retain(a(0)),
     _CGDataProviderCreateWithCFData: a => {
       const data = a(0);
       if (!data) return 0;
@@ -221,5 +228,5 @@ export function coreGraphics(cpu, heap, objc) {
       c.beginPath();o.bounds=null;o.bitmap?.commit();
     },
   };
-  return { funcs, data:new Map(), createImage, pixels, retain, release, setColor, withContext, currentCanvas:()=>context(current()) };
+  return { funcs, data:new Map(), colors, owns:p=>colors.has(p)||objects.has(p), retainCount:p=>colors.get(p)?.refs??objects.get(p)?.refs, equal:(a,b)=>colors.has(a)||colors.has(b)?colors.equal(a,b):objects.has(a)||objects.has(b)?a===b:undefined, hash:p=>colors.has(p)?colors.hash(p):objects.has(p)?p:undefined, createImage, pixels, retain, release, setColor, withContext, currentCanvas:()=>context(current()) };
 }

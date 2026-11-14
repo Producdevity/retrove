@@ -1,3 +1,4 @@
+import {ColorSymbols} from "../src/runtime/graphics/core-graphics/colors/bindings.ts";
 import {LayerGravitySymbols} from "../src/runtime/ios/uikit/image/content-gravity.ts";
 import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
 import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
@@ -62,6 +63,7 @@ const decoders = { utf8: new TextDecoder() };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
   {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx} = {}) {
+  let quartz;
   const lastDispatch = new Map();
   const classes = new Map(), names = new Map(), selectors = new Map(), owned = new Map(), poolStacks = new Map();
   const read = address => read32(cpu, address);
@@ -175,7 +177,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     owned.set(self, { count: 1, buffers: [] });
     return self;
   }
-  function retain(self) { const obj = owned.get(self); if (obj) obj.count++; return self; }
+  function retain(self) { if(quartz?.owns?.(self))return quartz.retain(self);const obj = owned.get(self); if (obj) obj.count++; return self; }
   function destroy(self) {
     const obj = owned.get(self);
     if (!obj) return;
@@ -183,6 +185,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     owned.delete(self); heap.free(self);
   }
   function release(self) {
+    if(quartz?.owns?.(self))return quartz.release(self);
     const obj = owned.get(self);
     if (!obj || --obj.count > 0) return;
     const dealloc = lookup(read(self), 'dealloc');
@@ -562,7 +565,6 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'setDelegate:', (_, a) => { delegate = a(0); });
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
-  let quartz;
   const input = touchUIKit({currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
@@ -574,8 +576,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   let dispatchService,cf;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,webViews:input.webViews,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
+  const equalObjects=async(a,b)=>a===b?1:Number(quartz?.equal?.(a,b)??await send(a,'isEqual:',[b]));
+  const hashObject=a=>quartz?.hash?.(a)??send(a,'hash');
   cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
-    retain,release:releaseFromHost,autorelease,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
+    retain,release:releaseFromHost,autorelease,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads,equal:equalObjects,hash:hashObject});
   const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData,decodeText,makeString,entries:foundationObjects.archiveEntries,isKind});
   const security=securityImports({entries:pointer=>cf.dictionaryEntries(pointer)??foundationObjects.archiveEntries(pointer),isKind,text,bytes:p=>cpu.read(read(p+4),read(p+8)),send,property:foundationObjects.property,retain,write,
     read:async()=>{const bytes=await fileObjects.contents(string(KEYCHAIN_FILE));return bytes?parsePlist(bytes):[];},save:items=>fileObjects.writeArchive(string(KEYCHAIN_FILE),encodeBinaryPlist(items))});
@@ -748,6 +752,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSFilePathErrorKey', 'NSFilePath'], ['_NSUnderlyingErrorKey', 'NSUnderlyingError'],
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
+  for(const [symbol,value]of Object.entries(ColorSymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value]of Object.entries(LayerGravitySymbols))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
@@ -850,6 +855,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     },
     _NSLog: a => { const message=foundationObjects.formatted(a(0), i=>a(i+1)); diagnostic('debug','guest-output',message.slice(0,512)); },
     _CFRetain: a => retain(a(0)), _CFRelease: a => release(a(0)),
+    _CFEqual:a=>equalObjects(a(0),a(1)),
+    _CFHash:a=>hashObject(a(0)),
+    _CFGetRetainCount:a=>quartz?.retainCount?.(a(0))??owned.get(a(0))?.count??0xffffffff,
     _CFDataCreate: a => {
       if (a(0)) throw Error('CFDataCreate with a custom allocator is unsupported');
       return createData(a(1), a(2));
@@ -886,7 +894,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
     _NSStringFromSelector: a => a(0) ? string(readString(cpu, a(0))) : 0,
   };
-  return { funcs, resolveData, install, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAlerts:input.pumpAlerts, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
+  return { funcs, resolveData, install, stringText:text, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAlerts:input.pumpAlerts, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
     audioReasonDictionary(key,value){return autorelease(foundationObjects.dictionary(names.get('NSDictionary'),[[string(key),foundationObjects.number(value)]]));},
     async audioSessionNotification(notification,key,value){
       const info=this.audioReasonDictionary(key,value);

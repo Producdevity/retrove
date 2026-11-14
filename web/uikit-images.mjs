@@ -1,3 +1,4 @@
+import {drawLayerBackground,drawLayerBorder} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
 import {decodeCgBI} from './cgbi.mjs';
@@ -8,7 +9,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -149,9 +150,10 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       layoutTiming=active(state.layoutAnimation)??layoutTiming;
       if(state.hidden||(alpha<=0&&!opacityTiming))return;
       const image=images.get((state.highlighted&&state.highlightedImage)||state.image), layerContent=state.contents&&cg()?.pixels(state.contents), custom=typeof lookup(read(view),'drawRect:')==='number';
-      const hostDrawing=hasHostDrawing?.(view);
+      const hostDrawing=hasHostDrawing?.(view),background=state.backgroundColor?uiColor?.(state.backgroundColor):undefined;
+      const colored=background||state.layerBackgroundColor||state.borderColor;
       const [bx,by,vw,vh]=state.bounds;
-      if(vw>0&&vh>0&&(image||custom||hostDrawing||layerContent)) {
+      if(vw>0&&vh>0&&(image||custom||hostDrawing||layerContent||colored)) {
         let node=nodes.get(view);
         if(!node) {
           node=pixelCanvas(1,1);
@@ -176,6 +178,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           const ctx=node.getContext('2d');
           ctx.setTransform(px/vw,0,0,py/vh,-bx*px/vw,-by*py/vh);
           if(state.clearsContextBeforeDrawing!==0)ctx.clearRect(bx,by,vw,vh);
+          if(colored)drawLayerBackground(ctx,state,p=>cg()?.colors.rgba(p),background);
           if(image)draw(image,ctx,...imageRect(image,state.contentMode,state.bounds));
           if(layerContent) {
             const buffer=ctx.createImageData(layerContent.width,layerContent.height);buffer.data.set(layerContent.rgba);
@@ -185,6 +188,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           }
           if(hostDrawing)await drawHost(view,ctx);
           if(custom&&cg())await cg().withContext(ctx,()=>send(view,'drawRect:',state.bounds.map(bits)));
+          if(state.borderColor)drawLayerBorder(ctx,state,p=>cg()?.colors.rgba(p));
         }
       }
       if(state.layer)await visit(state.layer,x,y,alpha,opacityTiming,layoutTiming);

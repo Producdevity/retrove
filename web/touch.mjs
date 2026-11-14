@@ -1,3 +1,4 @@
+import {installLayerColors} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {installLayerProperties} from "../src/runtime/ios/uikit/layer-properties.ts";
 import {installAnimationGroups} from "../src/runtime/ios/uikit/animation/groups.ts";
 import {installTransactions} from "../src/runtime/ios/uikit/animation/transactions.ts";
@@ -69,9 +70,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  let textViews,pickerViews,scrollers;
+  let textViews,pickerViews,scrollers,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -117,6 +118,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const transactions=installTransactions({...uiHost,thread:()=>currentThread?.()??1,now:()=>performance.now()});
   const layerGeometry=self=>data(data(self).backingView||self);
   installLayerProperties({...uiHost,geometry:layerGeometry,changed:(self,opacity)=>{layerGeometry(self)[opacity?"opacityAnimation":"layoutAnimation"]=transactions.context();},pixels:p=>getCoreGraphics?.()?.pixels(p),retainImage:p=>getCoreGraphics().retain(p),releaseImage:async p=>{await getCoreGraphics().release(p);}});
+  installLayerColors({...uiHost,rgba:p=>getCoreGraphics?.()?.colors.rgba(p),retainColor:p=>getCoreGraphics().retain(p),releaseColor:async p=>{await getCoreGraphics().release(p);}});
   installLayerFactory({...uiHost,view:layerGeometry,setFrame:(self,rect)=>{setFrame(data(self).backingView||self,rect);layerGeometry(self).layoutAnimation=transactions.context();return self;}});
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
   method('CALayer',false,'dealloc',async self=>{
@@ -125,7 +127,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       if(v.parent)detach(self);
       for(const child of v.children){data(child).parent=0;await releaseFromHost(child);}
       if(v.contents)await getCoreGraphics?.()?.release(v.contents);
-      if(v.borderColor)await releaseFromHost(v.borderColor);
+      if(v.borderColor)await getCoreGraphics().release(v.borderColor);
+      if(v.layerBackgroundColor)await getCoreGraphics().release(v.layerBackgroundColor);
       if(v.drawableProperties)await releaseFromHost(v.drawableProperties);
       views.delete(self);
     }
@@ -201,12 +204,12 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     ['CALayer','borderWidth','setBorderWidth:',0],['CALayer','cornerRadius','setCornerRadius:',0],
     ['CALayer','masksToBounds','setMasksToBounds:',0],['UIViewController','wantsFullScreenLayout','setWantsFullScreenLayout:',0]]) {
     method(cls,false,getter,s=>data(s)[getter]??fallback);
-    method(cls,false,setter,(s,a)=>{data(s)[getter]=a(0);});
+    method(cls,false,setter,(s,a)=>{data(s)[getter]=a(0);data(s).needsDisplay=true;});
   }
-  for(const [cls,getter,setter] of [['UIView','backgroundColor','setBackgroundColor:'],['CALayer','borderColor','setBorderColor:'],
+  for(const [cls,getter,setter] of [['UIView','backgroundColor','setBackgroundColor:'],
     ['CAEAGLLayer','drawableProperties','setDrawableProperties:']]) {
     method(cls,false,getter,s=>data(s)[getter]??0);
-    method(cls,false,setter,async(s,a)=>{const d=data(s),old=d[getter];d[getter]=retain(a(0));if(old)await releaseFromHost(old);});
+    method(cls,false,setter,async(s,a)=>{const d=data(s),old=d[getter];d[getter]=retain(a(0));d.needsDisplay=true;if(old)await releaseFromHost(old);});
   }
   const center=(s,_,dest)=>{const v=data(s),[x,y,w,h]=v.frame,[ax,ay]=v.anchorPoint??[.5,.5];write(dest,bits(x+w*ax));write(dest+4,bits(y+h*ay));};
   center.stret=true;method('UIView',false,'center',center);
@@ -214,7 +217,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'subviews',s=>autorelease(collection('NSArray',data(s).children)));
   installViewOrdering({method,children:pointer=>data(pointer).children});
   method('UIView',false,'viewWithTag:',(s,a)=>{const target=a(0),walk=p=>data(p).tag===target?p:data(p).children.map(walk).find(Boolean)??0;return walk(s);});
-  installColors({...uiHost,setColor:(channels,fill,stroke)=>getCoreGraphics?.()?.setColor(channels,fill,stroke)});
+  uiColors=installColors({...uiHost,deallocateObject:async p=>{await deallocObject(p);},setColor:(channels,fill,stroke)=>getCoreGraphics?.()?.setColor(channels,fill,stroke),createCG:(channels,gray)=>{const cg=getCoreGraphics?.();if(!cg)throw Error('Quartz color registry unavailable');return cg.colors.generic(gray?[channels[0],channels[3]]:channels);},colorInfo:p=>{const cg=getCoreGraphics?.(),channels=cg?.colors.rgba(p);return channels?{channels,gray:cg.colors.get(p).components.length===2}:undefined;},releaseCG:async p=>{await getCoreGraphics().release(p);}});
   installNibViews({...uiHost,items,bytes:pointer=>readBytes(read(pointer+DataField.Bytes),read(pointer+DataField.Length))});
   method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
   method('UIApplication',false,'keyWindow',()=>window);

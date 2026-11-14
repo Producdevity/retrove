@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/microsoft/WinObjC",
+  "revision": "94f6b5bfdc09d945e30607b56124b6f94a5b9d7b",
+  "files": {
+    "CGColor.mm": {
+      "path": "Frameworks/CoreGraphics/CGColor.mm",
+      "sha256": "ba847abdc9998087416e38996ed80c47b963b1b0a2bff1c93bf1502a19dd07c3",
+      "bytes": 8310
+    },
+    "CGColorTests.mm": {
+      "path": "tests/unittests/CoreGraphics/CGColorTests.mm",
+      "sha256": "694d32a52e2f8edc6483b5e4671a8a49d7a7cc0eb341db8c0157262e73bb602c",
+      "bytes": 6268
+    },
+    "LICENSE.md": {
+      "path": "LICENSE.md",
+      "sha256": "e8f598c6f19b29bf40ab666c3f69f84d496af8b50d2212e911e6ea8c4cf18c11",
+      "bytes": 1082
+    }
+  },
+  "adaptations": {
+    "src/runtime/graphics/core-graphics/colors/": [
+      "CGColor.mm"
+    ],
+    "tests/objc/coregraphics-colors.test.mjs": [
+      "CGColorTests.mm"
+    ]
+  }
+}
