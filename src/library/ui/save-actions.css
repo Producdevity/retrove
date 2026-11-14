@@ -1,6 +1,6 @@
 .save-actions {
   margin-top: 24px;
-  border-top: 1px solid #e2e6ef;
+  border-top: 1px solid var(--border);
   padding-top: 18px;
 }
 .save-actions h3 {
@@ -24,7 +24,7 @@
   flex-basis: 100%;
   padding: 12px;
   margin-top: 8px;
-  background: #f5f6fa;
+  background: var(--background);
   border-radius: 10px;
 }
 .save-preview button {
@@ -32,7 +32,7 @@
 }
 #details-content .save-preview p,
 #details-content .save-status {
-  color: #596479;
+  color: var(--secondary);
 }
 .save-status:empty {
   display: none;

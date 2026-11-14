@@ -26,7 +26,7 @@ export function connectActivity(): () => void {
     ]
       .filter(Boolean)
       .join("\n\n");
-    status.textContent = "Logs stay on this device. Copy or download them to share.";
+    status.textContent = "";
   };
   connectCopy(element("copy-log", HTMLButtonElement), report, status, refresh);
   exportButton.addEventListener("click", () => {

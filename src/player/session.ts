@@ -47,13 +47,15 @@ export class PlayerSession {
       this.mediaResume.audio,
       (error) => this.report.diagnostic("warn", "audio", errorMessage(error)),
     );
-    const resume = this.audioVisibility.resume(this.controller.signal);
-    this.running = this.execute(resume);
+    void this.audioVisibility.resume(this.controller.signal).catch((error: unknown) => {
+      if (!this.controller.signal.aborted)
+        this.report.diagnostic("warn", "audio", errorMessage(error));
+    });
+    this.running = this.execute();
     return this.running;
   }
-  private async execute(audioReady: Promise<void>): Promise<void> {
+  private async execute(): Promise<void> {
     try {
-      await audioReady;
       await withApplicationSession(this.app.id, async () => {
         await this.library.played(this.app.id);
         await runGuest(this.archive, {

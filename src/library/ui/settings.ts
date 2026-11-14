@@ -1,4 +1,5 @@
 import { action, element } from "../../ui/dom";
+import { connectAppearance } from "../../ui/appearance";
 import { formatBytes } from "../../ui/format";
 interface InstallEvent extends Event {
   prompt(): Promise<unknown>;
@@ -7,6 +8,8 @@ function isInstallEvent(event: Event): event is InstallEvent {
   return "prompt" in event && typeof event.prompt === "function";
 }
 export function connectSettings(failure: (error: unknown) => void): () => Promise<void> {
+  connectAppearance(failure);
+  const persist = element("persist", HTMLButtonElement);
   const usage = element("storage", HTMLParagraphElement);
   const persistence = element("persistence", HTMLParagraphElement);
   const install = element("install", HTMLButtonElement);
@@ -15,15 +18,26 @@ export function connectSettings(failure: (error: unknown) => void): () => Promis
   const refresh = async (): Promise<void> => {
     const estimate = await navigator.storage.estimate();
     usage.textContent = `${formatBytes(estimate.usage ?? 0)} used of ${formatBytes(estimate.quota ?? 0)} available to this browser.`;
-    persistence.textContent = (await navigator.storage.persisted())
-      ? "Persistent storage is enabled."
-      : "The browser may reclaim local storage when the device runs low on space.";
+    const supported = typeof navigator.storage.persist === "function";
+    const protectedStorage = supported && (await navigator.storage.persisted());
+    persist.hidden = !supported || protectedStorage;
+    persistence.textContent = protectedStorage
+      ? "Storage is protected from automatic browser cleanup."
+      : "The browser may remove apps and saves when storage runs low.";
   };
-  element("persist", HTMLButtonElement).addEventListener(
+  persist.addEventListener(
     "click",
     action(async () => {
-      await navigator.storage.persist();
-      await refresh();
+      persist.disabled = true;
+      try {
+        const granted = await navigator.storage.persist();
+        await refresh();
+        if (!granted)
+          persistence.textContent =
+            "The browser did not grant storage protection. Try again after installing Retrove.";
+      } finally {
+        persist.disabled = false;
+      }
     }, failure),
   );
   window.addEventListener("beforeinstallprompt", (event) => {

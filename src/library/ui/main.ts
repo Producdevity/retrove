@@ -1,4 +1,6 @@
+import "../../ui/appearance.css";
 import "./library.css";
+import { initializeAppearance } from "../../ui/appearance";
 import { registerOfflineShell } from "../../pwa/register";
 import type { InstalledApplication } from "../../domain/application";
 import { errorMessage } from "../../domain/validation";
@@ -13,6 +15,7 @@ import { connectSettings } from "./settings";
 
 import { libraryJournal } from "../../diagnostics/journal";
 import { DiagnosticOperation, failedOperation, observed } from "../../diagnostics/operations";
+initializeAppearance();
 libraryJournal.record(DiagnosticOperation.Session, {
   build: String(import.meta.env.VITE_RETROVE_REVISION),
   browser: navigator.userAgent,

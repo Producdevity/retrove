@@ -133,7 +133,8 @@ a {
 body.playing #loading {
   display: none;
 }
-body.failed .spinner {
+body.failed .spinner,
+body.finished .spinner {
   display: none;
 }
 body.immersive #toolbar {
@@ -157,8 +158,8 @@ body.immersive #display {
   opacity: 0.65;
 }
 dialog {
-  background: #f5f6fa;
-  color: #202735;
+  background: var(--background);
+  color: var(--foreground);
   border: 0;
   border-radius: 18px;
   width: min(800px, calc(100% - 28px));
@@ -176,25 +177,25 @@ dialog h2 {
   font-size: 18px;
 }
 dialog button {
-  background: #e4e9f7;
-  color: #4259c3;
+  background: var(--button);
+  color: var(--accent);
 }
 dialog p {
-  color: #707b90;
+  color: var(--muted);
   font-size: 13px;
 }
 #log {
   resize: vertical;
   width: 100%;
   height: 55dvh;
-  border: 1px solid #d5dce8;
+  border: 1px solid var(--border);
   border-radius: 9px;
   padding: 12px;
   font:
     11px/1.5 ui-monospace,
     monospace;
-  color: #39445b;
-  background: #fff;
+  color: var(--foreground);
+  background: var(--surface);
   margin-bottom: 12px;
 }
 @media (max-width: 600px) {
@@ -218,4 +219,10 @@ dialog p {
   transform: translateX(-50%);
   z-index: 100;
   background: #202735;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }

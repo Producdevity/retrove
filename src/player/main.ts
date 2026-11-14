@@ -1,4 +1,6 @@
+import "../ui/appearance.css";
 import "./player.css";
+import { initializeAppearance } from "../ui/appearance";
 import "../runtime/ios/uikit/alerts/dialog.css";
 import { openIPA } from "../../web/ipa.mjs";
 import { Platform, type ApplicationId } from "../domain/application";
@@ -9,9 +11,9 @@ import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
 import { PlayerSession } from "./session";
 
+initializeAppearance();
 const status = element("status", HTMLHeadingElement);
 const detail = element("detail", HTMLParagraphElement);
-const start = element("start", HTMLButtonElement);
 const media = element("resume-media", HTMLButtonElement);
 let session: PlayerSession | undefined;
 let imageVisible = false;
@@ -25,7 +27,6 @@ const fail = (error: unknown): void => {
   document.body.classList.add("failed");
   status.textContent = errorMessage(error);
   detail.textContent = "Open the report for details, or return to your library.";
-  start.hidden = true;
 };
 const showImage = (): void => {
   imageVisible = true;
@@ -80,24 +81,12 @@ async function prepare(): Promise<void> {
       updateMedia();
     },
   });
-  status.textContent = `Ready to open ${app.name}`;
-  detail.textContent = "Tap Start to enable audio and launch the app.";
-  start.hidden = false;
+  status.textContent = `Opening ${app.name}`;
+  await session.start();
+  document.body.classList.add("finished");
+  status.textContent = "App closed";
+  detail.textContent = "";
 }
-start.addEventListener(
-  "click",
-  action(
-    async () => {
-      if (!session) return;
-      start.hidden = true;
-      await session.start();
-    },
-    (error) => {
-      fail(error);
-      report.show();
-    },
-  ),
-);
 media.addEventListener(
   "click",
   action(
