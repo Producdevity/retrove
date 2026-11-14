@@ -1,3 +1,4 @@
+import {imageMetadataImports,rgbaImageMetadata,ImageComponents} from "../src/runtime/graphics/core-graphics/image-metadata.ts";
 // Quartz objects live independently of Objective-C objects and retain their backing storage.
 export function coreGraphics(cpu, heap, objc) {
   const objects = new Map(), stacks = new Map(), scratch = new DataView(new ArrayBuffer(4));
@@ -56,7 +57,11 @@ export function coreGraphics(cpu, heap, objc) {
   }
   function createImage(width, height, rgba) {
     if (width <= 0 || height <= 0 || rgba.length !== width * height * 4) return 0;
-    return create('image', { width, height, rgba: new Uint8ClampedArray(rgba) });
+    const copy=new Uint8ClampedArray(rgba),space=create('space',{components:ImageComponents.RGB});
+    if(!space)return 0;
+    const pointer=create('image',{...rgbaImageMetadata(width,height,space),rgba:copy});
+    if(!pointer){objects.delete(space);heap.free(space);}
+    return pointer;
   }
   function imageFromProvider(a) {
     const [width,height,bpc,bpp,stride,space,info,provider,decodePtr,interpolate] = Array.from({length:10}, (_, i) => a(i));
@@ -73,7 +78,7 @@ export function coreGraphics(cpu, heap, objc) {
       const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
       decode = Array.from({length: 2 * components}, (_,i) => view.getFloat32(i * 4, true));
     }
-    const p = create('image', {width,height,bytes,stride,space,components,provider,alpha,decode,little:order===1||order===2,interpolate:!!interpolate});
+    const p = create('image', {width,height,bytes,stride,space,components,provider,alpha,decode,little:order===1||order===2,interpolate:!!interpolate,bitsPerComponent:bpc,bitmapInfo:info});
     if (p) { retain(provider); retain(space); }
     return p;
   }
@@ -136,6 +141,7 @@ export function coreGraphics(cpu, heap, objc) {
     } finally {c.restore();}
   }
   const funcs = {
+    ...imageMetadataImports({image:pointer=>{const object=objects.get(pointer);return object?.kind==='image'?object:undefined;}}),
     _CGColorSpaceCreateDeviceRGB: () => create('space', {components:3}),
     _CGColorSpaceCreateDeviceGray: () => create('space', {components:1}),
     _CGColorSpaceRelease: a => release(a(0)),
@@ -150,8 +156,6 @@ export function coreGraphics(cpu, heap, objc) {
     _CGImageCreate: imageFromProvider,
     _CGImageRetain: a => retain(a(0)),
     _CGImageRelease: a => release(a(0)),
-    _CGImageGetWidth: a => objects.get(a(0))?.width ?? 0,
-    _CGImageGetHeight: a => objects.get(a(0))?.height ?? 0,
     _UIGraphicsGetCurrentContext: current,
     _CGContextSaveGState: a => {
       const o=objects.get(a(0));

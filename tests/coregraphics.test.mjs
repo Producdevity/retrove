@@ -21,6 +21,8 @@ test('a Quartz image retains its provider, honors guest row stride and unpremult
   assert.equal(refs(),2);
   assert.deepEqual([...cg.pixels(image).rgba],[255,0,0,128,48,32,16,255]);
   assert.equal(f._CGImageGetHeight(args(image)),2);
+  assert.equal(f._CGImageGetAlphaInfo(args(image)),2);assert.equal(f._CGImageGetBitmapInfo(args(image)),0x2002);
+  assert.equal(f._CGImageGetBitsPerComponent(args(image)),8);assert.equal(f._CGImageGetBitsPerPixel(args(image)),32);assert.equal(f._CGImageGetBytesPerRow(args(image)),8);assert.equal(f._CGImageGetColorSpace(args(image)),color);
   assert.equal(f._CGImageCreate(args(1,3,8,32,8,color,0x2002,provider,0,1,0)),0);
   await f._CGImageRelease(args(image));assert.equal(refs(),1);assert.equal(live.size,0);
 });
@@ -41,4 +43,12 @@ test('drawing contexts restore unbalanced guest state and remain local to each g
   });
   assert.deepEqual(calls,[['save'],['save'],['save'],['fill','evenodd'],['stroke'],['beginPath'],['restore'],['restore'],['restore']]);
   assert.equal(live.size,0);
+});
+
+test('normalized UIKit pixels expose straight RGBA metadata and retain their RGB color space',async()=>{
+ const {cg,live}=fixture(),f=cg.funcs,image=cg.createImage(1,1,Uint8ClampedArray.of(10,20,30,40));assert.ok(image);
+ assert.equal(f._CGImageGetAlphaInfo(args(image)),3);assert.equal(f._CGImageGetBitmapInfo(args(image)),3);
+ assert.equal(f._CGImageGetBitsPerComponent(args(image)),8);assert.equal(f._CGImageGetBitsPerPixel(args(image)),32);assert.equal(f._CGImageGetBytesPerRow(args(image)),4);
+ assert.ok(f._CGImageGetColorSpace(args(image)));assert.equal(live.size,2);assert.deepEqual([...cg.pixels(image).rgba],[10,20,30,40]);
+ await f._CGImageRelease(args(image));assert.equal(live.size,0);assert.equal(f._CGImageGetAlphaInfo(args(0)),0);
 });
