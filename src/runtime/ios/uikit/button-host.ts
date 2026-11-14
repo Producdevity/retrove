@@ -7,6 +7,7 @@ const BUTTON_CLASS = "UIButton";
 export function installButtons(host: ButtonHost, controls: Controls): void {
   const klass = host.hostClass(BUTTON_CLASS, CONTROL_CLASS);
   const buttons = new Buttons(host, controls);
+  installImageAdjustments(host, buttons, controls);
   host.method(BUTTON_CLASS, true, "buttonWithType:", async (_self, args) => {
     const pointer = host.alloc(klass);
     const state = await buttons.get(pointer);
@@ -66,5 +67,20 @@ export function installButtons(host: ButtonHost, controls: Controls): void {
     host.method(BUTTON_CLASS, false, current, async (self) =>
       buttons.appearance(await buttons.get(self), field, controls.flags(self), true),
     );
+  }
+}
+
+function installImageAdjustments(host: ButtonHost, buttons: Buttons, controls: Controls): void {
+  for (const [getter, setter, key] of [
+    ["adjustsImageWhenHighlighted", "setAdjustsImageWhenHighlighted:", "adjustsHighlighted"],
+    ["adjustsImageWhenDisabled", "setAdjustsImageWhenDisabled:", "adjustsDisabled"],
+  ] as const) {
+    host.method(BUTTON_CLASS, false, getter, async (self) =>
+      Number((await buttons.get(self))[key]),
+    );
+    host.method(BUTTON_CLASS, false, setter, async (self, args) => {
+      (await buttons.get(self))[key] = Boolean(args(Argument.First));
+      controls.changed(self);
+    });
   }
 }

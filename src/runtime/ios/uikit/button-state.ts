@@ -4,7 +4,10 @@ import { ControlState } from "./control-actions";
 import { TextAlignment } from "./text-layout";
 
 const TITLE_PADDING = 12;
+const HIGHLIGHTED_BRIGHTNESS = 0.6;
+const DISABLED_OPACITY = 0.5;
 export interface ButtonHost extends ControlHost {
+  adjustImage(pointer: number, brightness: number, opacity: number): void;
   imageSize(pointer: number): [number, number];
   labelSize(pointer: number): [number, number];
 }
@@ -21,6 +24,8 @@ export interface ButtonState {
   readonly background: number;
   readonly styles: Map<number, Appearance>;
   kind: number;
+  adjustsHighlighted: boolean;
+  adjustsDisabled: boolean;
 }
 export class Buttons {
   private readonly states = new Map<number, Promise<ButtonState>>();
@@ -53,6 +58,8 @@ export class Buttons {
       image,
       background,
       kind: 0,
+      adjustsHighlighted: true,
+      adjustsDisabled: true,
       styles: new Map([
         [
           ControlState.Normal,
@@ -101,6 +108,25 @@ export class Buttons {
       const value = this.appearance(state, field, flags, true);
       if (value !== (await this.host.send(pointer, getter)))
         await this.host.send(pointer, setter, [value]);
+    }
+    for (const [pointer, field] of [
+      [state.image, "image"],
+      [state.background, "background"],
+    ] as const) {
+      const disabled =
+        Boolean(flags & ControlState.Disabled) &&
+        state.adjustsDisabled &&
+        !state.styles.get(ControlState.Disabled)?.[field];
+      const highlighted =
+        !disabled &&
+        Boolean(flags & ControlState.Highlighted) &&
+        state.adjustsHighlighted &&
+        !state.styles.get(ControlState.Highlighted)?.[field];
+      this.host.adjustImage(
+        pointer,
+        highlighted ? HIGHLIGHTED_BRIGHTNESS : 1,
+        disabled ? DISABLED_OPACITY : 1,
+      );
     }
     return state;
   }

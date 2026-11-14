@@ -37,10 +37,10 @@ export function installUnarchiver(host: UnarchiverHost) {
     const name = archiveKey(host.text(key));
     return context && Object.hasOwn(context, name) ? context[name] : undefined;
   }
-  function initialize(pointer: number, bytes: Uint8Array) {
+  function initializeArchive(pointer: number, source: unknown) {
     if (decoders.has(pointer)) throw Error("Keyed unarchiver initialized twice");
     const contexts: ArchiveFields[] = [];
-    const graph = new ArchiveGraph(host.parse(bytes), {
+    const graph = new ArchiveGraph(source, {
       scalar: (value) => host.retain(host.scalar(value)),
       allocate: (name) => host.alloc(host.classNamed(name)),
       release: (value) => host.release(value),
@@ -62,7 +62,7 @@ export function installUnarchiver(host: UnarchiverHost) {
     if (!bytes) return 0;
     const coder = host.alloc(unarchiverClass);
     try {
-      initialize(coder, bytes);
+      initializeArchive(coder, host.parse(bytes));
       const decoder = state(coder);
       return host.autorelease(host.retain(await decoder.graph.decode(decoder.graph.top.root)));
     } finally {
@@ -76,7 +76,7 @@ export function installUnarchiver(host: UnarchiverHost) {
     root(host.data(args(Argument.First))),
   );
   host.method(UNARCHIVER, false, "initForReadingWithData:", (self, args) =>
-    initialize(self, host.data(args(Argument.First))),
+    initializeArchive(self, host.parse(host.data(args(Argument.First)))),
   );
   host.method(UNARCHIVER, false, "allowsKeyedCoding", () => 1);
   host.method(UNARCHIVER, false, "containsValueForKey:", (self, args) =>
@@ -98,7 +98,27 @@ export function installUnarchiver(host: UnarchiverHost) {
       host.destroy(self);
     }
   });
+  return {
+    open: (source: unknown) => openArchive(host, unarchiverClass, initializeArchive, state, source),
+  };
 }
+function openArchive(
+  host: UnarchiverHost,
+  klass: number,
+  initialize: (pointer: number, source: unknown) => number,
+  state: (pointer: number) => Decoder,
+  source: unknown,
+) {
+  const pointer = host.alloc(klass);
+  try {
+    initialize(pointer, source);
+    return { pointer, graph: state(pointer).graph };
+  } catch (error) {
+    host.destroy(pointer);
+    throw error;
+  }
+}
+
 function scalarNumber(value: unknown): number {
   if (value === undefined) return 0;
   if (typeof value === "number" || typeof value === "boolean") return Number(value);

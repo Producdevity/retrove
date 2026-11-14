@@ -1,0 +1,21 @@
+import { test } from 'vite-plus/test';
+import assert from 'node:assert/strict';
+import { fixture } from './fixture.mjs';
+test('CF bit vectors copy bytes, use MSB first indexing and isolate mutable copies', async t => {
+  const x = await fixture(t), input = x.heap.zero(2);
+  x.cpu.write(input, Uint8Array.of(0x81,0xa0));
+  const original = x.f('_CFBitVectorCreate',0,input,11);
+  x.cpu.write(input,Uint8Array.of(0,0));
+  assert.equal(x.f('_CFBitVectorGetCount',original),11);
+  assert.deepEqual(Array.from({length:11},(_,i)=>x.f('_CFBitVectorGetBitAtIndex',original,i)),[1,0,0,0,0,0,0,1,1,0,1]);
+  const copy=x.f('_CFBitVectorCreateMutableCopy',0,0,original);
+  x.f('_CFBitVectorSetBitAtIndex',copy,0,0);
+  x.f('_CFBitVectorSetBitAtIndex',copy,9,1);
+  assert.equal(x.f('_CFBitVectorGetBitAtIndex',copy,0),0);
+  assert.equal(x.f('_CFBitVectorGetBitAtIndex',original,0),1);
+  assert.equal(x.f('_CFBitVectorGetBitAtIndex',copy,9),1);
+  assert.throws(()=>x.f('_CFBitVectorSetBitAtIndex',original,0,1),/immutable/);
+  assert.throws(()=>x.f('_CFBitVectorGetBitAtIndex',copy,11),/bounds/);
+  await x.f('_CFRelease',copy);await x.f('_CFRelease',original);
+  assert.equal(x.heap.live.has(copy),false);assert.equal(x.heap.live.has(original),false);
+});

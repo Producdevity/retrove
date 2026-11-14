@@ -2,6 +2,7 @@ export type TouchPhase = "pointerdown" | "pointermove" | "pointerup" | "pointerc
 export const DropReason = {
   NoTarget: "no-target",
   Occupied: "single-touch-view",
+  Exclusive: "exclusive-touch-view",
   Missing: "missing-touch",
   Duplicate: "duplicate-down",
   Inactive: "inactive-application",

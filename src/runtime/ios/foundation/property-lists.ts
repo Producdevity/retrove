@@ -2,38 +2,53 @@ import type { FoundationHost } from "../objc/host";
 const MILLISECONDS_PER_SECOND = 1000;
 const MAX_PROPERTY_DEPTH = 128;
 const MAX_PROPERTY_ITEMS = 262144;
+export const PropertyMutability = { Immutable: 0, Containers: 1, ContainersAndLeaves: 2 } as const;
 interface PropertyHost {
-  string(value: string): number;
+  string(value: string, mutable?: boolean): number;
   number(value: number | boolean | bigint): number;
   date(seconds: number): number;
-  data(bytes: Uint8Array): number;
-  array(values: number[]): number;
-  dictionary(pairs: [number, number][]): number;
+  data(bytes: Uint8Array, mutable?: boolean): number;
+  array(values: number[], mutable?: boolean): number;
+  dictionary(pairs: [number, number][], mutable?: boolean): number;
   autorelease(pointer: number): number;
 }
 function dictionaryValue(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.getPrototypeOf(value) === null || Object.getPrototypeOf(value) === Object.prototype;
 }
-export function propertyValue(host: PropertyHost, value: unknown): number {
+export function propertyValue(
+  host: PropertyHost,
+  value: unknown,
+  mutability: number = PropertyMutability.Immutable,
+): number {
+  if (!Object.values(PropertyMutability).some((value) => value === mutability))
+    throw new Error("Invalid property list mutability option.");
+  const containers = mutability !== PropertyMutability.Immutable;
+  const leaves = mutability === PropertyMutability.ContainersAndLeaves;
   let remaining = MAX_PROPERTY_ITEMS;
   function build(item: unknown, depth: number): number {
     if (--remaining < 0 || depth > MAX_PROPERTY_DEPTH)
       throw new Error("Property list exceeds traversal limit.");
     if (item === null || item === undefined) return 0;
-    if (typeof item === "string") return host.string(item);
+    if (typeof item === "string") return host.string(item, leaves);
     if (typeof item === "number" || typeof item === "boolean" || typeof item === "bigint")
       return host.number(item);
     if (item instanceof Date) return host.date(item.getTime() / MILLISECONDS_PER_SECOND);
-    if (item instanceof Uint8Array) return host.data(item);
+    if (item instanceof Uint8Array) return host.data(item, leaves);
     if (Array.isArray(item)) {
       const values: readonly unknown[] = item;
-      return host.autorelease(host.array(values.map((v) => build(v, depth + 1))));
+      return host.autorelease(
+        host.array(
+          values.map((v) => build(v, depth + 1)),
+          containers,
+        ),
+      );
     }
     if (!dictionaryValue(item)) throw new Error("Unsupported property list value.");
     return host.autorelease(
       host.dictionary(
         Object.entries(item).map(([key, v]) => [host.string(key), build(v, depth + 1)]),
+        containers,
       ),
     );
   }

@@ -100,11 +100,12 @@ export function structCopyImports(
 }
 
 export function installUnobservedPropertyChanges(
-  host: Pick<FoundationHost, "method" | "text">,
+  host: Pick<FoundationHost, "method" | "text"> & { changed?(self: number): Promise<void> },
 ): void {
   // Observer registration is unavailable; manual notifications have no recipients.
   for (const selector of ["willChangeValueForKey:", "didChangeValueForKey:"])
-    host.method("NSObject", false, selector, (_self, args) => {
+    host.method("NSObject", false, selector, async (self, args) => {
       host.text(args(0));
+      if (selector === "didChangeValueForKey:") await host.changed?.(self);
     });
 }

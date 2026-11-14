@@ -1,3 +1,9 @@
+import {installLayerFactory,installLayerTree} from "../src/runtime/ios/uikit/layer.ts";
+import {installTouchViewProperties,touchConflict} from "../src/runtime/ios/uikit/touch/view-policy.ts";
+import {installViewOrdering} from "../src/runtime/ios/uikit/view/hierarchy.ts";
+import {installControllerNibs} from "../src/runtime/ios/uikit/nib/controllers.ts";
+import {installNibViews} from "../src/runtime/ios/uikit/nib/views.ts";
+import {DataField} from "../src/runtime/ios/foundation/data.ts";
 import {installAlerts} from "../src/runtime/ios/uikit/alerts/bindings.ts";
 import {installPickers} from "../src/runtime/ios/uikit/picker/bindings.ts";
 import {PointerPhase, PointerQueue, TouchPhase} from '../src/runtime/ios/uikit/touch/pointer-queue.ts';
@@ -17,7 +23,7 @@ const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:
   [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, selectorName, className, read, write, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic}) {
+  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
@@ -33,7 +39,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   }
   function data(ptr) {
     if (!views.has(ptr)) views.set(ptr, {frame:[0,0,0,0],bounds:[0,0,0,0],children:[],parent:0,hidden:false,
-      interactive:true,multi:false,alpha:1,layer:0,controller:0,transform:[1,0,0,1,0,0]});
+      interactive:true,multi:false,exclusive:false,alpha:1,layer:0,controller:0,transform:[1,0,0,1,0,0]});
     return views.get(ptr);
   }
   const readRect = a => [0,1,2,3].map(i => float(a(i)));
@@ -55,10 +61,10 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
   let textViews,pickerViews;
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p),drawHost:(p,ctx)=>pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p),drawHost:(p,ctx)=>pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
-    if (v.parent) { const next = data(v.parent).children; next.splice(next.indexOf(self),1); }
+    if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
     v.parent = 0;
   }
   const deallocObject=lookup(names.get('NSObject'),'dealloc');
@@ -84,10 +90,15 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
     touchInside:(set,view)=>{const touch=touches.get(items(set)[0]);if(!touch)return false;const [x,y]=convertPoint(touch.point,touch.window,view),[bx,by,w,h]=data(view).bounds;return x>=bx&&y>=by&&x<bx+w&&y<by+h;}};
-  const controls=installControls(controlHost);installButtons({...controlHost,imageSize:imageViews.size,labelSize:textViews.size},controls);
+  const controls=installControls(controlHost);installButtons({...controlHost,adjustImage:(pointer,brightness,opacity)=>{data(pointer).imageAdjustment={brightness,opacity};},imageSize:imageViews.size,labelSize:textViews.size},controls);
+  installLayerFactory(uiHost);
+  installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
   method('CALayer',false,'dealloc',async self=>{
     const v=views.get(self);
     if(v) {
+      if(v.parent)detach(self);
+      for(const child of v.children){data(child).parent=0;await releaseFromHost(child);}
+      if(v.contents)await getCoreGraphics?.()?.release(v.contents);
       if(v.borderColor)await releaseFromHost(v.borderColor);
       if(v.drawableProperties)await releaseFromHost(v.drawableProperties);
       views.delete(self);
@@ -146,15 +157,11 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'isHidden',s=>Number(data(s).hidden));
   method('UIView',false,'setAlpha:',(s,a)=>{ data(s).alpha=float(a(0));data(s).opacityAnimation=animation; });
   method('UIView',false,'alpha',s=>bits(data(s).alpha));
-  for (const [getter,setter,prop] of [['isUserInteractionEnabled','setUserInteractionEnabled:','interactive'],
-    ['isMultipleTouchEnabled','setMultipleTouchEnabled:','multi']]) {
-    method('UIView',false,getter,s=>Number(data(s)[prop]));
-    method('UIView',false,setter,(s,a)=>{data(s)[prop]=!!a(0);});
-  }
+  installTouchViewProperties({method,state:data});
   method('UIView',true,'layerClass',()=>names.get('CALayer'));
   method('UIView',false,'layer',async self => {
     const v=data(self);
-    if (!v.layer) v.layer=await send(await send(await send(read(self),'layerClass'),'alloc'),'init');
+    if (!v.layer){v.layer=await send(await send(await send(read(self),'layerClass'),'alloc'),'init');setFrame(v.layer,[...v.bounds]);data(v.layer).parent=self;}
     return v.layer;
   });
   method('UIWindow',false,'setScreen:',(s,a)=>{data(s).screen=a(0);});
@@ -179,9 +186,10 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   center.stret=true;method('UIView',false,'center',center);
   method('UIView',false,'setCenter:',(s,a)=>{const view=data(s),f=view.frame;view.layoutAnimation=animation;f[0]=float(a(0))-f[2]/2;f[1]=float(a(1))-f[3]/2;});
   method('UIView',false,'subviews',s=>autorelease(collection('NSArray',data(s).children)));
-  method('UIView',false,'bringSubviewToFront:',(s,a)=>{const list=data(s).children,i=list.indexOf(a(0));if(i>=0)list.push(...list.splice(i,1));});
+  installViewOrdering({method,children:pointer=>data(pointer).children});
   method('UIView',false,'viewWithTag:',(s,a)=>{const target=a(0),walk=p=>data(p).tag===target?p:data(p).children.map(walk).find(Boolean)??0;return walk(s);});
   installColors({...uiHost,setColor:(channels,fill,stroke)=>getCoreGraphics?.()?.setColor(channels,fill,stroke)});
+  installNibViews({...uiHost,items,bytes:pointer=>readBytes(read(pointer+DataField.Bytes),read(pointer+DataField.Length))});
   method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
   method('UIApplication',false,'keyWindow',()=>window);
   method('UIViewController',false,'setView:',async(self,a)=>{
@@ -191,10 +199,13 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     if(view)data(view).controller=self;
     if(old){data(old).controller=0;await releaseFromHost(old);}
   });
+  const controllerNibs=installControllerNibs({method,text,string,retain,release:releaseFromHost,load:(name,owner,bundle)=>loadNib(name,owner,bundle)});
+  method('UIViewController',false,'loadView',async self=>{if(!await controllerNibs.load(self))await send(self,'setView:',[autorelease(setFrame(alloc(names.get('UIView')),bounds()))]);});
+  method('UIViewController',false,'viewDidLoad',()=>{});
+  method('UIViewController',false,'dealloc',async self=>{const view=controllerViews.get(self);controllerViews.delete(self);if(view){data(view).controller=0;await releaseFromHost(view);}await controllerNibs.dispose(self);return deallocObject(self);});
   method('UIViewController',false,'view',async self=>{
     if (!controllerViews.get(self)) {
-      if (typeof lookup(read(self),'loadView') === 'number') await send(self,'loadView');
-      else await send(self,'setView:',[autorelease(setFrame(alloc(names.get('UIView')),bounds()))]);
+      await send(self,'loadView');
       await send(self,'viewDidLoad',[],true);
     }
     return controllerViews.get(self) ?? 0;
@@ -428,7 +439,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
         if(t) {inputMetrics.drop(DropReason.Duplicate);continue;}
         const target=hit(window,...e.point);
         if(!target) {inputMetrics.drop(DropReason.NoTarget);continue;}
-        if(!data(target).multi && [...active.values()].some(a=>a.target===target)) {inputMetrics.drop(DropReason.Occupied);continue;}
+        const conflict=touchConflict(data,target,[...active.values()].map(touch=>touch.target));if(conflict){inputMetrics.drop(conflict);continue;}
         const taps = previousTap && previousTap.target===target && e.time-previousTap.time < 0.35 &&
           Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10 ? previousTap.taps+1 : 1;
         t={ptr:alloc(names.get('UITouch')),window,target,taps,point:e.point};
@@ -468,5 +479,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
 }

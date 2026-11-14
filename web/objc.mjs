@@ -1,3 +1,10 @@
+import {securityImports} from "../src/runtime/ios/security/bindings.ts";
+import {SecuritySymbols,KEYCHAIN_FILE} from "../src/runtime/ios/security/constants.ts";
+import {encodeBinaryPlist} from "../src/runtime/ios/foundation/archives/plist-writer.ts";
+import {installRootProxy} from "../src/runtime/ios/objc/root-proxy.ts";
+import {NibLoader} from "../src/runtime/ios/uikit/nib/instantiate.ts";
+import {connectOutlet} from "../src/runtime/ios/objc/outlets.ts";
+import {protocolImports} from "../src/runtime/ios/objc/protocols.ts";
 import {installStringBytes} from "../src/runtime/ios/foundation/text/byte-constructors.ts";
 import {FoundationErrorSymbol} from "../src/runtime/ios/foundation/errors.ts";
 import {installAudioPlayers} from "../src/runtime/ios/media/audio-player.ts";
@@ -247,6 +254,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return (async()=>{for(const obj of linked?.values()??[])if(obj.policy)await releaseFromHost(obj.value);for(const imp of destructors)await callGuest(imp,[self,selector('.cxx_destruct')]);destroy(self);})();
   });
   method('NSObject', false, 'hash', self => self >>> 2);
+  installRootProxy({hostClass,copyMethod:(target,source,meta,name)=>{const sourceClass=names.get(source),targetClass=names.get(target);const implementation=classes.get(meta?read(sourceClass):sourceClass).methods.get(name);if(!implementation)throw Error('Missing root proxy method '+name);classes.get(meta?read(targetClass):targetClass).methods.set(name,implementation);}});
   method('NSAutoreleasePool', false, 'init', self => { owned.get(self).token = poolPush(); return self; });
   const drain = async self => { const obj = owned.get(self); if (obj.token) await poolPop(obj.token); destroy(self); };
   method('NSAutoreleasePool', false, 'dealloc', drain); method('NSAutoreleasePool', false, 'drain', drain);
@@ -270,7 +278,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const bytes=cpu.read(read(self+8),utf16?len*2:len);return utf16 ? decodeCharacterBytes(bytes) : decoders.utf8.decode(bytes);
   }
   const string = s => autorelease(makeString(s));
-  installUnobservedPropertyChanges({method,text});
+  installUnobservedPropertyChanges({method,text,changed:self=>foundationObjects.operationsChanged(self)});
   const utf8Cache = new Map();
   function makeUTF16(bytes, self = alloc(names.get('NSString'))) {
     const obj=owned.get(self);
@@ -543,19 +551,21 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
   let quartz;
   const input = touchUIKit({className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
-    selector,selectorName:p=>readString(cpu,p),read,write,graphics,signal,text,string,ipa,mediaHost,diagnostic});
+    selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
   installStringSearch({text,write,structureMethod:(selector,implementation)=>{implementation.stret=true;method('NSString',false,selector,implementation);}},characterSets);
   installLocks({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,send,
     currentThread:()=>threads?.funcs._pthread_self()??1,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
-  installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,pollSources:(loop,mode)=>foundationObjects.pollConnections(loop,mode),waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
-  let dispatchService;
+  installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(_,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);return await foundationObjects.pollConnections(loop,mode)||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
+  let dispatchService,cf;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
-    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop});
-  const cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
-    retain,release:releaseFromHost,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
+    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
+  cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
+    retain,release:releaseFromHost,autorelease,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
   const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData,decodeText,makeString,entries:foundationObjects.archiveEntries,isKind});
+  const security=securityImports({entries:pointer=>cf.dictionaryEntries(pointer)??foundationObjects.archiveEntries(pointer),isKind,text,bytes:p=>cpu.read(read(p+4),read(p+8)),send,property:foundationObjects.property,retain,write,
+    read:async()=>{const bytes=await fileObjects.contents(string(KEYCHAIN_FILE));return bytes?parsePlist(bytes):[];},save:items=>fileObjects.writeArchive(string(KEYCHAIN_FILE),encodeBinaryPlist(items))});
   const archivedData=(bytes,self)=>{
     const source=heap.alloc(Math.max(1,bytes.length));
     try {cpu.write(source,bytes);return createData(source,bytes.length,self);}finally{heap.free(source);}
@@ -564,12 +574,14 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     dataLength:p=>read(p+DataField.Length),readData:(p,n)=>cpu.read(read(p+DataField.Bytes),n),
     data:bytes=>autorelease(archivedData(bytes)),dictionary:attributes=>foundationObjects.property(attributes),
     error:(code,domain)=>fileObjects.error(code,domain),diagnostic:(message,code)=>diagnostic?.('warn','xml',message,{code})});
-  installUnarchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
+  let nibs;
+  const initializeFoundationArchive=archiveFoundation({string:(p,v)=>{makeString(v,p);},number:foundationObjects.setArchivedNumber,date:foundationObjects.setArchivedDate,data:(p,b)=>{archivedData(b,p);},dictionary:async(p,k,v)=>{await foundationObjects.associated(p,k,v);},collection:(p,values)=>{input.items(p).push(...values.map(retain));}});
+  const unarchiver=installUnarchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
     parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},send,
     scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
-    initializeBuiltin:archiveFoundation({string:(p,v)=>{makeString(v,p);},number:foundationObjects.setArchivedNumber,date:foundationObjects.setArchivedDate,
-      data:(p,b)=>{archivedData(b,p);},dictionary:async(p,k,v)=>{await foundationObjects.associated(p,k,v);},
-      collection:(p,values)=>{input.items(p).push(...values.map(retain));}})});
+    initializeBuiltin:async(p,name,fields,graph)=>await nibs.initialize(p,name,fields,graph)??initializeFoundationArchive(p,name,fields,graph)});
+  nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,items:input.items,ipa,openArchive:source=>unarchiver.open(source),
+    setOutlet:(self,key,value)=>connectOutlet({read,write,cString:p=>readString(cpu,p),responds:(p,name)=>!!lookup(read(p),name),send,retain,release:releaseFromHost},self,key,value)});
   installArchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,
     classes:p=>{const result=[],seen=new Set();for(let cls=read(p);cls&&!seen.has(cls);cls=read(cls+4)){seen.add(cls);const info=classes.get(cls);if(!info)throw Error('Invalid archived class');result.push(info.name);}return result;},
     scalar:p=>isKind(p,'NSString')&&!isKind(p,'NSMutableString')?text(p):foundationObjects.archiveNumber(p),
@@ -581,7 +593,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     decode:async bytes=>{const context=audioOutput();if(!context||context.state==='closed')throw Error('Audio output is unavailable');
       return {buffer:await decodePlayerAudio(bytes,context,source=>inspectAudioFile(source.read,source.size)),output:new WebPlayerOutput(context)};}});
   const accelerometer=installAccelerometer({hostClass,method,alloc,destroy,release:releaseFromHost,send});
-  const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,getDispatch:()=>dispatchService});
+  const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,threadIdentity:foundationObjects.threadIdentity,getDispatch:()=>dispatchService});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])
     method('UIApplication',false,name,(_,a)=>{statusBarHidden=!!a(0);});
@@ -604,7 +616,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     try {
       await launchApplication({resolveClass:name=>names.get(name),isApplicationClass:cls=>subclass(cls,names.get('UIApplication')),
         currentApplication:()=>application,setApplication:pointer=>{application=pointer;},responds:(p,name)=>!!lookup(read(p),name),send,
-        pushPool:poolPush,popPool:poolPop,connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
+        pushPool:poolPush,popPool:poolPop,loadMainNib:app=>nibs.main(app),connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
       onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
       while (input.hasWindow() || input.hasAlerts() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
@@ -632,6 +644,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     throw Error('UIApplication launched without a supported event source (key window or CADisplayLink)');
   }
 
+  const protocols=protocolImports({read,cString:p=>readString(cpu,p),string,text});
+  const methodTypes=new Map();
   function loadMethods(ptr, table) {
     if (!ptr) return;
     const stride = read(ptr) & 0xffff, count = read(ptr + 4);
@@ -641,6 +655,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       const old = read(at), name = readString(cpu, old), canonical = selector(name);
       if (old !== canonical) write(at, canonical);
       table.set(name, read(at + 8));
+      if(read(at+4))methodTypes.set(read(at+8),readString(cpu,read(at+4)));
     }
   }
   function register(ptr, isMeta, owner) {
@@ -673,6 +688,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       const imp = classes.get(read(p))?.methods.get('load');
       if (typeof imp === 'number') loads.push({cls: p, imp});
     }
+    each('__objc_protolist', p=>protocols.register(p));
+    each('__objc_protorefs', p=>protocols.register(p));
     each('__objc_nlclslist', p => queueClass(p));
     const nonLazyCategories = new Set();
     each('__objc_nlcatlist', c => nonLazyCategories.add(c));
@@ -694,6 +711,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ['_NSLocalizedDescriptionKey', 'NSLocalizedDescription']
   ]);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
+  for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
@@ -722,12 +740,14 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     exportedStringNames.set('_' + name, name);
   const exportedStrings = new Map();
   const directories = new Map([[5, 'Library'], [9, 'Documents'], [13, 'Library/Caches'], [14, 'Library/Application Support']]);
+  const booleanConstants=new Map();
   let defaultAllocator;
   function resolveData(name) {
     if (cxx && name.startsWith('_OBJC_EHTYPE_$_')) {
       const cls = name.slice(15);
       if (names.has(cls)) return cxx.objcType(cls, names.get(cls));
     }
+    if(name==='_kCFBooleanTrue'||name==='_kCFBooleanFalse'){if(!booleanConstants.has(name)){const slot=zero(4);write(slot,retain(foundationObjects.number(name==='_kCFBooleanTrue')));booleanConstants.set(name,slot);}return booleanConstants.get(name);}
     if(name.startsWith('_kCF')){const address=cf.resolveData(name);if(address!=null)return address;}
     if(blockClasses.has(name))return blockClasses.get(name);
     if(cg.constants.has(name))return cg.constants.get(name);
@@ -815,6 +835,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _objc_getClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _objc_lookUpClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _object_getClass: a => a(0) ? read(a(0)) : 0,
+    ...protocols.funcs,...security,
     _class_getSuperclass: a => a(0) ? read(a(0) + 4) : 0,
     _objc_retain: a => retain(a(0)), _objc_release: a => release(a(0)),
     _objc_autorelease: a => autorelease(a(0)),

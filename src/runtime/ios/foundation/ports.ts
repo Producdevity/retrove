@@ -9,6 +9,7 @@ const RUN_LOOP_CLASS = "NSRunLoop";
 const MILLISECONDS_PER_SECOND = 1000;
 const DOUBLE_BYTES = 8;
 export interface PortHost extends FoundationHost {
+  hasPendingSource?(loop: number, mode: string): boolean;
   pollSources?(loop: number, mode: string): Promise<boolean>;
   send(self: number, name: string, args?: number[]): Promise<HostResult>;
   waitMethod(
@@ -96,7 +97,12 @@ export class PortRunLoops {
     this.modes.set(loop, name);
     return {
       wait: () => {
-        if (Date.now() < deadline && this.hasSource(loop, name)) return;
+        if (
+          Date.now() < deadline &&
+          this.hasSource(loop, name) &&
+          !this.host.hasPendingSource?.(loop, name)
+        )
+          return;
         this.modes.delete(loop);
         return 1;
       },

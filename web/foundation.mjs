@@ -1,4 +1,9 @@
+import {installThreadInstances} from "../src/runtime/ios/foundation/thread-instances.ts";
+import {installLocalizedComparisons} from "../src/runtime/ios/foundation/text/localized-comparison.ts";
+import {installPaymentQueue} from "../src/runtime/ios/storekit/payment-queue.ts";
+import {installPasteboards} from "../src/runtime/ios/uikit/pasteboard.ts";
 import {installCollectionEquality} from "../src/runtime/ios/foundation/collection-equality.ts";
+import {installOperations} from "../src/runtime/ios/foundation/operations/bindings.ts";
 import {installCalendars} from "../src/runtime/ios/foundation/calendar/bindings.ts";
 import {installDecimalNumbers} from "../src/runtime/ios/foundation/decimal/bindings.ts";
 import {installPlatformVersions} from "../src/runtime/ios/platform.ts";
@@ -24,7 +29,7 @@ import {formatDarwin} from './format.mjs';
 import {readString} from './memory.mjs';
 
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
-  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop}) {
+  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries}) {
   const dicts = new Map(), numbers = new Map();
   const enumeration=new FastEnumeration({read,write,allocate:bytes=>heap.zero(bytes),free:pointer=>heap.free(pointer)});
   const bits = new DataView(new ArrayBuffer(8));
@@ -62,7 +67,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNumber',false,'dealloc',s=>{decimalNumbers.forget(s);releaseNumberType(s);numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
   installCollectionInitializers({method});
-  installCollectionEquality({method,isKind,send,items,entries:p=>Array.from(dicts.get(p)?.values()??[])});
+  installCollectionEquality({method,isKind,send,items,entries:p=>getCFEntries?.(p)??Array.from(dicts.get(p)?.values()??[])});
   installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});
   method('NSDictionary',true,'dictionary',cls=>autorelease(dictionary(cls,[])));
   method('NSMutableDictionary',true,'dictionaryWithCapacity:',cls=>autorelease(dictionary(cls,[])));
@@ -102,9 +107,10 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     for(const [k,v] of entries?.values()??[]) {await release(k);await release(v);}
     destroy(s);
   });
-  function property(value) {
-    return propertyValue({string,number,date,array,autorelease,dictionary:pairs=>dictionary(names.get('NSDictionary'),pairs),
-      data:bytes=>{const p=heap.alloc(Math.max(1,bytes.length));try{cpu.write(p,bytes);return autorelease(dataFrom(p,bytes.length));}finally{heap.free(p);}}},value);
+  function property(value,mutability=0) {
+    return propertyValue({string:(value,mutable)=>mutable?autorelease(makeString(value,alloc(names.get('NSMutableString')))):string(value),number,date,array,autorelease,
+      dictionary:(pairs,mutable)=>dictionary(names.get(mutable?'NSMutableDictionary':'NSDictionary'),pairs),
+      data:(bytes,mutable)=>{const p=heap.alloc(Math.max(1,bytes.length));try{cpu.write(p,bytes);return autorelease(dataFrom(p,bytes.length,mutable?alloc(names.get('NSMutableData')):undefined));}finally{heap.free(p);}}},value,mutability);
   }
   method('NSBundle',false,'infoDictionary',()=>property(ipa.info));
   method('NSBundle',false,'objectForInfoDictionaryKey:',(_,a)=>property(ipa.info[text(a(0))]));
@@ -231,27 +237,15 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSString',false,'substringWithRange:',(s,a)=>string(text(s).slice(a(0),a(0)+a(1))));
   method('NSString',false,'uppercaseString',s=>string(text(s).toUpperCase()));
   method('NSString',false,'lowercaseString',s=>string(text(s).toLowerCase()));
+  installLocalizedComparisons({method,text},languages()[0]);
   method('NSString',false,'caseInsensitiveCompare:',(s,a)=>Math.sign(text(s).toLowerCase().localeCompare(text(a(0)).toLowerCase())));
   const dates=installDates({hostClass,method,alloc,destroy,retain,autorelease,isDate:p=>isKind(p,'NSDate')});
   function date(t){return dates.create(t);}
   installCalendars({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,referenceTime:dates.referenceTime,createDate:dates.create});
-  hostClass('UIPasteboard','NSObject');
-  const boardsByName=new Map(), boards=new Map();
-  function pasteboard(name,create) {
-    if(boardsByName.has(name))return boardsByName.get(name);
-    const key='bioshock.pasteboard.'+ipa.info.CFBundleIdentifier+'.'+name;
-    let value=null;try{value=globalThis.localStorage?.getItem(key);}catch{}
-    if(value==null&&!create)return 0;
-    const p=alloc(names.get('UIPasteboard'));boards.set(p,{key,value,persistent:value!=null});boardsByName.set(name,p);return p;
-  }
-  method('UIPasteboard',true,'pasteboardWithName:create:',(_,a)=>a(0)?pasteboard(text(a(0)),!!a(1)):0);
-  method('UIPasteboard',false,'string',s=>{const v=boards.get(s).value;return v==null?0:string(v);});
-  method('UIPasteboard',false,'setString:',(s,a)=>{const b=boards.get(s);b.value=a(0)?text(a(0)):null;
-    if(b.persistent){if(b.value==null)globalThis.localStorage?.removeItem(b.key);else globalThis.localStorage?.setItem(b.key,b.value);}
-  });
-  method('UIPasteboard',false,'setPersistent:',(s,a)=>{const b=boards.get(s);b.persistent=!!a(0);
-    if(b.persistent&&b.value!=null)globalThis.localStorage?.setItem(b.key,b.value);else globalThis.localStorage?.removeItem(b.key);
-  });
+  installPaymentQueue({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,array});
+  installPasteboards({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,isKind,items,property,identifier:ipa.info.CFBundleIdentifier??ipa.bundlePath,
+    unique:()=>crypto.randomUUID(),bytes:pointer=>cpu.read(read(pointer+4),read(pointer+8)),
+    read:key=>globalThis.localStorage?.getItem(key)??null,save:(key,value)=>{if(value===null)globalThis.localStorage?.removeItem(key);else globalThis.localStorage?.setItem(key,value);}});
   const preferenceIdentifier=ipa.info.CFBundleIdentifier??ipa.bundlePath;
   const preferenceDomain='bioshock.preferences.'+preferenceIdentifier;
   installUserDefaults({hostClass,method,text,string,singleton,property,unbox,identifier:preferenceIdentifier,
@@ -348,12 +342,16 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     if(expression==='navigator.language')return string(languages()[0]);
     throw Error('Unsupported guest UIWebView expression: '+expression.slice(0,96));
   });
-  hostClass('NSOperationQueue','NSObject');
-  const mainQueue=singleton('NSOperationQueue');
-  method('NSOperationQueue',true,'mainQueue',mainQueue);
-  const queues=new Map();
-  method('NSOperationQueue',false,'setMaxConcurrentOperationCount:',(s,a)=>{queues.set(s,a(0)|0);});
-  method('NSOperationQueue',false,'maxConcurrentOperationCount',s=>queues.get(s)??-1);
+  const tasks=new Map();let operationGate;
+  const operations=installOperations({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,send,isKind,array,items,returnType,
+    selector:pointer=>readString(cpu,pointer),waitMethod:(cls,name,fn)=>method(cls,false,name,fn),
+    worker:(operation,task,exited)=>{
+      if(!hostGate||!threads)throw Error('Operation workers are unavailable');
+      operationGate??=hostGate({name:'NSOperationQueue worker',library:'Foundation'},async a=>{const task=tasks.get(a(0));if(!task)throw Error('Unknown operation worker');await task();return 0;});
+      tasks.set(operation,task);
+      if(!threads.spawnDetached(operationGate,[operation],async()=>{tasks.delete(operation);await exited();})){tasks.delete(operation);throw Error('Operation worker allocation failed');}
+    }});
+  const mainQueue=()=>operations.main();
   hostClass('NSURLRequest','NSObject');hostClass('NSMutableURLRequest','NSURLRequest');
   const requests=new Map();
   async function setRequestURL(s,p){const old=requests.get(s);requests.set(s,retain(p));if(old)await release(old);}
@@ -434,10 +432,20 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   hostClass('NSThread','NSObject');
   const threadObjects=new Map(), threadNames=new Map();
   function thread(id) {
-    if(!threadObjects.has(id))threadObjects.set(id,alloc(names.get('NSThread')));
+    if(!threadObjects.has(id)){const pointer=alloc(names.get('NSThread'));threadObjects.set(id,pointer);threadInstances.register(pointer);}
     return threadObjects.get(id);
   }
   const threadId=()=>threads?.funcs._pthread_self()??1;
+  const threadTasks=new Map();let threadGate;
+  const threadInstances=installThreadInstances({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,selector:p=>readString(cpu,p),send,
+    spawn(self,task,exited){
+      if(!threads)throw Error('NSThread workers are unavailable');
+      threadGate??=hostGate({name:'NSThread main',library:'Foundation'},async a=>{const task=threadTasks.get(a(0));if(!task)throw Error('Unknown NSThread worker');await task();return 0;});
+      threadTasks.set(self,task);
+      const id=threads.spawnDetached(threadGate,[self],async()=>{threadTasks.delete(self);threadObjects.delete(id);await exited();});
+      if(!id){threadTasks.delete(self);throw Error('Could not allocate NSThread stack');}
+      threadObjects.set(id,self);
+    }});
   method('NSThread',true,'mainThread',()=>thread(1));
   method('NSThread',true,'currentThread',()=>thread(threadId()));
   method('NSThread',true,'isMainThread',()=>Number(threadId()===1));
@@ -482,5 +490,5 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNotificationCenter',false,'postNotification:',(_,a)=>post(a(0)));
   method('NSNotificationCenter',false,'postNotificationName:object:',(_,a)=>post(notification(a(0),a(1),0)));
   method('NSNotificationCenter',false,'postNotificationName:object:userInfo:',(_,a)=>post(notification(a(0),a(1),a(2))));
-  return {archiveNumber:p=>numbers.get(p),archiveDate:dates.referenceTime,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:dates.setReferenceTime,property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pollConnections:(loop,mode)=>connections.pump(loop,mode),pending:()=>mainRequests.length+connections.pending(),async pollMain(){await connections.pump(getRunLoop(1),RunLoopMode.Default);for(const f of mainRequests.splice(0))await f();}};
+  return {threadIdentity:pointer=>[...threadObjects].find(([,value])=>value===pointer)?.[0]??0,archiveNumber:p=>numbers.get(p),archiveDate:dates.referenceTime,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:dates.setReferenceTime,property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pollConnections:(loop,mode)=>connections.pump(loop,mode),operationsChanged:self=>operations.changed(self),pending:()=>mainRequests.length+connections.pending()+operations.pending(),async pollMain(){await operations.pump(true);await connections.pump(getRunLoop(1),RunLoopMode.Default);for(const f of mainRequests.splice(0))await f();}};
 }

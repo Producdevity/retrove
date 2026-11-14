@@ -42,6 +42,17 @@ export function installColors(host: ColorHost): void {
   };
   for (const [name, channels] of Object.entries(PALETTE))
     host.method(COLOR_CLASS, true, name, () => create(channels));
+  host.method(COLOR_CLASS, false, "initWithRed:green:blue:alpha:", (self, args) => {
+    for (const index of [Component.Red, Component.Green, Component.Blue, Component.Alpha])
+      host.write(self + (index + 1) * WORD_BYTES, args(index));
+    return self;
+  });
+  host.method(COLOR_CLASS, false, "initWithWhite:alpha:", (self, args) => {
+    for (const index of [Component.Red, Component.Green, Component.Blue])
+      host.write(self + (index + 1) * WORD_BYTES, args(Argument.First));
+    host.write(self + (Component.Alpha + 1) * WORD_BYTES, args(Argument.Second));
+    return self;
+  });
   host.method(COLOR_CLASS, true, "colorWithWhite:alpha:", (_self, args) => {
     const white = floatFromBits(args(Argument.First));
     return create([white, white, white, floatFromBits(args(Argument.Second))]);

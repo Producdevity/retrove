@@ -1,0 +1,28 @@
+import {test,vi} from 'vite-plus/test';
+import assert from 'node:assert/strict';
+import {fixture} from './fixture.mjs';
+import {readString} from '../../web/memory.mjs';
+test('typed persistent pasteboards restore strings and bytes in a new guest runtime',async t=>{
+  const saved=new Map();
+  vi.stubGlobal('localStorage',{getItem:k=>saved.get(k)??null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)});
+  t.onTestFinished(()=>vi.unstubAllGlobals());
+  const x=await fixture(t), str=async(s)=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(s));
+  const name=await str('scoreboard'),type=await str('public.custom-bytes');
+  const board=await x.send(x.cls('UIPasteboard'),'pasteboardWithName:create:',name,1);
+  await x.send(board,'setPersistent:',1);
+  const bytes=x.heap.zero(3);x.cpu.write(bytes,Uint8Array.of(0,128,255));
+  const data=x.f('_CFDataCreate',0,bytes,3);
+  await x.send(board,'setData:forPasteboardType:',data,type);
+  x.cpu.write(bytes,Uint8Array.of(1,1,1));
+  const y=await fixture(t), ys=async(s)=>y.send(y.cls('NSString'),'stringWithUTF8String:',y.heap.string(s));
+  const restored=await y.send(y.cls('UIPasteboard'),'pasteboardWithName:create:',await ys('scoreboard'),0);
+  assert.ok(restored);
+  const result=await y.send(restored,'dataForPasteboardType:',await ys('public.custom-bytes'));
+  assert.deepEqual(y.cpu.read(await y.send(result,'bytes'),3),Uint8Array.of(0,128,255));
+  await y.send(restored,'setString:',await ys('café'));
+  assert.equal(readString(y.cpu,await y.send(await y.send(restored,'string'),'UTF8String')),'café');
+  assert.equal(await y.send(restored,'numberOfItems'),1);
+  assert.equal(await y.send(restored,'valueForPasteboardType:',await ys('public.custom-bytes')),0);
+  await y.send(restored,'setPersistent:',0);
+  assert.equal(saved.size,0);
+});

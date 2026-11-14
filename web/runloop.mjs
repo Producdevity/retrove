@@ -1,5 +1,7 @@
+import {ThreadDeliveries} from "../src/runtime/ios/foundation/thread-delivery.ts";
 import {readString} from './memory.mjs';
-export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release,send,threads,destroy,read,callGuest,getDispatch,withAnimation}) {
+export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release,send,threads,destroy,read,callGuest,getDispatch,withAnimation,threadIdentity}) {
+  const deliveries=new ThreadDeliveries({retain,release,send,currentThread:()=>threads?.funcs._pthread_self()??1});
   const timers=new Map(),scheduled=new Map(),queue=[],animations=[];
   const scratch=new DataView(new ArrayBuffer(8));
   const number=(lo,hi)=>{scratch.setUint32(0,lo,true);scratch.setUint32(4,hi,true);return scratch.getFloat64(0,true);};
@@ -46,8 +48,8 @@ export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,
     method('NSObject',isMeta,'performSelectorOnMainThread:withObject:waitUntilDone:',(s,a)=>deliver(s,a(0),a(1),a(2)));
     method('NSObject',isMeta,'performSelector:onThread:withObject:waitUntilDone:',async(s,a)=>{
       const [selector,thread,arg,wait]=[a(0),a(1),a(2),a(3)];
-      if(!await send(thread,'isMainThread'))throw Error('Requested selector delivery to a non-main NSThread run loop');
-      return deliver(s,selector,arg,wait);
+      if(await send(thread,'isMainThread'))return deliver(s,selector,arg,wait);
+      return deliveries.deliver(threadIdentity(thread),s,readString(cpu,selector),arg,Boolean(wait));
     });
   }
   // UIView immediately applies model changes. The completion block runs on
@@ -68,7 +70,7 @@ export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,
   method('UIView', true, 'animateWithDuration:animations:completion:', (_,a)=>
     animate(number(a(0),a(1)),0,0,a(2),a(3)));
   method('UIView', true, 'animateWithDuration:animations:', (_,a)=>animate(number(a(0),a(1)),0,0,a(2),0));
-  return {pending:()=>scheduled.size+queue.length+animations.length,async pump(){
+  return {pollThread:(id,mode)=>deliveries.pump(id,mode),hasThreadSource:(id,mode)=>deliveries.pending(id,mode),pending:()=>scheduled.size+queue.length+animations.length,async pump(){
     const now=performance.now();
     for (const call of queue.slice())if(call.at<=now){
       queue.splice(queue.indexOf(call),1);

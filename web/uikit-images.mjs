@@ -1,3 +1,5 @@
+import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
+import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
 import {decodeCgBI} from './cgbi.mjs';
 
 const transforms = [
@@ -6,7 +8,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -26,15 +28,9 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     return autorelease(p);
   }
   async function load(path, named) {
-    const base=ipa.bundlePath+'/';
-    path=path.replace(/^\/+/, '');
-    if(!path.startsWith(base))path=base+path;
-    const dot=path.lastIndexOf('.'), slash=path.lastIndexOf('/');
-    const ext=dot>slash?path.slice(dot):'.png',baseName=dot>slash?path.slice(0,dot):path;
-    const candidates=named?[baseName+'@2x~iphone'+ext,baseName+'@2x'+ext,baseName+'~iphone'+ext,baseName+ext]:[path];
-    const entry=candidates.find(p=>ipa.has(p));
-    if(!entry)return 0;
-    const bytes=await ipa.read(entry), scale=/@2x(?:~[^.]*)?\./.test(entry)?2:1;
+    const file=await imageFile({ipa,contents:readFile},path,named);
+    if(!file)return 0;
+    const {bytes,scale,path:entry}=file;
     let optimized;
     try {optimized=decodeCgBI(bytes);}
     catch(error){diagnostic?.('warn','graphics','Failed to decode optimized UIKit image',{path:entry,error:String(error)});return 0;}
@@ -78,6 +74,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     try {ctx.drawImage(source(image),0,0,1,1);}
     finally {ctx.restore();}
   }
+  installImageInitializers({method,retain,release:releaseFromHost,imageClass:()=>names.get('UIImage'),send});
   method('UIImage',true,'imageNamed:',(_,a)=>a(0)?load(text(a(0)),true):0);
   method('UIImage',true,'imageWithContentsOfFile:',(_,a)=>a(0)?load(text(a(0)),false):0);
   method('UIImage',true,'imageWithCGImage:',(cls,a)=>fromCG(cls,a(0),1,0));
@@ -150,10 +147,10 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       opacityTiming=active(state.opacityAnimation)??opacityTiming;
       layoutTiming=active(state.layoutAnimation)??layoutTiming;
       if(state.hidden||(alpha<=0&&!opacityTiming))return;
-      const image=images.get((state.highlighted&&state.highlightedImage)||state.image), custom=typeof lookup(read(view),'drawRect:')==='number';
+      const image=images.get((state.highlighted&&state.highlightedImage)||state.image), layerContent=state.contents&&cg()?.pixels(state.contents), custom=typeof lookup(read(view),'drawRect:')==='number';
       const hostDrawing=hasHostDrawing?.(view);
       const [bx,by,vw,vh]=state.bounds;
-      if(vw>0&&vh>0&&(image||custom||hostDrawing)) {
+      if(vw>0&&vh>0&&(image||custom||hostDrawing||layerContent)) {
         let node=nodes.get(view);
         if(!node) {
           node=pixelCanvas(1,1);
@@ -171,17 +168,23 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
         }
         const transition=[...transitions(['opacity'],opacityTiming),...transitions(['transform','width','height','left','top'],layoutTiming)].join(',');
-        Object.assign(node.style,{transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(shown.size)});
+        Object.assign(node.style,{transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(shown.size)});
         if(state.needsDisplay) {
           state.needsDisplay=false;
           const ctx=node.getContext('2d');
           ctx.setTransform(px/vw,0,0,py/vh,-bx*px/vw,-by*py/vh);
           if(state.clearsContextBeforeDrawing!==0)ctx.clearRect(bx,by,vw,vh);
           if(image)draw(image,ctx,...imageRect(image,state.contentMode,state.bounds));
+          if(layerContent) {
+            const buffer=ctx.createImageData(layerContent.width,layerContent.height);buffer.data.set(layerContent.rgba);
+            const layerCanvas=pixelCanvas(layerContent.width,layerContent.height);layerCanvas.getContext('2d').putImageData(buffer,0,0);
+            ctx.drawImage(layerCanvas,bx,by,vw,vh);
+          }
           if(hostDrawing)await drawHost(view,ctx);
           if(custom&&cg())await cg().withContext(ctx,()=>send(view,'drawRect:',state.bounds.map(bits)));
         }
       }
+      if(state.layer)await visit(state.layer,x,y,alpha,opacityTiming,layoutTiming);
       for(const child of [...state.children]) {
         const f=data(child).frame;
         await visit(child,x+f[0]-bx,y+f[1]-by,alpha,opacityTiming,layoutTiming);

@@ -39,3 +39,11 @@ test('NSMutableArray removes the last owned element, tolerates empty arrays and 
  const custom=x.instance('GuestMutableArray',[['count',0x6200],['removeObjectAtIndex:',0x6210]],[],x.cls('NSMutableArray'));x.install({'__objc_classlist':[custom]});
  const instance=await x.send(custom,'new');await x.send(instance,'removeLastObject');assert.deepEqual(calls,[[0x6210,[instance,x.sel('removeObjectAtIndex:'),2]]]);await x.send(instance,'release');
 });
+
+test('NSMutableArray bulk append snapshots self-aliasing input and retains every appended element',async t=>{
+ const x=await fixture(t),value=await x.send(x.cls('NSObject'),'new'),array=await x.send(x.cls('NSMutableArray'),'arrayWithObject:',value);
+ await x.send(array,'addObjectsFromArray:',array);
+ assert.equal(await x.send(array,'count'),2);assert.equal(await x.send(array,'objectAtIndex:',0),value);assert.equal(await x.send(array,'objectAtIndex:',1),value);
+ assert.equal(await x.send(value,'retainCount'),3);await x.send(array,'removeAllObjects');assert.equal(await x.send(value,'retainCount'),1);
+ await x.send(value,'release');
+});

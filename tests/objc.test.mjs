@@ -577,3 +577,13 @@ test('manual property changes accept valid keys while observer registration rema
  await x.send(object,'willChangeValueForKey:',key);await x.send(object,'didChangeValueForKey:',key);assert.equal(await x.send(object,'retainCount'),count);
  await assert.rejects(x.send(object,'willChangeValueForKey:',0),/Expected NSString/);await x.send(object,'release');
 });
+
+test('Objective-C dictionary equality reads toll-free Core Foundation dictionary contents',async t=>{
+ const x=await fixture(t),key=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('score'));
+ const a=await x.send(x.cls('NSNumber'),'numberWithInt:',1),b=await x.send(x.cls('NSNumber'),'numberWithInt:',2);
+ const left=x.f('_CFDictionaryCreateMutable',0,0,0,0),right=x.f('_CFDictionaryCreateMutable',0,0,0,0);
+ await x.f('_CFDictionaryAddValue',left,key,a);await x.f('_CFDictionaryAddValue',right,key,b);
+ assert.equal(await x.send(left,'isEqualToDictionary:',right),0);
+ await x.f('_CFDictionarySetValue',right,key,a);assert.equal(await x.send(left,'isEqual:',right),1);
+ await x.f('_CFRelease',left);await x.f('_CFRelease',right);
+});

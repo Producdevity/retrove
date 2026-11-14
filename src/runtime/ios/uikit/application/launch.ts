@@ -15,6 +15,7 @@ interface LaunchHost {
   send(pointer: number, selector: string, args?: number[], optional?: boolean): Promise<HostResult>;
   pushPool(): number;
   popPool(pointer: number): Promise<void>;
+  loadMainNib?(application: number): Promise<void>;
   connectInput(): void;
   activate(): Promise<void>;
   phase(name: string, details?: { delegate: string | null }): void;
@@ -43,6 +44,7 @@ export async function launchApplication(
       if (!delegate) throw new Error("Unknown UIApplication delegate " + delegateName);
       await host.send(application, "setDelegate:", [await instantiate(host, delegate)]);
     }
+    await host.loadMainNib?.(application);
     const responder = objectResult(await host.send(application, "delegate"));
     if (responder) {
       host.phase(LaunchPhase.Delegate);

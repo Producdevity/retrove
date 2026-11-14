@@ -10,6 +10,10 @@ function word(value: HostResult): number {
   return value;
 }
 export function installArrayMethods(host: ArrayHost): void {
+  host.method("NSMutableArray", false, "addObjectsFromArray:", async (self, args) => {
+    const values = [...host.items(args(0))];
+    for (const value of values) await host.send(self, "addObject:", [value]);
+  });
   host.method("NSMutableArray", false, "removeLastObject", async (self) => {
     const count = word(await host.send(self, "count", []));
     if (count) return host.send(self, "removeObjectAtIndex:", [count - 1]);

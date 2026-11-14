@@ -1,3 +1,4 @@
+import {bitVectorFunctions} from "../src/runtime/ios/foundation/bit-vectors.ts";
 // CF collection callbacks are optional. Raw pointer collections must never send
 // Objective-C messages to their elements. The collection itself is toll-free bridged.
 const utf8 = new TextEncoder();
@@ -16,7 +17,7 @@ function encoded(str, encoding) {
 }
 
 export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
-  retain,release,text,makeString,makeUTF16,foundation,items,getRunLoop,threads}) {
+  retain,release,autorelease,text,makeString,makeUTF16,foundation,items,getRunLoop,threads}) {
   const collections = new Map(), constants = new Map(), loops = new Map();
   hostClass('CFMutableArray','NSMutableArray');
   hostClass('CFMutableDictionary','NSMutableDictionary');
@@ -41,7 +42,7 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
     if(a(0)) throw Error('Custom CF collection allocator is unsupported');
     const capture=ptr=>ptr?Array.from({length:4},(_,i)=>read(ptr+(i+1)*4)):[];
     const ptr=alloc(names.get(cls));
-    collections.set(ptr,{keys:capture(a(2)),values:isDict?capture(a(3)):[],list:[]});
+    collections.set(ptr,{dictionary:isDict,keys:capture(a(2)),values:isDict?capture(a(3)):[],list:[]});
     return ptr;
   }
   async function acquire(fn,value) {return fn?await callGuest(fn,[0,value]):value;}
@@ -113,11 +114,13 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
   }
   const rangeIndex=a=>index(a(0),array(a(0)),a(1)|0,a(2)|0,a(3));
   const funcs={
+    ...bitVectorFunctions({hostClass,method,alloc,destroy,retain,release,autorelease,text,string:makeString,write,readBytes:(p,n)=>cpu.read(p,n)}),
     _CFArrayCreateMutable:a=>collection('CFMutableArray',a,false),
     _CFArrayGetCount:a=>array(a(0)).length, _CFArrayGetValueAtIndex:a=>at(array(a(0)),a(1)),
     _CFArrayAppendValue:a=>appendArray(a(0),a(1)), _CFArrayRemoveValueAtIndex:a=>removeArray(a(0),a(1)),
     _CFArrayGetFirstIndexOfValue:rangeIndex, _CFArrayContainsValue:async a=>Number(await rangeIndex(a)>=0),
     _CFDictionaryCreateMutable:a=>collection('CFMutableDictionary',a,true),
+    _CFDictionarySetValue:a=>changeDict(a(0),a(1),a(2),true),
     _CFDictionaryGetValue:a=>dictValue(a(0),a(1)), _CFDictionaryRemoveValue:a=>changeDict(a(0),a(1),0),
     _CFDictionaryAddValue:a=>changeDict(a(0),a(1),a(2)), _CFNumberGetValue:numberValue,
     _CFMakeCollectable:a=>a(0),
@@ -155,5 +158,5 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
       return makeString([v.slice(0,8),v.slice(8,12),v.slice(12,16),v.slice(16,20),v.slice(20)].join('-'));
     }
   };
-  return {funcs,resolveData};
+  return {funcs,resolveData,dictionaryEntries:pointer=>{const value=collections.get(pointer);return value?.dictionary?value.list:undefined;}};
 }

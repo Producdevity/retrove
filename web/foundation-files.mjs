@@ -1,3 +1,4 @@
+import {installPropertyListSerialization} from "../src/runtime/ios/foundation/property-list-serialization.ts";
 import {installFileAttributes} from "../src/runtime/ios/foundation/file-attributes.ts";
 import {installErrors,ERROR_INSTANCE_BYTES,ErrorField} from "../src/runtime/ios/foundation/errors.ts";
 import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
@@ -92,6 +93,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     } finally {if(buffer)heap.free(buffer);heap.free(statbuf);await invoke('_close',fd);}
   }
   installStringFiles({method,alloc,destroy,autorelease,write,contents,errno:()=>read(invoke('___error')),decode:decodeText,initialize:(p,v)=>makeString(v,p),error:makeError});
+  installPropertyListSerialization({hostClass,method,string,retain,write,error:makeError,parse:parsePlist,property,bytes:p=>{if(!isKind(p,'NSData'))throw Error('Expected NSData property list');return cpu.read(read(p+4),read(p+8));}});
   installDictionaryFiles({method,autorelease,destroy,contents,parse:parsePlist,property,send});
   method('NSData',true,'dataWithContentsOfFile:',async(_,a)=>{
     const bytes=await contents(a(0));if(!bytes)return 0;
