@@ -1,3 +1,5 @@
+import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
+import {installArrayCopies} from "../src/runtime/ios/foundation/arrays.ts";
 import {installDates} from "../src/runtime/ios/foundation/dates.ts";
 import {installNumbers} from "../src/runtime/ios/foundation/numbers.ts";
 import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
@@ -33,6 +35,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     for (const [key, value] of pairs) if (key && value) associated(ptr,key,value);
     return ptr;
   }
+  installArrayCopies({method,autorelease,items,array});
   installStringPaths({method,string,text});
   installValues({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value)});
   hostClass('NSNumber','NSValue');
@@ -45,6 +48,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNumber',false,'copy',retain);
   method('NSNumber',false,'dealloc',s=>{numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
+  installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});
   method('NSDictionary',true,'dictionary',cls=>autorelease(dictionary(cls,[])));
   method('NSMutableDictionary',true,'dictionaryWithCapacity:',cls=>autorelease(dictionary(cls,[])));
   method('NSDictionary',true,'dictionaryWithObject:forKey:',(cls,a)=>autorelease(dictionary(cls,[[a(1),a(0)]])));
