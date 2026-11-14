@@ -1,3 +1,4 @@
+export const UNICODE_CHARACTER_LIMIT = 0x110000;
 const DECIMAL_RADIX = 10;
 const DECIMAL_ZEROES = "0٠۰߀०০੦૦୦௦౦೦൦෦๐໐༠၀႐០᠐᥆᧐᪀᪐᭐᮰᱀᱐꘠꣐꤀꧐꧰꩐꯰０";
 
@@ -17,6 +18,29 @@ export class CharacterSet {
   }
   inverted(): CharacterSet {
     return new CharacterSet((character) => !this.contains(character));
+  }
+  union(other: CharacterSet): CharacterSet {
+    return new CharacterSet((character) => this.contains(character) || other.contains(character));
+  }
+  intersection(other: CharacterSet): CharacterSet {
+    return new CharacterSet((character) => this.contains(character) && other.contains(character));
+  }
+  subtract(other: CharacterSet): CharacterSet {
+    return new CharacterSet((character) => this.contains(character) && !other.contains(character));
+  }
+  static range(location: number, length: number): CharacterSet {
+    if (
+      !Number.isInteger(location) ||
+      !Number.isInteger(length) ||
+      location < 0 ||
+      length < 0 ||
+      location + length > UNICODE_CHARACTER_LIMIT
+    )
+      throw new Error("NSCharacterSet range exceeds Unicode character space.");
+    return new CharacterSet((character) => {
+      const code = character.codePointAt(0);
+      return code !== undefined && code >= location && code < location + length;
+    });
   }
   static characters(value: string): CharacterSet {
     const characters = new Set(value);

@@ -34,9 +34,9 @@ class ScannerObjects {
   async setSkipped(self: number, pointer: number): Promise<void> {
     const state = this.get(self);
     const set = this.characters.get(pointer);
-    this.host.retain(pointer);
+    const copied = pointer ? this.characters.create(set) : 0;
     const previous = state.skipped;
-    state.skipped = pointer;
+    state.skipped = copied;
     state.scanner.skipped = set;
     await this.host.release(previous);
   }
