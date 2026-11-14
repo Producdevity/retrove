@@ -1,3 +1,4 @@
+import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
 import {FastEnumeration} from "../src/runtime/ios/foundation/fast-enumeration.ts";
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
 import {installUserDefaults} from '../src/runtime/ios/foundation/user-defaults.ts';
@@ -343,7 +344,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSUUID',false,'copy',retain);
   method('NSUUID',false,'dealloc',p=>{uuids.delete(p);destroy(p);});
   hostClass('ASIdentifierManager','NSObject');
-  let noAdId,vendorId;
+  let noAdId;
   method('ASIdentifierManager',true,'sharedManager',singleton('ASIdentifierManager'));
   method('ASIdentifierManager',false,'isAdvertisingTrackingEnabled',()=>0);
   method('ASIdentifierManager',false,'advertisingTrackingEnabled',()=>0);
@@ -478,14 +479,9 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   });
   const mainRequests=[];
   hostClass('UIDevice','NSObject');
-  method('UIDevice',false,'identifierForVendor',()=>{
-    if(!vendorId){
-      const key=domain+'.vendor-id';let id;
-      try{id=globalThis.localStorage?.getItem(key);}catch{}
-      vendorId=newUUID(id);if(!id)try{globalThis.localStorage?.setItem(key,uuidString(vendorId));}catch{}
-    }
-    return vendorId;
-  });
+  installDeviceIdentity({method,string,uuid:newUUID,uuidString,
+    read:()=>globalThis.localStorage?.getItem(preferenceDomain+'.vendor-id')??null,
+    save:value=>globalThis.localStorage?.setItem(preferenceDomain+'.vendor-id',value)});
   method('UIDevice',true,'currentDevice',singleton('UIDevice'));
   method('UIDevice',false,'systemVersion',()=>string('7.1'));
   method('UIDevice',false,'systemName',()=>string('iPhone OS'));
