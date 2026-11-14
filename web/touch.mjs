@@ -1,3 +1,4 @@
+import {installPickers} from "../src/runtime/ios/uikit/picker/bindings.ts";
 import {PointerPhase, PointerQueue, TouchPhase} from '../src/runtime/ios/uikit/touch/pointer-queue.ts';
 import {InputMetrics, DropReason} from '../src/runtime/diagnostics/input-metrics.ts';
 import {installColors} from '../src/runtime/ios/uikit/colors.ts';
@@ -52,8 +53,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  let textViews;
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p),drawHost:(p,ctx)=>textViews?.draw(p,ctx)});
+  let textViews,pickerViews;
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p),drawHost:(p,ctx)=>pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children; next.splice(next.indexOf(self),1); }
@@ -77,6 +78,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   method('UIView',false,'dealloc',deallocateView);
   const uiHost={hostClass,method,structure:method,alloc,destroy,autorelease,retain,release:releaseFromHost,send,text,string,write,read,ipa,document:mediaHost?.ownerDocument,view:data,setFrame,deallocateView};
   textViews=installLabels(uiHost);
+  pickerViews=installPickers({...uiHost,screenWidth:()=>phoneScreen.width,responds:(p,name)=>!!p&&!!lookup(read(p),name),
+    touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
     touchInside:(set,view)=>{const touch=touches.get(items(set)[0]);if(!touch)return false;const [x,y]=convertPoint(touch.point,touch.window,view),[bx,by,w,h]=data(view).bounds;return x>=bx&&y>=by&&x<bx+w&&y<by+h;}};
   const controls=installControls(controlHost);installButtons({...controlHost,imageSize:imageViews.size,labelSize:textViews.size},controls);
@@ -463,5 +466,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();},pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
+  return {snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();},pump,cancelTouches,hasWindow:()=>!!window,items,array:items=>collection('NSArray',items)};
 }
