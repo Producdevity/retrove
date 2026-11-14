@@ -5,6 +5,16 @@ import { WORD_BYTES } from "../../ios/abi/scalars";
 const Upload = { Buffer: 0, Format: 1, Data: 2, Size: 3, Rate: 4 } as const;
 export function bufferImports(runtime: OpenALRuntime): Record<string, ALFunction> {
   const host = runtime.host;
+  const upload: ALFunction = (args) => {
+    const name = args(Upload.Buffer),
+      size = args(Upload.Size) | 0;
+    runtime.buffer(name);
+    if (runtime.referenced(name)) throw new OpenALError(ALError.InvalidOperation);
+    if (size < 0) throw new OpenALError(ALError.InvalidValue);
+    if (size > MAX_BUFFER_BYTES) throw new OpenALError(ALError.OutOfMemory);
+    const bytes = args(Upload.Data) ? host.read(args(Upload.Data), size) : new Uint8Array(size);
+    runtime.device.buffers.set(name, decodePCM(args(Upload.Format), bytes, args(Upload.Rate) | 0));
+  };
   return {
     _alGenBuffers: (args) => {
       const names = runtime.names(args(0) | 0);
@@ -27,18 +37,10 @@ export function bufferImports(runtime: OpenALRuntime): Record<string, ALFunction
       for (const name of names) runtime.device.buffers.delete(name);
     },
     _alIsBuffer: (args) => Number(args(0) === 0 || runtime.device.buffers.has(args(0))),
-    _alBufferData: (args) => {
-      const name = args(Upload.Buffer),
-        size = args(Upload.Size) | 0;
-      runtime.buffer(name);
-      if (runtime.referenced(name)) throw new OpenALError(ALError.InvalidOperation);
-      if (size < 0) throw new OpenALError(ALError.InvalidValue);
-      if (size > MAX_BUFFER_BYTES) throw new OpenALError(ALError.OutOfMemory);
-      const bytes = args(Upload.Data) ? host.read(args(Upload.Data), size) : new Uint8Array(size);
-      runtime.device.buffers.set(
-        name,
-        decodePCM(args(Upload.Format), bytes, args(Upload.Rate) | 0),
-      );
+    _alBufferData: upload,
+    _alBufferDataStatic: (args) => {
+      if (args(Upload.Size) && !args(Upload.Data)) throw new OpenALError(ALError.InvalidValue);
+      return upload(args);
     },
     _alGetBufferi: (args) => {
       const pcm = runtime.buffer(args(0));

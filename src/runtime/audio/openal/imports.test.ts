@@ -122,3 +122,29 @@ test("unknown queued buffer names fail atomically and known AL functions resolve
   expect(x.call("_alcCloseDevice", x.device)).toBe(1);
   expect(x.live.size).toBe(0);
 });
+
+test("Apple static PCM uploads resolve to real buffer conversion and retain standard errors", () => {
+  const x = fixture();
+  x.call("_alGenBuffers", 1, 512);
+  const buffer = x.view.getUint32(512, true);
+  x.memory.set(new TextEncoder().encode("alBufferDataStatic\0"), 16000);
+  expect(x.call("_alcGetProcAddress", 0, 16000)).toBe(0x4000);
+  const upload = x.gates.get("_alBufferDataStatic");
+  if (!upload) throw new Error("Static buffer gate missing.");
+  const args = [buffer, PCMFormat.Mono16, 2048, 16, 8000];
+  for (let i = 0; i < 8; i++) x.view.setInt16(2048 + i * 2, 16384, true);
+  upload((i) => args[i] ?? 0);
+  expect(x.call("_alGetError")).toBe(0);
+  x.call("_alGetBufferi", buffer, AL.Size, 528);
+  expect(x.view.getUint32(528, true)).toBe(16);
+  x.call("_alBufferDataStatic", buffer, PCMFormat.Mono16, 0, 16, 8000);
+  expect(x.call("_alGetError")).toBe(ALError.InvalidValue);
+  x.call("_alGenSources", 1, 520);
+  const source = x.view.getUint32(520, true);
+  x.call("_alSourcei", source, AL.Buffer, buffer);
+  x.call("_alSourcePlay", source);
+  expect(x.calls.length).toBe(1);
+  x.call("_alBufferDataStatic", buffer, PCMFormat.Mono16, 2048, 16, 8000);
+  expect(x.call("_alGetError")).toBe(ALError.InvalidOperation);
+  x.close();
+});
