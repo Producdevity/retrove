@@ -39,7 +39,7 @@ function makeFixture({ bind = [], lazy = [], weak = [], rebase = [], exports = [
   }
   put(0, 0xfeedface); put(4, 12); put(8, 9); put(12, 2); put(16, count); put(20, at - 28);
   put(0x1000, initializer); put(0x300, 0xe12fff1e);
-  return { bytes, data, put };
+  return { bytes, data, dyld, put };
 }
 function guest() {
   const mem = new Uint8Array(0x10000), d = new DataView(mem.buffer);
@@ -121,4 +121,22 @@ test('fault symbolication selects the nearest named definition in the same secti
   const image = parseMachO(f.bytes);
   assert.deepEqual(image.symbolAt(0x5003), {name: '_start', offset: 2});
   assert.equal(image.symbolAt(0x3000), undefined);
+});
+
+
+test('binds classic external data relocations before Objective-C metadata is installed',()=>{
+  const f=makeFixture(),d=new DataView(f.bytes.buffer),end=28+d.getUint32(20,true);
+  f.put(f.dyld,0);f.put(24,0x80);
+  f.put(16,d.getUint32(16,true)+2);f.put(20,end-28+104);
+  for(const [i,value] of [2,24,0x1900,1,0x1940,32].entries())f.put(end+i*4,value);
+  const dynamic=end+24;f.put(dynamic,11);f.put(dynamic+4,80);f.put(dynamic+64,0x1980);f.put(dynamic+68,1);
+  f.put(0x1900,1);f.bytes[0x1904]=1;d.setUint16(0x1906,0x100,true);
+  f.bytes.set(new TextEncoder().encode('\0_OBJC_CLASS_$_NSObject\0'),0x1940);
+  f.put(0x1980,0x5004);f.put(0x1984,0x0c000000);f.put(0x1004,12);
+  const image=parseMachO(f.bytes),memory=guest();
+  assert.equal(image.imports.length,1);
+  loadMachO(image,memory,binding=>{assert.equal(binding.name,'_OBJC_CLASS_$_NSObject');return 0x7000;});
+  assert.equal(memory.read32(0x5004),0x700c);
+  f.put(0x1984,0x1c000000);
+  assert.throws(()=>parseMachO(f.bytes),/unsupported ARM external relocation type/);
 });

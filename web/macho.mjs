@@ -1,3 +1,4 @@
+import {classicRelocations} from "../src/runtime/ios/macho/classic-relocations.ts";
 import {SymbolIndex} from "../src/runtime/diagnostics/symbol-index.ts";
 const PAGE = 4096;
 const ARM = 12;
@@ -228,11 +229,13 @@ function exportAddress(bytes, base, name) {
   }
 }
 
-function readIndirect(image, sym, dysym) {
+function readIndirect(image, sym, dysym, flags) {
   if (!sym || !dysym) return;
   const u = (d, at) => d.getUint32(at, true);
   const symbols = view(sub(image.bytes, u(sym, 8), u(sym, 12) * 12, 'symbol table'));
   const strings = sub(image.bytes, u(sym, 16), u(sym, 20), 'string table');
+  const relocations = view(sub(image.bytes, u(dysym, 64), u(dysym, 68) * 8, 'external relocations'));
+  for(const binding of classicRelocations({...image, flags, symbols, strings, relocations}))image.imports.push(binding);
   const indices = view(sub(image.bytes, u(dysym, 56), u(dysym, 60) * 4, 'indirect symbols'));
   for (const seg of image.segments) {
     for (const s of seg.sections) {
@@ -341,7 +344,7 @@ export function parseMachO(input) {
       fixupStream(stream(at), image, mode);
     }
     exportBytes ??= stream(40);
-  } else readIndirect(image, sym, dysym);
+  } else readIndirect(image, sym, dysym, u(24));
   image.findExport = name => exportAddress(exportBytes, baseSegment.address, name);
   image.symbolAt = symbolLookup(image, sym);
   return image;
