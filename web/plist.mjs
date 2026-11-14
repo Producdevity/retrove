@@ -1,3 +1,4 @@
+import {ArchiveReference} from "../src/runtime/ios/foundation/archives/graph.ts";
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const utf16be = new TextDecoder("utf-16be", { fatal: true });
 
@@ -91,7 +92,7 @@ function binaryPlist(bytes) {
         break;
       }
       case 8:
-        value = uint(take(arg + 1), arg + 1, table);
+        value = new ArchiveReference(uint(take(arg + 1), arg + 1, table));
         break;
       case 10: case 12: case 13: {
         const length = size();

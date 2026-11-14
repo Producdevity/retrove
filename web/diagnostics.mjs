@@ -241,7 +241,7 @@ export class DiagnosticRecorder {
   text(which = 'current') {
     const run = which === 'previous' ? this.previous : this.current;
     if (!run) return '';
-    const rows = ['BioShock browser runtime diagnostics', 'Run: ' + run.id,
+    const rows = ['Retrove runtime diagnostics', 'Run: ' + run.id,
       'Input: ' + run.label, 'Started: ' + run.startedAt, 'Last checkpoint: ' + run.updatedAt,
       'State: ' + run.state + ' (+' + (run.elapsed / 1000).toFixed(3) + 's)'];
     if (run.state === 'interrupted')

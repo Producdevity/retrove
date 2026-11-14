@@ -164,4 +164,5 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     }finally{await invoke('_close',fd);}
   });
   method('NSFileManager',false,'stringWithFileSystemRepresentation:length:',(_,a)=>string(new TextDecoder().decode(cpu.read(a(0),a(1)))));
+  return {contents};
 }

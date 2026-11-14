@@ -93,6 +93,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   });
   function property(value) {
     if (value == null) return 0;
+    if (value instanceof Date) return date(value.getTime()/1000);
     if (typeof value==='string') return string(value);
     if (typeof value==='number'||typeof value==='boolean'||typeof value==='bigint') return number(value);
     if (Array.isArray(value)) return autorelease(array(value.map(property)));
@@ -543,5 +544,5 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNotificationCenter',false,'postNotification:',(_,a)=>post(a(0)));
   method('NSNotificationCenter',false,'postNotificationName:object:',(_,a)=>post(notification(a(0),a(1),0)));
   method('NSNotificationCenter',false,'postNotificationName:object:userInfo:',(_,a)=>post(notification(a(0),a(1),a(2))));
-  return {property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
+  return {setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:(p,v)=>{times.set(p,v+978307200);},property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
 }

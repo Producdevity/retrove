@@ -1,3 +1,6 @@
+import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiver.ts";
+import {archiveFoundation} from "../src/runtime/ios/foundation/archives/foundation.ts";
+import {parsePlist} from "./plist.mjs";
 import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
 import {propertyAccessors} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
@@ -526,7 +529,17 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData});
   const cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
     retain,release:releaseFromHost,text,makeString,makeUTF16,foundation:foundationObjects,items:input.items,getRunLoop,threads});
-  fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData});
+  const fileObjects=fileManager({release:releaseFromHost,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array:input.array,autorelease,send,retain,property:foundationObjects.property,dataFrom:createData});
+  const archivedData=(bytes,self)=>{
+    const source=heap.alloc(Math.max(1,bytes.length));
+    try {cpu.write(source,bytes);return createData(source,bytes.length,self);}finally{heap.free(source);}
+  };
+  installUnarchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
+    parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},send,
+    scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
+    initializeBuiltin:archiveFoundation({string:(p,v)=>{makeString(v,p);},number:foundationObjects.setArchivedNumber,date:foundationObjects.setArchivedDate,
+      data:(p,b)=>{archivedData(b,p);},dictionary:async(p,k,v)=>{await foundationObjects.associated(p,k,v);},
+      collection:(p,values)=>{input.items(p).push(...values.map(retain));}})});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,getDispatch:()=>dispatchService});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])
