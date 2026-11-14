@@ -1,3 +1,4 @@
+import {installStringCharacters,decodeCharacterBytes} from "../src/runtime/ios/foundation/text/characters.ts";
 import {MovieNotification,MovieUserInfo} from "../src/runtime/ios/media/movie-playback.ts";
 import {installXMLParser} from "../src/runtime/ios/foundation/xml/bindings.ts";
 import {XML_ERROR_DOMAIN} from "../src/runtime/ios/foundation/xml/types.ts";
@@ -37,7 +38,7 @@ import { eaglDrawable } from './drawable.mjs';
 import { read32, readString, readCStringBytes, write32 } from './memory.mjs';
 
 const encoder = new TextEncoder();
-const decoders = { utf8: new TextDecoder(), utf16: new TextDecoder('utf-16le') };
+const decoders = { utf8: new TextDecoder() };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
   {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, hostGate, cxx} = {}) {
@@ -259,7 +260,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const utf16 = Boolean(read(self + 4) & 16);
     const len = read(self + 12);
     if (len > 16 * 1024 * 1024) throw Error('Invalid NSString length');
-    return (utf16 ? decoders.utf16 : decoders.utf8).decode(cpu.read(read(self + 8), utf16 ? len * 2 : len));
+    const bytes=cpu.read(read(self+8),utf16?len*2:len);return utf16 ? decodeCharacterBytes(bytes) : decoders.utf8.decode(bytes);
   }
   const string = s => autorelease(makeString(s));
   const utf8Cache = new Map();
@@ -298,6 +299,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSString',false,'mutableCopy',s=>makeString(text(s),alloc(names.get('NSMutableString'))));
   installPercentEscapes({method,text,string});
   installStringReplacement({method,text,string,assign:(p,v)=>{makeString(v,p);}});
+  installStringCharacters({method,text,alloc,autorelease,readBytes:(pointer,length)=>cpu.read(pointer,length),writeBytes:(pointer,bytes)=>cpu.write(pointer,bytes),initialize:(pointer,bytes)=>makeUTF16(bytes,pointer)});
   installCStringConstructors({method,alloc,autorelease,destroy,bytes:p=>readCStringBytes(cpu,p),decode:decodeText,initialize:(p,v)=>makeString(v,p),utf8});
   method('NSString', false, 'length', self => text(self).length);
   method('NSString', false, 'UTF8String', utf8);
