@@ -500,3 +500,27 @@ test('NSValue boxes pointers without owning their targets and exposes stable typ
   assert.equal(readString(x.cpu,type),'^v');
   await x.send(target,'release');
 });
+
+
+test('NSUserDefaults registers volatile fallbacks without overwriting saved settings',async t=>{
+  const stored=new Map();
+  vi.stubGlobal('localStorage',{getItem:key=>stored.get(key)??null,setItem:(key,value)=>stored.set(key,value)});
+  t.onTestFinished(()=>vi.unstubAllGlobals());
+  const x=await fixture(t), preferences=await x.send(x.cls('NSUserDefaults'),'standardUserDefaults');
+  const key=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('sound'));
+  const enabled=await x.send(x.cls('NSNumber'),'numberWithBool:',1);
+  const defaults=await x.send(x.cls('NSDictionary'),'dictionaryWithObject:forKey:',enabled,key);
+  await x.send(preferences,'registerDefaults:',defaults);
+  assert.equal(await x.send(preferences,'boolForKey:',key),1);
+  assert.equal(stored.size,0);
+  await x.send(preferences,'setBool:forKey:',0,key);
+  await x.send(preferences,'registerDefaults:',defaults);
+  assert.equal(await x.send(preferences,'boolForKey:',key),0);
+  assert.deepEqual(JSON.parse([...stored.values()][0]),{sound:false});
+  await x.send(preferences,'removeObjectForKey:',key);
+  assert.equal(await x.send(preferences,'boolForKey:',key),1);
+  assert.deepEqual(JSON.parse([...stored.values()][0]),{});
+  const next=await fixture(t), restored=await next.send(next.cls('NSUserDefaults'),'standardUserDefaults');
+  const restoredKey=await next.send(next.cls('NSString'),'stringWithUTF8String:',next.heap.string('sound'));
+  assert.equal(await next.send(restored,'objectForKey:',restoredKey),0);
+});

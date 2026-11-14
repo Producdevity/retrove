@@ -1,4 +1,5 @@
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
+import {installUserDefaults} from '../src/runtime/ios/foundation/user-defaults.ts';
 import {installValues} from '../src/runtime/ios/foundation/values.ts';
 import {installUrlPaths} from '../src/runtime/ios/foundation/url-paths.ts';
 import {formatDarwin} from './format.mjs';
@@ -276,37 +277,15 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('UIPasteboard',false,'setPersistent:',(s,a)=>{const b=boards.get(s);b.persistent=!!a(0);
     if(b.persistent&&b.value!=null)globalThis.localStorage?.setItem(b.key,b.value);else globalThis.localStorage?.removeItem(b.key);
   });
-  hostClass('NSUserDefaults','NSObject');
-  const domain='bioshock.preferences.'+(ipa.info.CFBundleIdentifier??ipa.bundlePath);
-  let saved;
-  const defaults=()=>{
-    if(!saved) {let values;try{values=JSON.parse(globalThis.localStorage?.getItem(domain)??'{}');}catch{}
-      saved=Object.assign(Object.create(null),values);}
-    return saved;
-  };
-  function sync() {
-    try { if(!globalThis.localStorage)return 0;globalThis.localStorage.setItem(domain,JSON.stringify(defaults()));return 1; }catch{return 0;}
-  }
-  const value=k=>defaults()[text(k)];
-  const set=(k,v)=>{if(v==null)delete defaults()[text(k)];else defaults()[text(k)]=v;sync();};
-  method('NSUserDefaults',true,'standardUserDefaults',singleton('NSUserDefaults'));
-  method('NSUserDefaults',false,'objectForKey:',(_,a)=>property(value(a(0))));
-  method('NSUserDefaults',false,'stringForKey:',(_,a)=>{const v=value(a(0));return v==null?0:string(String(v));});
-  method('NSUserDefaults',false,'integerForKey:',(_,a)=>Number(value(a(0)))|0);
-  method('NSUserDefaults',false,'boolForKey:',(_,a)=>{const v=value(a(0));return Number(typeof v==='string'?/^(?:y|t|[1-9])/i.test(v):Boolean(v));});
-  method('NSUserDefaults',false,'doubleForKey:',(_,a)=>{bits.setFloat64(0,Number(value(a(0)))||0,true);return bits.getBigUint64(0,true);});
-  method('NSUserDefaults',false,'setInteger:forKey:',(_,a)=>set(a(1),a(0)|0));
-  method('NSUserDefaults',false,'setBool:forKey:',(_,a)=>set(a(1),!!a(0)));
-  method('NSUserDefaults',false,'setObject:forKey:',(_,a)=>set(a(1),unbox(a(0))));
-  method('NSUserDefaults',false,'setDouble:forKey:',(_,a)=>{bits.setUint32(0,a(0),true);bits.setUint32(4,a(1),true);set(a(2),bits.getFloat64(0,true));});
-  method('NSUserDefaults',false,'removeObjectForKey:',(_,a)=>set(a(0),undefined));
-  method('NSUserDefaults',false,'dictionaryRepresentation',()=>property(defaults()));
-  method('NSUserDefaults',false,'persistentDomainForName:',(_,a)=>{
-    const name=text(a(0));if(name===ipa.info.CFBundleIdentifier)return property(defaults());
-    if(name==='NSGlobalDomain')return property({AppleLanguages:languages(),AppleLocale:languages()[0].replaceAll('-','_')});
-    return 0;
+  const preferenceIdentifier=ipa.info.CFBundleIdentifier??ipa.bundlePath;
+  const preferenceDomain='bioshock.preferences.'+preferenceIdentifier;
+  installUserDefaults({hostClass,method,text,string,singleton,property,unbox,identifier:preferenceIdentifier,
+    globals:{AppleLanguages:languages(),AppleLocale:languages()[0].replaceAll('-','_')},
+    storage:{
+      read:()=>{try{return JSON.parse(globalThis.localStorage?.getItem(preferenceDomain)??'{}');}catch{return {}; }},
+      write:values=>{try{if(!globalThis.localStorage)return false;globalThis.localStorage.setItem(preferenceDomain,JSON.stringify(values));return true;}catch{return false;}}
+    }
   });
-  method('NSUserDefaults',false,'synchronize',sync);
   hostClass('NSProcessInfo','NSObject');
   method('NSProcessInfo',true,'processInfo',singleton('NSProcessInfo'));
   method('NSProcessInfo',false,'physicalMemory',()=>1n<<30n);
