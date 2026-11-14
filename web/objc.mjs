@@ -1,3 +1,5 @@
+import {decodeText} from "../src/runtime/ios/foundation/text/encoding.ts";
+import {installPercentEscapes} from "../src/runtime/ios/foundation/text/percent-escape-host.ts";
 import {installStringReplacement} from "../src/runtime/ios/foundation/text/replacement-host.ts";
 import {installObjectAllocation} from "../src/runtime/ios/objc/allocation.ts";
 import {BundleKey} from "../src/runtime/ios/foundation/bundle.ts";
@@ -273,13 +275,6 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (!utf8Cache.has(self)) utf8Cache.set(self, heap.string(text(self)));
     return utf8Cache.get(self);
   };
-  function decodeText(bytes,encoding){
-    if(encoding===1 && bytes.some(n=>n>127))return null;
-    const names={1:'utf-8',4:'utf-8',10:'utf-16le',0x90000100:'utf-16be',0x94000100:'utf-16le'};
-    if(encoding===5)return Array.from(bytes,c=>String.fromCharCode(c)).join('');
-    if(!names[encoding])return null;
-    try{return new TextDecoder(names[encoding],{fatal:true}).decode(bytes);}catch{return null;}
-  }
   method('NSString',false,'initWithData:encoding:',(s,a)=>{
     const data=a(0),v=data?decodeText(cpu.read(read(data+4),read(data+8)),a(1)):null;
     if(v===null){destroy(s);return 0;}return makeString(v,s);
@@ -298,6 +293,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSMutableString',false,'appendFormat:',(s,a)=>{makeString(text(s)+foundationObjects.formatted(a(0),i=>a(i+1)),s);});
   method('NSMutableString',false,'copy',s=>makeString(text(s)));
   method('NSString',false,'mutableCopy',s=>makeString(text(s),alloc(names.get('NSMutableString'))));
+  installPercentEscapes({method,text,string});
   installStringReplacement({method,text,string,assign:(p,v)=>{makeString(v,p);}});
   installCStringConstructors({method,alloc,autorelease,destroy,bytes:p=>readCStringBytes(cpu,p),decode:decodeText,initialize:(p,v)=>makeString(v,p),utf8});
   method('NSString', false, 'length', self => text(self).length);

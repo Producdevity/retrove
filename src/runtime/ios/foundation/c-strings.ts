@@ -1,6 +1,7 @@
+import { StringEncoding } from "./text/encoding";
 import type { FoundationHost } from "../objc/host";
 const STRING_CLASS = "NSString";
-export const DEFAULT_C_STRING_ENCODING = 4;
+export const DEFAULT_C_STRING_ENCODING = StringEncoding.UTF8;
 interface CStringHost extends Pick<FoundationHost, "method" | "alloc" | "autorelease" | "destroy"> {
   bytes(pointer: number): Uint8Array;
   decode(bytes: Uint8Array, encoding: number): string | null;
