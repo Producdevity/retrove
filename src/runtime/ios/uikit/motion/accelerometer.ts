@@ -44,8 +44,6 @@ export function installAccelerometer(
     bits.setUint32(0, args(Argument.First), true);
     bits.setUint32(WORD_BYTES, args(Argument.Second), true);
     const value = bits.getFloat64(0, true);
-    if (Number.isNaN(value) || value < 0)
-      throw new Error("UIAccelerometer update interval must be non-negative.");
     interval = value;
   });
   for (const property of ["x", "y", "z", "timestamp"] as const) {
@@ -60,7 +58,8 @@ export function installAccelerometer(
   return {
     async pump(active = true): Promise<void> {
       const value = source.take();
-      if (!active || !delegate || !value || value.timestamp - previous < interval) return;
+      const requested = Number.isNaN(interval) ? DEFAULT_UPDATE_INTERVAL : Math.max(0, interval);
+      if (!active || !delegate || !value || value.timestamp - previous < requested) return;
       previous = value.timestamp;
       const sample = host.alloc(accelerationClass);
       samples.set(sample, value);
