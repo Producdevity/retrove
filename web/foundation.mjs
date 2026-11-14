@@ -1,3 +1,5 @@
+import {installURLConnections} from "../src/runtime/ios/foundation/url-connection.ts";
+import {RunLoopMode} from "../src/runtime/ios/foundation/ports.ts";
 import {installRequestOptions} from "../src/runtime/ios/foundation/url-request.ts";
 import {installRequestHeaders} from "../src/runtime/ios/foundation/http-headers.ts";
 import {propertyValue} from "../src/runtime/ios/foundation/property-lists.ts";
@@ -17,7 +19,7 @@ import {formatDarwin} from './format.mjs';
 import {readString} from './memory.mjs';
 
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
-  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom}) {
+  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop}) {
   const dicts = new Map(), numbers = new Map();
   const enumeration=new FastEnumeration({read,write,allocate:bytes=>heap.zero(bytes),free:pointer=>heap.free(pointer)});
   const bits = new DataView(new ArrayBuffer(8));
@@ -377,7 +379,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   function offlineError(code=-1009) {
     const err=alloc(names.get('NSError'));write(err+4,code);write(err+8,retain(string('NSURLErrorDomain')));return err;
   }
-  const connections=new Map(), responses=new Map();
+  const responses=new Map();
   hostClass('NSURLResponse','NSObject');
   method('NSURLResponse',false,'copy',retain);
   installURLCache({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,send});
@@ -394,34 +396,9 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     return {data,response:autorelease(response)};
   }
   function supportedRequest(req){const u=urls.get(requests.get(req));return !!u&&['https:','http:','file:'].includes(u.protocol);}
-  function connect(s) {
-    const c=connections.get(s);if(!c||c.started||c.cancelled)return;c.started=true;
-    mainRequests.push(async()=>{
-      if(c.cancelled||!c.delegate)return;
-      const {data,response,error}=await loadRequest(c.request);
-      if(error) {
-        await send(c.delegate,'connection:didFailWithError:',[s,error],true);
-      } else {
-        await send(c.delegate,'connection:didReceiveResponse:',[s,response],true);
-        if(!c.cancelled)await send(c.delegate,'connection:didReceiveData:',[s,data],true);
-        if(!c.cancelled)await send(c.delegate,'connectionDidFinishLoading:',[s],true);
-      }
-    });
-  }
-  function newConnection(s,req,delegate,immediate){
-    if(!supportedRequest(req)){destroy(s);return 0;}
-    connections.set(s,{request:retain(req),delegate:retain(delegate)});if(immediate)connect(s);return s;
-  }
-  method('NSURLConnection',true,'canHandleRequest:',(_,a)=>Number(supportedRequest(a(0))));
-  method('NSURLConnection',true,'connectionWithRequest:delegate:',(cls,a)=>autorelease(newConnection(alloc(cls),a(0),a(1),true)));
-  method('NSURLConnection',false,'initWithRequest:delegate:',(s,a)=>newConnection(s,a(0),a(1),true));
-  method('NSURLConnection',false,'initWithRequest:delegate:startImmediately:',(s,a)=>newConnection(s,a(0),a(1),!!a(2)));
-  method('NSURLConnection',false,'start',connect);
-  method('NSURLConnection',false,'cancel',s=>{const c=connections.get(s);if(c)c.cancelled=true;});
-  method('NSURLConnection',false,'scheduleInRunLoop:forMode:',(s,a)=>{const c=connections.get(s);if(c)c.runLoop=a(0);});
-  method('NSURLConnection',false,'dealloc',async s=>{
-    const c=connections.get(s);if(c){c.cancelled=true;connections.delete(s);await release(c.delegate);await release(c.request);}destroy(s);
-  });
+  const connections=installURLConnections({method,alloc,destroy,autorelease,retain,release,text,
+    supported:supportedRequest,currentLoop:()=>getRunLoop(),load:loadRequest,
+    notify:async(delegate,selector,args)=>{await send(delegate,selector,args,true);}});
   method('NSURLConnection',true,'sendAsynchronousRequest:queue:completionHandler:',async(_,a)=>{
     const req=a(0),q=a(1),fn=a(2);if(!fn)return;
     const {response=0,data=0,error=0}=await loadRequest(req);
@@ -505,5 +482,5 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNotificationCenter',false,'postNotification:',(_,a)=>post(a(0)));
   method('NSNotificationCenter',false,'postNotificationName:object:',(_,a)=>post(notification(a(0),a(1),0)));
   method('NSNotificationCenter',false,'postNotificationName:object:userInfo:',(_,a)=>post(notification(a(0),a(1),a(2))));
-  return {archiveNumber:p=>numbers.get(p),archiveDate:dates.referenceTime,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:dates.setReferenceTime,property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
+  return {archiveNumber:p=>numbers.get(p),archiveDate:dates.referenceTime,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:dates.setReferenceTime,property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pollConnections:(loop,mode)=>connections.pump(loop,mode),pending:()=>mainRequests.length+connections.pending(),async pollMain(){await connections.pump(getRunLoop(1),RunLoopMode.Default);for(const f of mainRequests.splice(0))await f();}};
 }

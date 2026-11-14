@@ -1,10 +1,15 @@
 import { Argument, type FoundationHost, type HostResult } from "../objc/host";
+export const RunLoopMode = {
+  Default: "kCFRunLoopDefaultMode",
+  Common: "kCFRunLoopCommonModes",
+} as const;
 const PORT_CLASS = "NSPort";
 const MACH_PORT_CLASS = "NSMachPort";
 const RUN_LOOP_CLASS = "NSRunLoop";
 const MILLISECONDS_PER_SECOND = 1000;
 const DOUBLE_BYTES = 8;
 export interface PortHost extends FoundationHost {
+  pollSources?(loop: number, mode: string): Promise<boolean>;
   send(self: number, name: string, args?: number[]): Promise<HostResult>;
   waitMethod(
     className: string,
@@ -71,7 +76,15 @@ export class PortRunLoops {
     mode: number,
     date: number,
   ): Promise<number | { wait(): number | undefined }> {
-    const name = this.host.text(mode);
+    const name = this.host.text(mode),
+      previous = this.modes.get(loop);
+    this.modes.set(loop, name);
+    try {
+      if (await this.host.pollSources?.(loop, name)) return 1;
+    } finally {
+      if (previous === undefined) this.modes.delete(loop);
+      else this.modes.set(loop, previous);
+    }
     if (!this.hasSource(loop, name)) return 0;
     const value = await this.host.send(date, "timeIntervalSince1970");
     if (typeof value !== "bigint") throw new Error("Invalid run loop deadline.");
