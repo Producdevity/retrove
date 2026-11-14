@@ -258,7 +258,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSDate',false,'dateByAddingTimeInterval:',(s,a)=>date(times.get(s)+getDouble(a(0),a(1))));
   method('NSDate',false,'copy',retain);
   method('NSDate',false,'dealloc',s=>{times.delete(s);destroy(s);});
-  method('NSTimeZone',true,'systemTimeZone',singleton('NSTimeZone'));
+  const localTimeZone=singleton('NSTimeZone');
+  for(const selector of ['systemTimeZone','defaultTimeZone','localTimeZone'])method('NSTimeZone',true,selector,localTimeZone);
   method('NSTimeZone',false,'name',()=>string(Intl.DateTimeFormat().resolvedOptions().timeZone));
   method('NSTimeZone',false,'secondsFromGMT',()=>new Date().getTimezoneOffset()*-60);
   hostClass('UIPasteboard','NSObject');
@@ -544,5 +545,5 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNotificationCenter',false,'postNotification:',(_,a)=>post(a(0)));
   method('NSNotificationCenter',false,'postNotificationName:object:',(_,a)=>post(notification(a(0),a(1),0)));
   method('NSNotificationCenter',false,'postNotificationName:object:userInfo:',(_,a)=>post(notification(a(0),a(1),a(2))));
-  return {setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:(p,v)=>{times.set(p,v+978307200);},property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
+  return {archiveNumber:p=>numbers.get(p),archiveDate:p=>times.get(p)-978307200,archiveEntries:p=>Array.from(dicts.get(p)?.values()??[]),setArchivedNumber:(p,v)=>{numbers.set(p,v);},setArchivedDate:(p,v)=>{times.set(p,v+978307200);},property,formatted,description,unbox,get,dictionary,number,associated,newUUID,uuidString,pending:()=>mainRequests.length,async pollMain(){for(const f of mainRequests.splice(0))await f();}};
 }

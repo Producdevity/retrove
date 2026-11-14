@@ -62,3 +62,40 @@ test('guest initWithCoder callbacks decode typed scalars, missing keys and a sel
   const root=await x.send(x.cls('NSKeyedUnarchiver'),'unarchiveObjectWithData:',await data(x,customArchive));
   assert.equal(x.read(root),cls);assert.equal(visited,1);
 });
+
+test('Foundation archive encoding produces a binary archive that reconstructs identity and values', async t=>{
+  const x=await fixture(t), pool=x.f('_objc_autoreleasePoolPush');
+  const original=await x.send(x.cls('NSKeyedUnarchiver'),'unarchiveObjectWithData:',await data(x,foundationArchive));
+  const encoded=await x.send(x.cls('NSKeyedArchiver'),'archivedDataWithRootObject:',original);
+  const bytes=x.cpu.read(await x.send(encoded,'bytes'),await x.send(encoded,'length'));
+  assert.equal(new TextDecoder().decode(bytes.subarray(0,8)),'bplist00');
+  const result=await x.send(x.cls('NSKeyedUnarchiver'),'unarchiveObjectWithData:',encoded);
+  const key=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('array'));
+  const array=await x.send(result,'objectForKey:',key);
+  assert.equal(await x.send(array,'count'),4);
+  const shared=await x.send(array,'objectAtIndex:',0);
+  assert.equal(await x.send(array,'objectAtIndex:',1),shared);
+  assert.equal(readString(x.cpu,await x.send(shared,'UTF8String')),'shared');
+  await x.f('_objc_autoreleasePoolPop',pool);
+});
+
+test('incremental archives preserve escaped keys and conditional references without retaining unencoded objects', async t=>{
+  const x=await fixture(t);
+  const string=s=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(s));
+  const bytes=await x.send(x.cls('NSMutableData'),'dataWithLength:',0);
+  const coder=await x.send(await x.send(x.cls('NSKeyedArchiver'),'alloc'),'initForWritingWithMutableData:',bytes);
+  const included=await string('shared'),omitted=await string('omitted');
+  await x.send(coder,'encodeConditionalObject:forKey:',included,await string('conditional'));
+  await x.send(coder,'encodeConditionalObject:forKey:',omitted,await string('missing'));
+  await x.send(coder,'encodeObject:forKey:',included,await string('root'));
+  await x.send(coder,'encodeInt:forKey:',17,await string('$class'));
+  await x.send(coder,'encodeInt:forKey:',19,await string('__proto__'));
+  await x.send(coder,'finishEncoding');await x.send(coder,'finishEncoding');await x.send(coder,'release');
+  const decoder=await x.send(await x.send(x.cls('NSKeyedUnarchiver'),'alloc'),'initForReadingWithData:',bytes);
+  const root=await x.send(decoder,'decodeObjectForKey:',await string('root'));
+  assert.equal(await x.send(decoder,'decodeObjectForKey:',await string('conditional')),root);
+  assert.equal(await x.send(decoder,'decodeObjectForKey:',await string('missing')),0);
+  assert.equal(await x.send(decoder,'decodeIntForKey:',await string('$class')),17);
+  assert.equal(await x.send(decoder,'decodeIntForKey:',await string('__proto__')),19);
+  await x.send(decoder,'finishDecoding');await x.send(decoder,'release');
+});

@@ -1,3 +1,4 @@
+import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
 import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
 import {parsePlist} from './plist.mjs';
 import {readString} from './memory.mjs';
@@ -164,5 +165,13 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     }finally{await invoke('_close',fd);}
   });
   method('NSFileManager',false,'stringWithFileSystemRepresentation:length:',(_,a)=>string(new TextDecoder().decode(cpu.read(a(0),a(1)))));
-  return {contents};
+  const archiveWriter={
+    unique:()=>crypto.randomUUID(),
+    open:(path,flags)=>pathCall(path,p=>invoke('_open',p,flags)),
+    close:fd=>invoke('_close',fd),
+    rename:(source,dest)=>pathCall(source,s=>pathCall(dest,d=>invoke('_rename',s,d))),
+    remove:path=>pathCall(path,p=>invoke('_unlink',p)),
+    async write(fd,bytes){const p=heap.alloc(bytes.length);try{cpu.write(p,bytes);return await invoke('_write',fd,p,bytes.length);}finally{heap.free(p);}}
+  };
+  return {contents,writeArchive:(path,bytes)=>writeArchiveFile(archiveWriter,text(path),bytes)};
 }

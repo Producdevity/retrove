@@ -1,4 +1,4 @@
-const ARCHIVE_VERSION = 100000;
+export const ARCHIVE_VERSION = 100000;
 const MAX_DECODE_DEPTH = 128;
 export type ArchiveFields = Record<string, unknown>;
 
@@ -110,4 +110,8 @@ export class ArchiveGraph {
     this.decoded.clear();
     for (const pointer of pointers) await this.host.release(pointer);
   }
+}
+
+export function archiveKey(key: string): string {
+  return key.startsWith("$") ? "$" + key : key;
 }

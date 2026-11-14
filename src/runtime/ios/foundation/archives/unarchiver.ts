@@ -1,6 +1,6 @@
 import { Argument, type FoundationHost } from "../../objc/host";
 import { floatBits } from "../../abi/scalars";
-import { ArchiveGraph, type ArchiveFields } from "./graph";
+import { archiveKey, ArchiveGraph, type ArchiveFields } from "./graph";
 
 const CODER = "NSCoder";
 const UNARCHIVER = "NSKeyedUnarchiver";
@@ -34,7 +34,7 @@ export function installUnarchiver(host: UnarchiverHost) {
   }
   function field(pointer: number, key: number): unknown {
     const context = state(pointer).contexts.at(-1);
-    const name = host.text(key);
+    const name = archiveKey(host.text(key));
     return context && Object.hasOwn(context, name) ? context[name] : undefined;
   }
   function initialize(pointer: number, bytes: Uint8Array) {
