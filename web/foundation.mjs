@@ -218,7 +218,6 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSString',false,'characterAtIndex:',(s,a)=>{
     const v=text(s),i=a(0);if(i>=v.length)throw Error('NSString index outside bounds');return v.charCodeAt(i);
   });
-  method('NSString',false,'stringByReplacingOccurrencesOfString:withString:',(s,a)=>string(text(s).replaceAll(text(a(0)),text(a(1)))));
   method('NSString',false,'substringFromIndex:',(s,a)=>string(text(s).slice(a(0))));
   method('NSString',false,'substringToIndex:',(s,a)=>string(text(s).slice(0,a(0))));
   method('NSString',false,'substringWithRange:',(s,a)=>string(text(s).slice(a(0),a(0)+a(1))));

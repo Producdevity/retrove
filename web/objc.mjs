@@ -1,3 +1,4 @@
+import {installStringReplacement} from "../src/runtime/ios/foundation/text/replacement-host.ts";
 import {installObjectAllocation} from "../src/runtime/ios/objc/allocation.ts";
 import {BundleKey} from "../src/runtime/ios/foundation/bundle.ts";
 import {installCStringConstructors} from "../src/runtime/ios/foundation/c-strings.ts";
@@ -297,6 +298,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSMutableString',false,'appendFormat:',(s,a)=>{makeString(text(s)+foundationObjects.formatted(a(0),i=>a(i+1)),s);});
   method('NSMutableString',false,'copy',s=>makeString(text(s)));
   method('NSString',false,'mutableCopy',s=>makeString(text(s),alloc(names.get('NSMutableString'))));
+  installStringReplacement({method,text,string,assign:(p,v)=>{makeString(v,p);}});
   installCStringConstructors({method,alloc,autorelease,destroy,bytes:p=>readCStringBytes(cpu,p),decode:decodeText,initialize:(p,v)=>makeString(v,p),utf8});
   method('NSString', false, 'length', self => text(self).length);
   method('NSString', false, 'UTF8String', utf8);

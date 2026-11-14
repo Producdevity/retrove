@@ -3,3 +3,6 @@ Archive SHA-256: 681fc542a0cd72cc735fd850dfefa7750c95a8a0fa4172155f5614f1120468d
 Original site: https://bioshock-arm-runtime.producdevity.chatgpt.site
 Third-party licenses and pinned sources are preserved in web/vendor/.
 Game executables and assets are supplied locally by users and are not distributed.
+
+Unicode 17.0 case-folding data is derived from Unicode CaseFolding.txt.
+Its source hash and Unicode License V3 are preserved in web/vendor/unicode/.

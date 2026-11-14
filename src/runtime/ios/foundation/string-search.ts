@@ -3,7 +3,8 @@ import type { FoundationHost, GuestArguments } from "../objc/host";
 import type { CharacterSet } from "./character-set";
 import type { CharacterSets } from "./character-set-host";
 
-export const SearchOption = { Backwards: 4, Anchored: 8 } as const;
+import { StringCompareOption as SearchOption } from "./text/search-text";
+export { SearchOption };
 export const NOT_FOUND = 0x7fffffff;
 const SearchArgument = { Set: 0, Options: 1, Location: 2, Length: 3 } as const;
 interface SearchRange {
