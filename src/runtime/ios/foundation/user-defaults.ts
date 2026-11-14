@@ -94,6 +94,7 @@ export function installUserDefaults(host: DefaultsHost): void {
   host.method(DEFAULTS_CLASS, false, "objectForKey:", (_, args) =>
     host.property(value(args(Argument.First))),
   );
+  installCollectionDefaults(host, value);
   host.method(DEFAULTS_CLASS, false, "stringForKey:", (_, args) => {
     const item = value(args(Argument.First));
     if (typeof item === "string" || typeof item === "number") return host.string(String(item));
@@ -148,4 +149,27 @@ export function installUserDefaults(host: DefaultsHost): void {
         : 0;
   });
   host.method(DEFAULTS_CLASS, false, "synchronize", sync);
+}
+
+function installCollectionDefaults(
+  host: DefaultsHost,
+  value: (key: number) => PreferenceValue | undefined,
+): void {
+  for (const [selector, matches] of [
+    ["arrayForKey:", (item: PreferenceValue | undefined) => Array.isArray(item)],
+    [
+      "dictionaryForKey:",
+      (item: PreferenceValue | undefined) =>
+        typeof item === "object" && item !== null && !Array.isArray(item),
+    ],
+    [
+      "stringArrayForKey:",
+      (item: PreferenceValue | undefined) =>
+        Array.isArray(item) && item.every((value: unknown) => typeof value === "string"),
+    ],
+  ] as const)
+    host.method(DEFAULTS_CLASS, false, selector, (_, args) => {
+      const item = value(args(Argument.First));
+      return matches(item) ? host.property(item) : 0;
+    });
 }

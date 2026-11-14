@@ -10,6 +10,7 @@ interface DeviceIdentityHost extends Pick<FoundationHost, "method" | "string"> {
   save(value: string): void;
 }
 export function installDeviceIdentity(host: DeviceIdentityHost): void {
+  host.method(DEVICE_CLASS, false, "name", () => host.string("Retrove"));
   let vendor = 0;
   function identifier() {
     if (vendor) return vendor;
