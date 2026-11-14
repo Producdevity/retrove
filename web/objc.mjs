@@ -4,7 +4,7 @@ import {decodeText} from "../src/runtime/ios/foundation/text/encoding.ts";
 import {installPercentEscapes} from "../src/runtime/ios/foundation/text/percent-escape-host.ts";
 import {installStringReplacement} from "../src/runtime/ios/foundation/text/replacement-host.ts";
 import {installObjectAllocation} from "../src/runtime/ios/objc/allocation.ts";
-import {BundleKey} from "../src/runtime/ios/foundation/bundle.ts";
+import {BundleKey,installBundleDirectories} from "../src/runtime/ios/foundation/bundle.ts";
 import {installCStringConstructors} from "../src/runtime/ios/foundation/c-strings.ts";
 import {RenderingAPI} from "../src/runtime/graphics/fixed-function/host.ts";
 import {installAccelerometer} from "../src/runtime/ios/uikit/motion/accelerometer.ts";
@@ -385,6 +385,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const path = ipa.bundlePath + '/' + name + (ext ? '.' + ext : '');
     return ipa.has(path) ? string('/' + path) : 0;
   });
+  installBundleDirectories({method,text,string,send});
 
   hostClass('CALayer', 'NSObject');
   hostClass('CAEAGLLayer', 'CALayer');

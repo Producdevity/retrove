@@ -1,7 +1,7 @@
 import {installCollectionInitializers} from "../src/runtime/ios/foundation/collections.ts";
 import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
 import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
-import {installArrayCopies} from "../src/runtime/ios/foundation/arrays.ts";
+import {installArrayMethods} from "../src/runtime/ios/foundation/arrays.ts";
 import {installDates} from "../src/runtime/ios/foundation/dates.ts";
 import {installNumbers} from "../src/runtime/ios/foundation/numbers.ts";
 import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
@@ -37,8 +37,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     for (const [key, value] of pairs) if (key && value) associated(ptr,key,value);
     return ptr;
   }
-  installArrayCopies({method,autorelease,items,array});
-  installStringPaths({method,string,text});
+  installArrayMethods({method,autorelease,items,array,send});
+  installStringPaths({method,string,text,array,autorelease,items});
   installValues({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value)});
   hostClass('NSNumber','NSValue');
   function number(value) {
