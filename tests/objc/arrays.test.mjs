@@ -18,3 +18,13 @@ test('NSArray rejects nil additions before creating another owned array',async t
  const x=await fixture(t),array=await x.send(x.cls('NSArray'),'array'),selector=x.sel('arrayByAddingObject:'),before=x.heap.live.size;
  await assert.rejects(()=>x.f('_objc_msgSend',array,selector,0),/nil/);assert.equal(x.heap.live.size,before);
 });
+
+
+test('mutable array and set capacity initializers retain inserted objects without allocating the reservation',async t=>{
+ const x=await fixture(t);
+ for(const name of ['NSMutableArray','NSMutableSet']){
+  const self=await x.send(x.cls(name),'alloc');assert.equal(await x.send(self,'initWithCapacity:',0xffffffff),self);assert.equal(await x.send(self,'count'),0);
+  const object=await x.send(x.cls('NSObject'),'new');await x.send(self,'addObject:',object);await x.send(object,'release');
+  assert.equal(await x.send(self,'count'),1);assert.equal(await x.send(object,'retainCount'),1);const release=x.sel('release');await x.f('_objc_msgSend',self,release);assert.equal(x.heap.live.has(object),false);
+ }
+});

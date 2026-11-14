@@ -1,3 +1,4 @@
+import {installCollectionInitializers} from "../src/runtime/ios/foundation/collections.ts";
 import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
 import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
 import {installArrayCopies} from "../src/runtime/ios/foundation/arrays.ts";
@@ -49,6 +50,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSNumber',false,'copy',retain);
   method('NSNumber',false,'dealloc',s=>{numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
+  installCollectionInitializers({method});
   installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});
   method('NSDictionary',true,'dictionary',cls=>autorelease(dictionary(cls,[])));
   method('NSMutableDictionary',true,'dictionaryWithCapacity:',cls=>autorelease(dictionary(cls,[])));

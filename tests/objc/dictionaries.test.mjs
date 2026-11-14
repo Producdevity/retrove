@@ -18,3 +18,12 @@ test('NSDictionary array construction rejects unequal lengths before copying key
  const selector=x.sel('dictionaryWithObjects:forKeys:'),before=x.heap.live.size;
  await assert.rejects(()=>x.f('_objc_msgSend',x.cls('NSDictionary'),selector,empty,keys),/counts differ/);assert.equal(x.heap.live.size,before);
 });
+
+
+test('NSMutableDictionary capacity initialization preserves identity and owns only inserted contents',async t=>{
+ const x=await fixture(t),self=await x.send(x.cls('NSMutableDictionary'),'alloc');
+ assert.equal(await x.send(self,'initWithCapacity:',0xffffffff),self);assert.equal(await x.send(self,'count'),0);
+ const key=await x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string('score')),value=await x.send(x.cls('NSObject'),'new');
+ await x.send(self,'setObject:forKey:',value,key);await x.send(value,'release');assert.equal(await x.send(self,'objectForKey:',key),value);assert.equal(await x.send(value,'retainCount'),1);
+ const release=x.sel('release');await x.f('_objc_msgSend',self,release);assert.equal(x.heap.live.has(value),false);assert.equal(x.heap.live.has(self),false);
+});
