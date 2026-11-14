@@ -1,3 +1,7 @@
+import {drawScrollIndicators} from "../src/runtime/ios/uikit/scroll/indicators.ts";
+import {installScrollViews} from "../src/runtime/ios/uikit/scroll/bindings.ts";
+import {ScrollTiming} from "../src/runtime/ios/uikit/scroll/state.ts";
+import {viewClip} from "../src/runtime/ios/uikit/view/clipping.ts";
 import {WebViews} from "../src/runtime/ios/uikit/web-view.ts";
 import {installTextFields} from "../src/runtime/ios/uikit/text-field/bindings.ts";
 import {installLayerFactory,installLayerTree} from "../src/runtime/ios/uikit/layer.ts";
@@ -62,8 +66,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  let textViews,pickerViews;
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p),drawHost:(p,ctx)=>pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
+  let textViews,pickerViews,scrollers;
+  const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -99,11 +104,12 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     const value=data(self),[bx,by,w,h]=value.bounds,screen=displayBounds(window),bounds=mediaHost?.getBoundingClientRect();
     if(!bounds||!w||!h||!screen[2]||!screen[3])return;
     const p=displayPoint([bx,by],self,window),qx=displayPoint([bx+1,by],self,window),qy=displayPoint([bx,by+1],self,window),sx=bounds.width/screen[2],sy=bounds.height/screen[3];
-    return {left:(p[0]-screen[0])*sx+'px',top:(p[1]-screen[1])*sy+'px',width:w+'px',height:h+'px',opacity:String(alpha),transform:'matrix('+[(qx[0]-p[0])*sx,(qx[1]-p[1])*sy,(qy[0]-p[0])*sx,(qy[1]-p[1])*sy,0,0].join(',')+')'};
+    return {clipPath:clip(self),left:(p[0]-screen[0])*sx+'px',top:(p[1]-screen[1])*sy+'px',width:w+'px',height:h+'px',opacity:String(alpha),transform:'matrix('+[(qx[0]-p[0])*sx,(qx[1]-p[1])*sy,(qy[0]-p[0])*sx,(qy[1]-p[1])*sy,0,0].join(',')+')'};
   };
   const controls=installControls(controlHost);installButtons({...controlHost,adjustImage:(pointer,brightness,opacity)=>{data(pointer).imageAdjustment={brightness,opacity};},imageSize:imageViews.size,labelSize:textViews.size},controls);
   const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});
   const textFields=installTextFields({...controlHost,selector,mount:mediaHost,font:p=>textViews.font(p),layout:fieldLayout,enabled:p=>controls.get(p).enabled,dispatch:(p,events)=>controls.dispatch(p,events)});
+  scrollers=installScrollViews({...uiHost,parent:p=>data(p).parent,now:()=>performance.now(),isControl:p=>!!lookup(read(p),'sendActionsForControlEvents:'),local:(self,point)=>{const value=convertPoint(point,window,self),bounds=data(self).bounds;return [value[0]-bounds[0],value[1]-bounds[1]];},boundsChanged:self=>{const v=data(self);if(v.layer){setFrame(v.layer,[...v.bounds]);data(v.layer).bounds=[...v.bounds];}}});
   installLayerFactory(uiHost);
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
   method('CALayer',false,'dealloc',async self=>{
@@ -443,38 +449,50 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     signal?.addEventListener('abort',disconnect,{once:true});
   }
   function disconnect(){events?.abort(); signal?.removeEventListener('abort',disconnect);canvas=null;}
+  async function deliverTouch(t,e,phase,name,target=t.target) {
+    for(const touch of active.values()){touch.phase=TouchPhase.Stationary;touch.previous=touch.point;}
+    t.phase=phase;t.previous=t.point;t.point=e.point;t.time=e.time;
+    const changed=collection('NSSet',[t.ptr]),all=collection('NSSet',[...active.values()].map(t=>t.ptr));
+    const event=alloc(names.get('UIEvent'));eventTouches.set(event,all);
+    try{inputMetrics.dispatch(className(target),e.type,e.point,convertPoint(e.point,window,target));await send(target,name,[changed,event]);}
+    finally{await releaseFromHost(changed);await releaseFromHost(all);await releaseFromHost(event);}
+  }
+  async function sampleTouch(t,e,phase,name) {
+    let pan={view:0,cancel:false};
+    if(e.type===PointerPhase.Move)pan=await scrollers.interaction.move(e.id,e.point,e.time);
+    if(phase>=TouchPhase.Ended)pan.view=await scrollers.interaction.end(e.id,phase===TouchPhase.Cancelled,e.time);
+    if(pan.cancel){
+      if(!t.deferred){inputMetrics.receive();await deliverTouch(t,{...e,type:PointerPhase.Cancel},TouchPhase.Cancelled,'touchesCancelled:withEvent:');}
+      else inputMetrics.dispatch(className(pan.view),t.down.type,t.down.point,convertPoint(t.down.point,window,pan.view));
+      t.deferred=false;t.pan=true;
+    }
+    if(t.pan||pan.view){
+      inputMetrics.dispatch(className(pan.view||t.panView),e.type,e.point,convertPoint(e.point,window,pan.view||t.panView));t.panView=pan.view||t.panView;t.point=e.point;t.phase=phase;t.time=e.time;return;
+    }
+    if(t.deferred&&phase===TouchPhase.Cancelled)return;
+    if(t.deferred&&(phase===TouchPhase.Ended||(e.time-t.down.time)*1000>=ScrollTiming.Delay)){t.deferred=false;await deliverTouch(t,t.down,TouchPhase.Began,'touchesBegan:withEvent:');}
+    if(!t.deferred)await deliverTouch(t,e,phase,name);
+  }
   async function pump() {
+    await scrollers.pump();
     if(window)await layout(window);
-    await imageViews.render(window);
-    await textFields.pump();
-    webViews.render();
+    await imageViews.render(window);await textFields.pump();webViews.render();
     for(const e of queue.takeTurn()) {
       let t=active.get(e.id);
-      if(e.type==='pointerdown') {
-        if(t) {inputMetrics.drop(DropReason.Duplicate);continue;}
-        const target=hit(window,...e.point);
-        if(!target) {inputMetrics.drop(DropReason.NoTarget);continue;}
+      if(e.type===PointerPhase.Down){
+        if(t){inputMetrics.drop(DropReason.Duplicate);continue;}
+        const target=hit(window,...e.point);if(!target){inputMetrics.drop(DropReason.NoTarget);continue;}
         const conflict=touchConflict(data,target,[...active.values()].map(touch=>touch.target));if(conflict){inputMetrics.drop(conflict);continue;}
-        const taps = previousTap && previousTap.target===target && e.time-previousTap.time < 0.35 &&
-          Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10 ? previousTap.taps+1 : 1;
-        t={ptr:alloc(names.get('UITouch')),window,target,taps,point:e.point};
-        active.set(e.id,t); touches.set(t.ptr,t);
+        const taps=previousTap&&previousTap.target===target&&e.time-previousTap.time<0.35&&Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10?previousTap.taps+1:1;
+        t={ptr:alloc(names.get('UITouch')),window,target:retain(target),taps,point:e.point,down:e,deferred:await scrollers.interaction.begin(e.id,target,e.point,e.time)};
+        active.set(e.id,t);touches.set(t.ptr,t);
       }
       if(!t){inputMetrics.drop(DropReason.Missing);continue;}
-      for(const touch of active.values()) { touch.phase=TouchPhase.Stationary; touch.previous=touch.point; }
-      const [phase,name]=phases[e.type];
-      t.phase=phase; t.previous=t.point; t.point=e.point; t.time=e.time;
-      const changed=collection('NSSet',[t.ptr]), all=collection('NSSet',[...active.values()].map(t=>t.ptr));
-      const event=alloc(names.get('UIEvent')); eventTouches.set(event,all);
-      try {inputMetrics.dispatch(className(t.target),e.type,e.point,convertPoint(e.point,window,t.target));await send(t.target,name,[changed,event]);}
-      finally {
-        await releaseFromHost(changed); await releaseFromHost(all); await releaseFromHost(event);
-        if(phase>=TouchPhase.Ended) {
-          if(phase===TouchPhase.Ended)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};
-          active.delete(e.id); await releaseFromHost(t.ptr);
-        }
-      }
+      const[phase,name]=phases[e.type];
+      try{await sampleTouch(t,e,phase,name);}
+      finally{if(phase>=TouchPhase.Ended){if(phase===TouchPhase.Ended&&!t.pan)previousTap={target:t.target,taps:t.taps,time:t.time,point:t.point};active.delete(e.id);await releaseFromHost(t.ptr);await releaseFromHost(t.target);}}
     }
+    for(const t of active.values())if(t.deferred&&(performance.now()/1000-t.down.time)*1000>=ScrollTiming.Delay){t.deferred=false;await deliverTouch(t,t.down,TouchPhase.Began,'touchesBegan:withEvent:');}
   }
   async function cancelTouches() {
     const discarded=queue.clear();
@@ -494,5 +512,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {webViews,snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();textFields.close();webViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
+  return {webViews,snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();scrollers.close();textFields.close();webViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
 }

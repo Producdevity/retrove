@@ -8,7 +8,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -168,7 +168,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
         }
         const transition=[...transitions(['opacity'],opacityTiming),...transitions(['transform','width','height','left','top'],layoutTiming)].join(',');
-        Object.assign(node.style,{transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(shown.size)});
+        Object.assign(node.style,{clipPath:clip?.(view)??'none',transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(shown.size)});
         if(state.needsDisplay) {
           state.needsDisplay=false;
           const ctx=node.getContext('2d');
