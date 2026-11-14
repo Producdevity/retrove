@@ -1,9 +1,9 @@
+import {IMA4Decoder} from "../src/runtime/audio/codecs/ima4.ts";
 import {read32,write32} from './memory.mjs';
 import {tag} from './audio-file.mjs';
 const view=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);
 const LPCM=tag('lpcm'),IMA=tag('ima4');
 const invalid=-66682,codec=-66673;
-const steps=[7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,130,143,157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,1060,1166,1282,1411,1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,5894,6484,7132,7845,8630,9493,10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,27086,29794,32767];
 function format(b){
   const d=view(b),f={rate:d.getFloat64(0,true)};
   for(const [i,key] of ['id','flags','packetBytes','packetFrames','frameBytes','channels','bits'].entries())f[key]=d.getUint32(8+4*i,true);
@@ -19,30 +19,14 @@ function pcm(f){
     set:(d,off,x)=>d['set'+kind](off,kind==='Float32'?x:Math.round(Math.max(-1,Math.min(1-1/half,x))*half)+bias,little)
   };
 }
-function decode(f,bytes){
+function decode(f,bytes,ima){
   const read=pcm(f),d=view(bytes), channels=f.channels;
   if(read){
     const samples=new Float32Array(Math.floor(bytes.length/f.frameBytes)*channels);
     for(let i=0;i<samples.length;i++)samples[i]=read.get(d,i*f.bits/8);
     return samples;
   }
-  if(f.id!==IMA||bytes.byteLength%(34*channels))return null;
-  const samples=new Float32Array(bytes.length/34*64);
-  for(let packet=0,p=0;p<bytes.length;packet++){
-    for(let c=0;c<channels;c++,p+=34){
-      const h=d.getInt16(p), index=h&127;
-      if(index>88)return null;
-      let ix=index,sample=h&~127;
-      for(let i=0;i<64;i++){
-        const code=(bytes[p+2+(i>>1)]>>(4*(i&1)))&15,step=steps[ix];
-        const delta=(step>>3)+(code&1?step>>2:0)+(code&2?step>>1:0)+(code&4?step:0);
-        sample=Math.max(-32768,Math.min(32767,sample+(code&8?-delta:delta)));
-        ix=Math.max(0,Math.min(88,ix+[-1,-1,-1,-1,2,4,6,8][code&7]));
-        samples[(packet*64+i)*channels+c]=sample/32768;
-      }
-    }
-  }
-  return samples;
+  return f.id===IMA ? ima?.decode(bytes)??null : null;
 }
 export function audioQueues(cpu,heap,callGuest,context){
   const queues=new Map(); let serial=0,servicing=false;
@@ -76,7 +60,7 @@ export function audioQueues(cpu,heap,callGuest,context){
       const out=a(6);if(!a(0)||!out)return invalid;
       write32(cpu,out,0);const f=format(cpu.read(a(0),40));
       if(!valid(f)||(!pcm(f)&&!(f.id===IMA&&f.packetFrames===64&&f.packetBytes===34*f.channels)))return codec;
-      const id=++serial;queues.set(id,{id,f,callback:a(1),user:a(2),buffers:new Map(),nodes:new Set(),items:[],ended:[],
+      const id=++serial;queues.set(id,{id,f,ima:f.id===IMA?new IMA4Decoder(f.channels):null,callback:a(1),user:a(2),buffers:new Map(),nodes:new Set(),items:[],ended:[],
         active:new Set(),started:false,stopping:false,time:0});write32(cpu,out,id);return 0;
     },
     _AudioQueueAllocateBuffer:a=>allocate(a,false),
@@ -97,7 +81,7 @@ export function audioQueues(cpu,heap,callGuest,context){
       const q=queues.get(a(0)),p=a(1),b=q?.buffers.get(p);
       if(!b)return -66687;if(q.active.has(p))return -66666;
       const n=read32(cpu,p+8);if(!n)return -66686;if(n>b.cap)return invalid;
-      const samples=decode(q.f,cpu.read(b.data,n));if(!samples||!samples.length)return codec;
+      const samples=decode(q.f,cpu.read(b.data,n),q.ima);if(!samples||!samples.length)return codec;
       q.items.push({p,samples,pos:0});q.active.add(p);return 0;
     },
     _AudioQueueStart:a=>{const q=queues.get(a(0));if(!q)return invalid;
