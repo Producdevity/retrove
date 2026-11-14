@@ -552,7 +552,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const source=heap.alloc(Math.max(1,bytes.length));
     try {cpu.write(source,bytes);return createData(source,bytes.length,self);}finally{heap.free(source);}
   };
-  installXMLParser({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,
+  installXMLParser({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,responds:(p,name)=>!!p&&!!lookup(read(p),name),
     dataLength:p=>read(p+DataField.Length),readData:(p,n)=>cpu.read(read(p+DataField.Bytes),n),
     data:bytes=>autorelease(archivedData(bytes)),dictionary:attributes=>foundationObjects.property(attributes),
     error:(code,domain)=>fileObjects.error(code,domain),diagnostic:(message,code)=>diagnostic?.('warn','xml',message,{code})});

@@ -1,6 +1,7 @@
 import type { FoundationHost, HostResult } from "../../objc/host";
 import type { XMLEvent, XMLSettings } from "./types";
 export interface XMLHost extends FoundationHost {
+  responds(pointer: number, selector: string): boolean;
   dataLength(pointer: number): number;
   readData(pointer: number, length: number): Uint8Array;
   data(bytes: Uint8Array): number;

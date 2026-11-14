@@ -2,7 +2,7 @@ import type { XMLHost } from "./host";
 import type { XMLEvent } from "./types";
 const encoder = new TextEncoder();
 export async function dispatchXML(
-  host: XMLHost,
+  host: Pick<XMLHost, "string" | "dictionary" | "data" | "responds" | "send">,
   delegate: number,
   parser: number,
   event: XMLEvent,
@@ -32,8 +32,13 @@ export async function dispatchXML(
       args = [host.string(event.value)];
       break;
     case "cdata":
-      selector = "parser:foundCDATA:";
-      args = [host.data(encoder.encode(event.value))];
+      if (host.responds(delegate, "parser:foundCDATA:")) {
+        selector = "parser:foundCDATA:";
+        args = [host.data(encoder.encode(event.value))];
+      } else {
+        selector = "parser:foundCharacters:";
+        args = [host.string(event.value)];
+      }
       break;
     case "instruction":
       selector = "parser:foundProcessingInstructionWithTarget:data:";
