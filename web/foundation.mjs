@@ -1,3 +1,4 @@
+import {installDecimalNumbers} from "../src/runtime/ios/foundation/decimal/bindings.ts";
 import {installPlatformVersions} from "../src/runtime/ios/platform.ts";
 import {ErrorInfo} from "../src/runtime/ios/foundation/errors.ts";
 import {installURLConnections} from "../src/runtime/ios/foundation/url-connection.ts";
@@ -52,10 +53,11 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     const n=alloc(names.get('NSNumber')); numbers.set(n,value); return autorelease(n);
   }
   const releaseNumberType=installNumbers({method,alloc,autorelease,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
-  const numberText=s=>{const value=numbers.get(s);return String(typeof value==='boolean'?Number(value):value);};
+  const decimalNumbers=installDecimalNumbers({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,cString:value=>heap.string(value),writeBytes:(p,b)=>cpu.write(p,b),set:(p,v)=>{numbers.set(p,v);}});
+  const numberText=s=>{const value=numbers.get(s);return decimalNumbers.text(s)??String(typeof value==='boolean'?Number(value):value);};
   for(const selector of ['stringValue','description'])method('NSNumber',false,selector,s=>string(numberText(s)));
   method('NSNumber',false,'copy',retain);
-  method('NSNumber',false,'dealloc',s=>{releaseNumberType(s);numbers.delete(s);destroy(s);});
+  method('NSNumber',false,'dealloc',s=>{decimalNumbers.forget(s);releaseNumberType(s);numbers.delete(s);destroy(s);});
   hostClass('NSDictionary','NSObject'); hostClass('NSMutableDictionary','NSDictionary');
   installCollectionInitializers({method});
   installDictionaryArrays({method,autorelease,release,items,dictionary,copyKey:p=>send(p,'copy')});
