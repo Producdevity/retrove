@@ -1,3 +1,4 @@
+import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
 import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.ts";
 import {encodeFoundation} from "../src/runtime/ios/foundation/archives/foundation-encoder.ts";
 import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiver.ts";
@@ -525,6 +526,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     selector,selectorName:p=>readString(cpu,p),read,write,graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
+  installLocks({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,send,
+    currentThread:()=>threads?.funcs._pthread_self()??1,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let dispatchService;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
