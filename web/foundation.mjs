@@ -1,3 +1,4 @@
+import {installNumbers} from "../src/runtime/ios/foundation/numbers.ts";
 import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
 import {FastEnumeration} from "../src/runtime/ios/foundation/fast-enumeration.ts";
 // Foundation objects shared by the guest's UIKit bootstrap and property lists.
@@ -37,23 +38,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   function number(value) {
     const n=alloc(names.get('NSNumber')); numbers.set(n,value); return autorelease(n);
   }
-  for (const name of ['int','integer','bool','double','float','longLong']) {
-    const kind=name[0].toUpperCase()+name.slice(1);
-    method('NSNumber',true,'numberWith'+kind+':',(_,a)=>{
-      const lo=a(0)>>>0, hi=a(1)>>>0;
-      bits.setUint32(0,lo,true); bits.setUint32(4,hi,true);
-      const v=name==='double'?bits.getFloat64(0,true):name==='float'?bits.getFloat32(0,true):
-        name==='longLong'?bits.getBigInt64(0,true):name==='bool'?Boolean(lo):lo|0;
-      return number(v);
-    });
-    method('NSNumber',false,name+'Value',s=>{
-      const v = numbers.get(s) ?? 0;
-      if(name==='bool')return Number(!!v);
-      if(name==='float'){bits.setFloat32(0,Number(v),true);return bits.getUint32(0,true);}
-      if(name==='double'){bits.setFloat64(0,Number(v),true);return bits.getBigUint64(0,true);}
-      return name==='longLong'?BigInt(Math.trunc(Number(v))):Number(v)|0;
-    });
-  }
+  installNumbers({method,alloc,autorelease,get:p=>numbers.get(p)??0,set:(p,value)=>{numbers.set(p,value);}});
   const numberText=s=>{const value=numbers.get(s);return String(typeof value==='boolean'?Number(value):value);};
   for(const selector of ['stringValue','description'])method('NSNumber',false,selector,s=>string(numberText(s)));
   method('NSNumber',false,'copy',retain);
