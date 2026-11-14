@@ -1,3 +1,4 @@
+import {MovieNotification,MovieUserInfo} from "../src/runtime/ios/media/movie-playback.ts";
 import {installXMLParser} from "../src/runtime/ios/foundation/xml/bindings.ts";
 import {XML_ERROR_DOMAIN} from "../src/runtime/ios/foundation/xml/types.ts";
 import {decodeText} from "../src/runtime/ios/foundation/text/encoding.ts";
@@ -718,7 +719,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   for(const [name,value] of [['NSFontAttributeName','NSFont'],['NSForegroundColorAttributeName','NSColor'],['NSGregorianCalendar','gregorian']])
     exportedStringNames.set('_'+name,value);
   const cg = geometry(cpu,heap);
-  for (const name of ['MPMoviePlayerPlaybackDidFinishNotification', 'MPMoviePlayerPlaybackDidFinishReasonUserInfoKey',
+  for (const name of [...Object.values(MovieNotification),...Object.values(MovieUserInfo),
     'AVAudioSessionInterruptionTypeKey','AVAudioSessionRouteChangeReasonKey'])
     exportedStringNames.set('_' + name, name);
   const exportedStrings = new Map();

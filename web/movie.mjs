@@ -1,7 +1,7 @@
-import {MoviePlayback} from '../src/runtime/ios/media/movie-playback.ts';
+import {MoviePlayback,MovieNotification,MovieUserInfo} from '../src/runtime/ios/media/movie-playback.ts';
 // MPMoviePlayerController delivers notifications from the guest main thread.
-const finished = 'MPMoviePlayerPlaybackDidFinishNotification';
-const reasonKey = 'MPMoviePlayerPlaybackDidFinishReasonUserInfoKey';
+const finished = MovieNotification.PlaybackFinished;
+const reasonKey = MovieUserInfo.FinishReason;
 const floatBits = new DataView(new ArrayBuffer(8));
 
 export function moviePlayers({hostClass, method, names, alloc, destroy, retain, release, string, text, send,

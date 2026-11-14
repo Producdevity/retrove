@@ -1,3 +1,12 @@
+export const MovieNotification = {
+  PlaybackFinished: "MPMoviePlayerPlaybackDidFinishNotification",
+  LoadStateChanged: "MPMoviePlayerLoadStateDidChangeNotification",
+  ScalingChanged: "MPMoviePlayerScalingModeDidChangeNotification",
+  ContentPreloaded: "MPMoviePlayerContentPreloadDidFinishNotification",
+} as const;
+export const MovieUserInfo = {
+  FinishReason: "MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",
+} as const;
 import type { VisibilitySource } from "../uikit/application/display-refresh";
 export interface MovieElement extends EventTarget {
   readonly paused: boolean;

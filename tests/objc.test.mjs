@@ -551,3 +551,11 @@ test('UIKit exports local-notification launch key as a stable NSString data symb
  const value=x.read(symbol);
  assert.equal(readString(x.cpu,await x.send(value,'UTF8String')),'UIApplicationLaunchOptionsLocalNotificationKey');
 });
+
+test('legacy movie notification imports are stable NSString objects',async t=>{
+ const x=await fixture(t);
+ for(const name of ['MPMoviePlayerPlaybackDidFinishNotification','MPMoviePlayerScalingModeDidChangeNotification','MPMoviePlayerLoadStateDidChangeNotification','MPMoviePlayerContentPreloadDidFinishNotification']){
+  const symbol=x.objc.resolveData('_'+name);assert.ok(symbol);assert.equal(x.objc.resolveData('_'+name),symbol);
+  const object=x.read(symbol);assert.equal(readString(x.cpu,await x.send(object,'UTF8String')),name);
+ }
+});
