@@ -1,3 +1,4 @@
+import {bitmapImports,bitmapImageMetadata} from "../src/runtime/graphics/core-graphics/bitmap-imports.ts";
 import {imageMetadataImports,rgbaImageMetadata,ImageComponents} from "../src/runtime/graphics/core-graphics/image-metadata.ts";
 // Quartz objects live independently of Objective-C objects and retain their backing storage.
 export function coreGraphics(cpu, heap, objc) {
@@ -20,6 +21,7 @@ export function coreGraphics(cpu, heap, objc) {
     if (!object || --object.refs) return;
     objects.delete(p);
     heap.free(p);
+    if (object.kind === 'context' && object.bitmap) {object.bitmap.close();await release(object.bitmap.space);}
     if (object.kind === 'provider') await objc.releaseObject(object.data);
     if (object.kind === 'image') {
       await release(object.provider);
@@ -141,6 +143,16 @@ export function coreGraphics(cpu, heap, objc) {
     } finally {c.restore();}
   }
   const funcs = {
+    ...bitmapImports({
+      read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),allocate:n=>heap.zero(n),free:p=>heap.free(p),
+      components:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined,
+      create:bitmap=>{const p=create('context',{canvas:bitmap.canvas,bitmap,saves:0,antialias:true,bounds:null});if(p)retain(bitmap.space);return p;},
+      context:p=>objects.get(p)?.kind==='context'?objects.get(p):undefined,
+      image:p=>pixels(p)??undefined,
+      snapshot:bitmap=>{const p=create('image',{...bitmapImageMetadata(bitmap),rgba:new Uint8ClampedArray(bitmap.rgba())});if(p)retain(bitmap.space);return p;},
+    }),
+    _CGContextRetain:a=>retain(a(0)),
+    _CGContextRelease:a=>release(a(0)),
     ...imageMetadataImports({image:pointer=>{const object=objects.get(pointer);return object?.kind==='image'?object:undefined;}}),
     _CGColorSpaceCreateDeviceRGB: () => create('space', {components:3}),
     _CGColorSpaceCreateDeviceGray: () => create('space', {components:1}),
@@ -181,14 +193,16 @@ export function coreGraphics(cpu, heap, objc) {
     },
     _CGContextFillRect: a => {
       const o=objects.get(a(0));if(o?.kind!=='context')return;
+      o.bitmap?.refresh();
       const c=o.canvas, rect=numbers(a,1,4);
-      if(o.antialias){c.fillRect(...rect);return;}
+      if(o.antialias){c.fillRect(...rect);o.bitmap?.commit();return;}
       const path=new Path2D();path.rect(...rect);
-      rasterize(c,deviceBounds(c,...rect),(x,y)=>c.isPointInPath(path,x,y),false);
+      rasterize(c,deviceBounds(c,...rect),(x,y)=>c.isPointInPath(path,x,y),false);o.bitmap?.commit();
     },
     _CGContextDrawPath: a => {
       const o=objects.get(a(0)),mode=a(1);
       if(o?.kind!=='context')return;
+      o.bitmap?.refresh();
       const c=o.canvas,rule=mode===1||mode===4?'evenodd':'nonzero';
       if ([0,1,3,4].includes(mode)) {
         if(o.antialias)c.fill(rule);
@@ -198,7 +212,7 @@ export function coreGraphics(cpu, heap, objc) {
         if(o.antialias)c.stroke();
         else rasterize(c,o.bounds,(x,y)=>c.isPointInStroke(x,y),true);
       }
-      c.beginPath();o.bounds=null;
+      c.beginPath();o.bounds=null;o.bitmap?.commit();
     },
   };
   return { funcs, data:new Map(), createImage, pixels, retain, release, setColor, withContext, currentCanvas:()=>context(current()) };

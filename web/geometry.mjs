@@ -1,3 +1,4 @@
+import {affineImports} from "../src/runtime/graphics/core-graphics/affine.ts";
 // ARMv7 public CoreGraphics functions use the base AAPCS float register layout.
 export function geometry(cpu, heap) {
   const scratch=new DataView(new ArrayBuffer(4));
@@ -14,6 +15,7 @@ export function geometry(cpu, heap) {
     constants.set(name,store(heap.zero(values.length*4),values));
   const edges=([x,y,w,h])=>[Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h)];
   const funcs={
+    ...affineImports(),
     _CGRectIsNull:a=>Number(decode(a(0))===Infinity || decode(a(1))===Infinity),
     _CGRectIsEmpty:a=>Number(decode(a(2))===0 || decode(a(3))===0 || decode(a(0))===Infinity),
     _CGRectIntersectsRect:a=>{
