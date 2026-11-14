@@ -1,3 +1,5 @@
+import {audioFileReading} from "../src/runtime/audio/files/imports.ts";
+import {audioURLSource} from "../src/runtime/audio/files/source.ts";
 import {read32,write32} from './memory.mjs';
 
 export const tag=s=>[...s].reduce((v,c)=>v*256+c.charCodeAt(0),0);
@@ -75,19 +77,23 @@ async function inspect(read, size) {
   if(cookie)props.set(tag('mgic'),cookie);
   if(table){const b=new Uint8Array(16),v=bytesView(b);v.setBigInt64(0,table.valid,true);
     v.setInt32(8,table.priming,true);v.setInt32(12,table.remainder,true);props.set(tag('pnfo'),b);}
-  return {props,dataAt,count,packetBytes,offsets,frames,read};
+  return {props,dataAt,dataSize,count,packetBytes,offsets,frames,read};
 }
 
-export function audioFiles(cpu,heap,guest) {
+export function audioFiles(cpu,heap,guest,io) {
   const files=new Map();let next=0;
   function property(a,info) {
     const f=files.get(a(0));if(!f||!a(2))return -50;
     const prop=f.props.get(a(1));if(!prop)return badProperty;
     if(info){write32(cpu,a(2),prop.byteLength);if(a(3))write32(cpu,a(3),0);}
-    else {if(!a(3)||read32(cpu,a(2))<prop.length)return tag('!siz');cpu.write(a(3),prop);write32(cpu,a(2),prop.length);}
+    else {if(!a(3)||read32(cpu,a(2))!==prop.length)return tag('!siz');cpu.write(a(3),prop);write32(cpu,a(2),prop.length);}
     return 0;
   }
-  return {
+  const reading=audioFileReading({source:url=>audioURLSource(io,url),inspect:source=>inspect(source.read,source.size),
+    register:file=>{files.set(++next,file);return next;},lookup:p=>files.get(p),remove:p=>files.delete(p),entries:()=>files.values(),clear:()=>files.clear(),
+    readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),write:(p,b)=>cpu.write(p,b)});
+  const api={
+    ...reading.funcs,
     _AudioFileOpenWithCallbacks: async a=>{
       const client=a(0),reader=a(1),sizeProc=a(3),out=a(6);
       if(!out||!reader||!sizeProc)return -50;write32(cpu,out,0);
@@ -111,29 +117,7 @@ export function audioFiles(cpu,heap,guest) {
       catch(e){if(e.osStatus!==undefined)return e.osStatus;throw e;}
     },
     _AudioFileGetPropertyInfo:a=>property(a,true), _AudioFileGetProperty:a=>property(a,false),
-    _AudioFileClose:a=>files.delete(a(0))?0:-50,
-    _AudioFileReadPacketData:async a=>{
-      const f=files.get(a(0)),nbytes=a(2),desc=a(3),start=a(4)+a(5)*2**32,packets=a(6),out=a(7);
-      if(!f||!nbytes||!packets||!out||!Number.isSafeInteger(start))return -50;
-      const capacity=read32(cpu,nbytes),wanted=read32(cpu,packets);
-      write32(cpu,nbytes,0);write32(cpu,packets,0);
-      if(start>=f.count)return -39;
-      const offset=i=>f.offsets?f.offsets[i]:i*f.packetBytes;
-      let n=Math.min(wanted,f.count-start);
-      if(!f.offsets)n=Math.min(n,Math.floor(capacity/f.packetBytes));
-      else {let lo=0,hi=n;while(lo<hi){const m=Math.ceil((hi+lo)/2);
-        if(offset(start+m)-offset(start)<=capacity)lo=m;else hi=m-1;}n=lo;}
-      const first=offset(start),len=offset(start+n)-first;
-      try{for(let j=0;j<len;j+=65536)cpu.write(out+j,await f.read(f.dataAt+first+j,Math.min(65536,len-j)));}
-      catch(e){if(e.osStatus!==undefined)return e.osStatus;throw e;}
-      if(desc&&f.offsets){
-        const b=new Uint8Array(16*n),v=bytesView(b);
-        for(let i=0;i<n;i++){const at=start+i;v.setBigInt64(16*i,BigInt(offset(at)-first),true);
-          v.setUint32(16*i+8,f.frames?.[at]??0,true);v.setUint32(16*i+12,offset(at+1)-offset(at),true);}
-        cpu.write(desc,b);
-      }
-      write32(cpu,nbytes,len);write32(cpu,packets,n);
-      return n<wanted&&start+n===f.count?-39:0;
-    }
   };
+  Object.defineProperty(api,'close',{value:reading.close});
+  return api;
 }

@@ -40,7 +40,7 @@ const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', '
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
-  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeGraphics, image;
+  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, image;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
@@ -182,10 +182,12 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const cg=coreGraphics(cpu,heap,objc);
     objc.attachCoreGraphics(cg);
     sounds = systemSounds(cpu, ipa, audioContext, objc.fileURLPath, nested);
+    const fileAudio=audioFiles(cpu,heap,nested,{path:objc.fileURLPath,errno:()=>read32(cpu,sys.funcs.___error()),allocate:n=>heap.alloc(n),free:p=>heap.free(p),string:s=>heap.string(s),read:(p,n)=>cpu.read(p,n),word:p=>read32(cpu,p),invoke:async(name,args)=>sys.funcs[name](i=>args[i]??0)});
+    closeAudioFiles=fileAudio.close;
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, audioFiles(cpu,heap,nested), commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
+      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
@@ -400,7 +402,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     throw error;
   } finally {
     clearInterval(heartbeat);
-    try { closeGraphics?.(); al?.close(); objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeFiles?.(); }
+    try { closeGraphics?.(); al?.close(); objc?.close?.(); sounds?.close(); queues?.close(); audio?.close(); await closeAudioFiles?.(); await closeFiles?.(); }
     finally { try { threads?.close(); } finally { cpu?.close(); } }
   }
 }

@@ -28,7 +28,7 @@ test('AudioFile opens a guest callback WAV, reports native ASBD and reads exact 
   const f=read(32);write(36,40);assert.equal(call(fs,'AudioFileGetProperty',f,tag('dfmt'),36,80),0);
   assert.equal(new DataView(b.buffer).getFloat64(80,true),22050);assert.equal(read(88),tag('lpcm'));
   write(36,8);write(40,5);
-  assert.equal(await call(fs,'AudioFileReadPacketData',f,0,36,0,1,0,40,300),-39);
+  assert.equal(await call(fs,'AudioFileReadPacketData',f,0,36,0,1,0,40,300),0);
   assert.equal(read(36),8);assert.equal(read(40),2);assert.deepEqual([...b.subarray(300,308)],[5,6,7,8,9,10,11,12]);
   assert.equal(call(fs,'AudioFileClose',f),0);
 });
@@ -65,4 +65,46 @@ test('AudioServices decodes the selected asset and schedules one completion afte
   call(sounds.funcs,'AudioServicesPlaySystemSound',id);await sounds.pump();assert.deepEqual(callbacks,[]);
   node.onended();await sounds.pump();await sounds.pump();assert.deepEqual(callbacks,[[123,id,456]]);
   assert.equal(call(sounds.funcs,'AudioServicesDisposeSystemSoundID',id),0);sounds.close();
+});
+
+function urlFixture(input) {
+ const x=memory();let position=0,closes=0,opens=0;
+ const io={path:async()=>'/Payload/Test.app/sample.caf',errno:()=>2,allocate:n=>x.heap.alloc(n),free:p=>x.heap.free(p),read:(p,n)=>x.cpu.read(p,n),word:x.read,
+  string:value=>{const bytes=new TextEncoder().encode(value+'\0'),p=x.heap.alloc(bytes.length);x.cpu.write(p,bytes);return p;},
+  invoke:async(name,a)=>{
+   if(name==='_open'){assert.equal(a[1],0);opens++;return 42;}
+   if(name==='_close'){closes++;return 0;}
+   if(name==='_fstat'){x.write(a[1]+60,input.length);x.write(a[1]+64,0);return 0;}
+   if(name==='_lseek'){position=a[1]+a[2]*2**32;return BigInt(position);}
+   if(name==='_read'){const bytes=input.subarray(position,position+Math.min(a[2],5));position+=bytes.length;x.cpu.write(a[1],bytes);return bytes.length;}
+   throw Error('Unexpected file operation '+name);
+  }};
+ const api=audioFiles(x.cpu,x.heap,()=>{throw Error('URL assets should use filesystem reads');},io);
+ return {...x,api,closes:()=>closes,opens:()=>opens};
+}
+const nativeCAF=Buffer.from('Y2FmZgABAABkZXNjAAAAAAAAACBA1YiAAAAAAGltYTQAAAAAAAAAIgAAAEAAAAABAAAAAGRhdGEAAAAAAAAASAAAAAAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQw==','base64');
+const nativeProperties={"1650683508": {"status": 0, "data": "RAAAAAAAAAA="}, "1886090594": {"status": 0, "data": "IgAAAA=="}, "1885564532": {"status": 0, "data": "AgAAAAAAAAA="}, "1684434292": {"status": 0, "data": "AAAAAICI1UA0YW1pAAAAACIAAABAAAAAAAAAAAEAAAAAAAAAAAAAAA=="}};
+const nativeReads=[{"status": 0, "bytes": 68, "data": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkM=", "wanted": 68, "start": 0}, {"status": -39, "bytes": 8, "data": "PD0+P0BBQkM=", "wanted": 16, "start": 60}, {"status": -39, "bytes": 0, "data": "", "wanted": 1, "start": 68}, {"status": -39, "bytes": 0, "data": "", "wanted": 0, "start": 68}, {"status": 0, "bytes": 4, "data": "AAABAg==", "wanted": 4, "start": -1}];
+test('AudioFile URL streams exact native CAF metadata and compressed payload through the guest filesystem',async()=>{
+ const x=urlFixture(nativeCAF),f=(name,...a)=>call(x.api,name,...a);
+ assert.equal(await f('AudioFileOpenURL',1,1,0,32),0);const handle=x.read(32);assert.ok(handle);
+ for(const [key,expected]of Object.entries(nativeProperties)){
+  const bytes=Buffer.from(expected.data,'base64');x.write(36,bytes.length);
+  assert.equal(f('AudioFileGetProperty',handle,Number(key),36,100),0);assert.deepEqual([...x.cpu.read(100,bytes.length)],[...bytes]);
+ }
+ for(const c of nativeReads.filter(c=>c.start>=0)){
+  x.write(36,c.wanted);assert.equal(await f('AudioFileReadBytes',handle,0,c.start,0,36,200),c.status);
+  assert.equal(x.read(36),c.bytes);assert.deepEqual([...x.cpu.read(200,c.bytes)],[...Buffer.from(c.data,'base64')]);
+ }
+ x.write(36,0xdead);x.write(40,3);assert.equal(await f('AudioFileReadPackets',handle,0,36,0,0,0,40,300),0);
+ assert.equal(x.read(36),68);assert.equal(x.read(40),2);assert.deepEqual([...x.cpu.read(300,68)],Array.from({length:68},(_,i)=>i));
+ x.write(36,34);x.write(40,3);assert.equal(await f('AudioFileReadPacketData',handle,0,36,0,0,0,40,300),0);assert.equal(x.read(36),34);assert.equal(x.read(40),1);
+ assert.equal(await f('AudioFileClose',handle),0);assert.equal(x.closes(),1);assert.equal(f('AudioFileClose',handle),-38);
+});
+test('AudioFile URL failures close owned descriptors and reject write permissions without opening the asset',async()=>{
+ const invalid=urlFixture(Buffer.from('invalid')),f=(name,...a)=>call(invalid.api,name,...a);
+ assert.equal(await f('AudioFileOpenURL',1,1,0,32),tag('typ?'));assert.equal(invalid.read(32),0);assert.equal(invalid.closes(),1);
+ const valid=urlFixture(nativeCAF);assert.equal(await call(valid.api,'AudioFileOpenURL',1,3,0,32),tag('prm?'));assert.equal(valid.opens(),0);
+ assert.equal(await call(valid.api,'AudioFileOpenURL',1,1,0,32),0);await valid.api.close();assert.equal(valid.closes(),1);
+ assert.equal(call(valid.api,'AudioFileGetProperty',valid.read(32),tag('dfmt'),36,100),-50);
 });
