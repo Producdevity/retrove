@@ -1,3 +1,4 @@
+import {propertyValue} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installCollectionInitializers} from "../src/runtime/ios/foundation/collections.ts";
 import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
 import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
@@ -91,12 +92,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     destroy(s);
   });
   function property(value) {
-    if (value == null) return 0;
-    if (value instanceof Date) return date(value.getTime()/1000);
-    if (typeof value==='string') return string(value);
-    if (typeof value==='number'||typeof value==='boolean'||typeof value==='bigint') return number(value);
-    if (Array.isArray(value)) return autorelease(array(value.map(property)));
-    return autorelease(dictionary(names.get('NSDictionary'),Object.entries(value).map(([k,v])=>[string(k),property(v)])));
+    return propertyValue({string,number,date,array,autorelease,dictionary:pairs=>dictionary(names.get('NSDictionary'),pairs),
+      data:bytes=>{const p=heap.alloc(Math.max(1,bytes.length));try{cpu.write(p,bytes);return autorelease(dataFrom(p,bytes.length));}finally{heap.free(p);}}},value);
   }
   method('NSBundle',false,'infoDictionary',()=>property(ipa.info));
   method('NSBundle',false,'objectForInfoDictionaryKey:',(_,a)=>property(ipa.info[text(a(0))]));

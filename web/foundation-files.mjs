@@ -1,3 +1,4 @@
+import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
 import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
 import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
@@ -93,11 +94,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     } finally {if(buffer)heap.free(buffer);heap.free(statbuf);await invoke('_close',fd);}
   }
   installStringFiles({method,alloc,destroy,autorelease,write,contents,errno:()=>read(invoke('___error')),decode:decodeText,initialize:(p,v)=>makeString(v,p),error:makeError});
-  method('NSDictionary',true,'dictionaryWithContentsOfURL:',async(_,a)=>{
-    const u=a(0);if(!u||!await send(u,'isFileURL'))return 0;
-    const bytes=await contents(await send(u,'path'));if(!bytes)return 0;
-    try{const obj=parsePlist(bytes);return obj&&Object.getPrototypeOf(obj)===null?property(obj):0;}catch{return 0;}
-  });
+  installDictionaryFiles({method,autorelease,destroy,contents,parse:parsePlist,property,send});
   method('NSData',true,'dataWithContentsOfFile:',async(_,a)=>{
     const bytes=await contents(a(0));if(!bytes)return 0;
     const p=heap.alloc(Math.max(1,bytes.length));try{cpu.write(p,bytes);return autorelease(dataFrom(p,bytes.length));}finally{heap.free(p);}
