@@ -1,3 +1,4 @@
+import { announceMotionAccess } from "./access";
 const GRAVITY_METERS_PER_SECOND_SQUARED = 9.80665;
 const MILLISECONDS_PER_SECOND = 1000;
 const MOTION_EVENT = "devicemotion";
@@ -55,6 +56,7 @@ export class BrowserMotion implements MotionSource {
     if (this.listening || !this.target) return;
     this.target.addEventListener(MOTION_EVENT, this.receive);
     this.listening = true;
+    announceMotionAccess(this.target);
   }
   stop(): void {
     this.target?.removeEventListener(MOTION_EVENT, this.receive);

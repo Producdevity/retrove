@@ -1,5 +1,6 @@
 import "../ui/appearance.css";
 import "./player.css";
+import { MOTION_ACCESS_REQUESTED, requestMotionAccess } from "../runtime/ios/uikit/motion/access";
 import { initializeAppearance } from "../ui/appearance";
 import "../runtime/ios/uikit/alerts/dialog.css";
 import { openIPA } from "../../web/ipa.mjs";
@@ -15,6 +16,20 @@ initializeAppearance();
 const status = element("status", HTMLHeadingElement);
 const detail = element("detail", HTMLParagraphElement);
 const media = element("resume-media", HTMLButtonElement);
+const motion = element("enable-motion", HTMLButtonElement);
+window.addEventListener(MOTION_ACCESS_REQUESTED, () => {
+  motion.hidden = false;
+});
+motion.addEventListener(
+  "click",
+  action(
+    async () => {
+      await requestMotionAccess();
+      motion.hidden = true;
+    },
+    (error) => report.diagnostic("warn", "motion", errorMessage(error)),
+  ),
+);
 let session: PlayerSession | undefined;
 let imageVisible = false;
 let audioResumeNeeded = false;
