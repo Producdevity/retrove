@@ -1,3 +1,4 @@
+import {installErrors,ERROR_INSTANCE_BYTES,ErrorField} from "../src/runtime/ios/foundation/errors.ts";
 import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
 import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
@@ -9,21 +10,13 @@ import {readString} from './memory.mjs';
 export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names,alloc,string,text,utf8,write,read,array,autorelease,send,retain,property,dataFrom,decodeText,makeString}) {
   const invoke=(name,...args)=>sys.funcs[name](i=>args[i]??0);
   hostClass('NSFileManager','NSObject');
-  hostClass('NSError','NSObject',16);
+  hostClass('NSError','NSObject',ERROR_INSTANCE_BYTES);
+  installErrors({method,alloc,destroy,autorelease,retain,release,text,string,write,read,send,dictionary:()=>property({})});
   let manager;
   method('NSFileManager',true,'defaultManager',()=>manager??=alloc(names.get('NSFileManager')));
-  method('NSError',false,'code',s=>read(s+4));
-  method('NSError',false,'domain',s=>read(s+8)||string('NSPOSIXErrorDomain'));
-  method('NSError',false,'localizedDescription',s=>{
-    const code=read(s+4)|0;
-    if(code===-1009)return string('The internet connection appears to be offline.');
-    if(code===-1100)return string('The requested file could not be found.');
-    return string((read(s+8)?text(read(s+8)):'NSPOSIXErrorDomain')+' error '+code);
-  });
-  method('NSError',false,'dealloc',async s=>{const domain=read(s+8);if(domain)await release(domain);destroy(s);});
   function failure(out) {
     if(out){
-      const value=alloc(names.get('NSError'));write(value+4,read(invoke('___error')));write(out,autorelease(value));
+      const value=alloc(names.get('NSError'));write(value+ErrorField.Code,read(invoke('___error')));write(out,autorelease(value));
     }
     return 0;
   }
@@ -37,7 +30,7 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
       return ok?type:0;
     } finally {heap.free(scratch);}
   }
-  const makeError=(code,domain)=>{const value=alloc(names.get('NSError'));write(value+4,code);const name=retain(string(domain));write(value+8,name);return autorelease(value);};
+  const makeError=(code,domain)=>{const value=alloc(names.get('NSError'));write(value+ErrorField.Code,code);const name=retain(string(domain));write(value+ErrorField.Domain,name);return autorelease(value);};
   installUrlResources({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,send,
     stat:async path=>await stat(utf8(path),0)?0:read(invoke('___error')),
     error:makeError});
