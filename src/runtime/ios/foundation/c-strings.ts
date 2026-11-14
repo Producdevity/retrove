@@ -9,6 +9,10 @@ interface CStringHost extends Pick<FoundationHost, "method" | "alloc" | "autorel
   utf8(pointer: number): number;
 }
 export function installCStringConstructors(host: CStringHost): void {
+  host.method(STRING_CLASS, true, "string", (cls) =>
+    host.autorelease(host.initialize(host.alloc(cls), "")),
+  );
+  host.method(STRING_CLASS, false, "init", (self) => host.initialize(self, ""));
   host.method(STRING_CLASS, true, "defaultCStringEncoding", () => DEFAULT_C_STRING_ENCODING);
   for (const [name, explicit] of [
     ["CString:", false],
