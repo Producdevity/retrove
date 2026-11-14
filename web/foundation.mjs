@@ -1,3 +1,4 @@
+import {installRequestOptions} from "../src/runtime/ios/foundation/url-request.ts";
 import {installRequestHeaders} from "../src/runtime/ios/foundation/http-headers.ts";
 import {propertyValue} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installCollectionInitializers} from "../src/runtime/ios/foundation/collections.ts";
@@ -354,15 +355,12 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   hostClass('NSURLRequest','NSObject');hostClass('NSMutableURLRequest','NSURLRequest');
   const requests=new Map();
   async function setRequestURL(s,p){const old=requests.get(s);requests.set(s,retain(p));if(old)await release(old);}
-  for(const sel of ['requestWithURL:','requestWithURL:cachePolicy:timeoutInterval:']) method('NSURLRequest',true,sel,async(cls,a)=>{
-    const s=alloc(cls);await setRequestURL(s,a(0));return autorelease(s);
-  });
-  for(const sel of ['initWithURL:','initWithURL:cachePolicy:timeoutInterval:'])method('NSURLRequest',false,sel,async(s,a)=>{await setRequestURL(s,a(0));return s;});
+  const releaseRequestOptions=installRequestOptions({method,alloc,autorelease,setURL:setRequestURL});
   method('NSMutableURLRequest',false,'setURL:',(s,a)=>setRequestURL(s,a(0)));
   method('NSURLRequest',false,'URL',s=>requests.get(s)??0);
   method('NSURLRequest',false,'dealloc',async s=>{
     const props=requestProperties.get(s),u=requests.get(s);
-    releaseHeaders(s);requests.delete(s);requestProperties.delete(s);
+    releaseHeaders(s);releaseRequestOptions(s);requests.delete(s);requestProperties.delete(s);
     for(const ptr of Object.values(props??{}))await release(ptr);
     if(u)await release(u);destroy(s);
   });

@@ -1,5 +1,5 @@
 import type { FoundationHost } from "../objc/host";
-const RequestClass = { Base: "NSURLRequest", Mutable: "NSMutableURLRequest" } as const;
+import { RequestClass } from "./url-request";
 const CANONICAL_FIELDS = [
   "Content-Type",
   "Content-Length",
