@@ -38,16 +38,17 @@ import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.t
 import {encodeFoundation} from "../src/runtime/ios/foundation/archives/foundation-encoder.ts";
 import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiver.ts";
 import {archiveFoundation} from "../src/runtime/ios/foundation/archives/foundation.ts";
-import {parsePlist} from "./plist.mjs";
+import {parsePlist} from "../src/runtime/formats/plist/index.ts";
 import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
 import {propertyAccessors,structCopyImports,installUnobservedPropertyChanges} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
+import {installURLOpening, openInBrowser} from "../src/runtime/ios/uikit/application/url-opening.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from '../src/runtime/ios/uikit/screen.ts';
 import {coreFoundation} from './corefoundation.mjs';
-import {bundleStrings} from './localized-strings.mjs';
+import {bundleStrings} from '../src/runtime/ios/foundation/localized-strings.ts';
 import {foundationRunLoop} from './runloop.mjs';
 import {cfNetwork} from './cfnetwork.mjs';
 import {geometry} from '../src/runtime/graphics/core-graphics/geometry.ts';
@@ -565,6 +566,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'setDelegate:', (_, a) => { delegate = a(0); });
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
+  installURLOpening({method, text, send, open: openInBrowser});
   const input = touchUIKit({currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
