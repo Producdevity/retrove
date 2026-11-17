@@ -8,35 +8,40 @@ import { Platform, type ApplicationId } from "../domain/application";
 import { errorMessage } from "../domain/validation";
 import { browserLibrary } from "../library/browser";
 import { action, element } from "../ui/dom";
+import { onUserActivation } from "./activation";
 import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
 import { PlayerSession } from "./session";
 
 initializeAppearance();
+const LOADER_AREAS = new Set(["ipa", "guest"]);
 const status = element("status", HTMLHeadingElement);
 const detail = element("detail", HTMLParagraphElement);
-const media = element("resume-media", HTMLButtonElement);
-const motion = element("enable-motion", HTMLButtonElement);
+const tapHint = element("tap-hint", HTMLParagraphElement);
+let motionPending = false;
 window.addEventListener(MOTION_ACCESS_REQUESTED, () => {
-  motion.hidden = false;
+  motionPending = true;
 });
-motion.addEventListener(
-  "click",
-  action(
-    async () => {
-      await requestMotionAccess();
-      motion.hidden = true;
-    },
-    (error) => report.diagnostic("warn", "motion", errorMessage(error)),
-  ),
-);
 let session: PlayerSession | undefined;
 let imageVisible = false;
 let audioResumeNeeded = false;
 let movieResumeNeeded = false;
 const updateMedia = (): void => {
-  media.hidden = !audioResumeNeeded && !movieResumeNeeded;
+  tapHint.hidden = !movieResumeNeeded;
 };
+onUserActivation(
+  window,
+  () => {
+    const tasks: Promise<unknown>[] = [];
+    if (motionPending) {
+      motionPending = false;
+      tasks.push(requestMotionAccess());
+    }
+    if (session && (audioResumeNeeded || movieResumeNeeded)) tasks.push(session.resumeMedia());
+    return tasks;
+  },
+  (error) => report.diagnostic("warn", "activation", errorMessage(error)),
+);
 const fail = (error: unknown): void => {
   document.body.classList.remove("playing");
   document.body.classList.add("failed");
@@ -52,11 +57,8 @@ const report = new SessionReport(
     if (state.fault) fail(new Error(state.fault));
     else if (state.frames > 0) showImage();
   },
-  (level, _area, message) => {
-    if (level === "info") {
-      detail.textContent = message;
-      if (!imageVisible) status.textContent = message;
-    }
+  (level, area, message) => {
+    if (level === "info" && LOADER_AREAS.has(area) && !imageVisible) detail.textContent = message;
   },
 );
 const display = new PlayerDisplay(
@@ -102,15 +104,6 @@ async function prepare(): Promise<void> {
   status.textContent = "App closed";
   detail.textContent = "";
 }
-media.addEventListener(
-  "click",
-  action(
-    async () => {
-      await session?.resumeMedia();
-    },
-    (error) => report.diagnostic("warn", "media", errorMessage(error)),
-  ),
-);
 element("back", HTMLAnchorElement).addEventListener("click", (event) => {
   event.preventDefault();
   void (async () => {
