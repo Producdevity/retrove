@@ -81,3 +81,18 @@ test("clearing preserves untouched native bytes, including unused alpha componen
     90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 0, 0, 0, 0, 90, 90, 90, 90, 90, 90, 90, 90,
   ]);
 });
+
+test("DeviceGray contexts without alpha store premultiplied luma, one byte per pixel", () => {
+  // gray, kCGImageAlphaNone: Texture2D's layout for text textures
+  const layout = bitmapLayout(2, 1, 8, 0, 1, 0);
+  expect(layout?.gray).toBe(true);
+  expect(layout?.stride).toBe(2);
+  if (!layout) return;
+  expect([...unpackBitmap(layout, Uint8Array.of(0, 200))]).toEqual([
+    0, 0, 0, 255, 200, 200, 200, 255,
+  ]);
+  const target = new Uint8Array(2);
+  packBitmap(layout, Uint8ClampedArray.of(255, 255, 255, 128, 0, 0, 0, 0), target);
+  expect([...target]).toEqual([128, 0]);
+  expect(bitmapLayout(2, 1, 8, 0, 1, 1)).toBeUndefined();
+});

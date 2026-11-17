@@ -9,7 +9,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,glLayer}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -97,10 +97,10 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
   });
   method('UIImage',false,'scale',s=>bits(images.get(s)?.scale??1));
   method('UIImage',false,'imageOrientation',s=>images.get(s)?.orientation??0);
-  method('UIImage',false,'drawInRect:',(s,a)=>draw(images.get(s),cg()?.currentCanvas(),...[0,1,2,3].map(i=>float(a(i)))));
+  method('UIImage',false,'drawInRect:',(s,a)=>{cg()?.drawCurrent(c=>draw(images.get(s),c,...[0,1,2,3].map(i=>float(a(i)))));});
   method('UIImage',false,'drawAtPoint:',(s,a)=>{
     const img=images.get(s);
-    if(img)draw(img,cg()?.currentCanvas(),float(a(0)),float(a(1)),img.width,img.height);
+    if(img)cg()?.drawCurrent(c=>draw(img,c,float(a(0)),float(a(1)),img.width,img.height));
   });
   const size=(s,_,dest)=>{write(dest,bits(images.get(s)?.width??0));write(dest+4,bits(images.get(s)?.height??0));};
   size.stret=true;method('UIImage',false,'size',size);
@@ -140,7 +140,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const hostBounds=mediaHost.getBoundingClientRect();
     const aspect=hostBounds.width&&hostBounds.height && w&&h ? (hostBounds.height/h)/(hostBounds.width/w) : 1;
     const now=performance.now();
-    let order=1;
+    let order=1,glOrder=0;
     const active=t=>t&&now<t.start+(t.duration+t.delay)*1000?t:null;
     function transitions(names,t) {return t?names.map(n=>n+' '+t.duration+'s '+t.curve+' '+t.delay+'s'):[];}
     async function visit(view,x,y,alpha,opacityTiming,layoutTiming) {
@@ -161,7 +161,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           mediaHost.append(node);nodes.set(view,node);state.needsDisplay=true;
         }
         shown.add(view);
-        node.style.zIndex=String(order++);
+        const z=order++;
         const scale=state.contentScaleFactor?float(state.contentScaleFactor):1;
         const px=Math.max(1,Math.ceil(vw*scale)),py=Math.max(1,Math.ceil(vh*scale));
         if(node.width!==px||node.height!==py){node.width=px;node.height=py;state.needsDisplay=true;}
@@ -172,7 +172,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
         }
         const transition=[...transitions(['opacity'],opacityTiming),...transitions(['transform','width','height','left','top'],layoutTiming)].join(',');
-        Object.assign(node.style,{clipPath:clip?.(view)??'none',transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(shown.size)});
+        Object.assign(node.style,{clipPath:clip?.(view)??'none',transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(z)});
         if(state.needsDisplay) {
           state.needsDisplay=false;
           const ctx=node.getContext('2d');
@@ -191,6 +191,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           if(state.borderColor)drawLayerBorder(ctx,state,p=>cg()?.colors.rgba(p));
         }
       }
+      // GL content sits in the view order at its EAGL layer, so views behind it stay behind the game.
+      if(state.layer&&glLayer?.(state.layer))glOrder=order++;
       if(state.layer)await visit(state.layer,x,y,alpha,opacityTiming,layoutTiming);
       for(const child of [...state.children].sort((a,b)=>(data(a).zPosition??0)-(data(b).zPosition??0))) {
         const f=data(child).frame;
@@ -198,6 +200,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       }
     }
     if(w&&h)await visit(window,0,0,1);
+    const graphics=mediaHost.querySelector('canvas[data-graphics]');
+    if(graphics)graphics.style.zIndex=glOrder?String(glOrder):'';
     for(const [view,node] of nodes)if(!shown.has(view)){node.remove();nodes.delete(view);}
   }
   function close() {for(const n of nodes.values())n.remove();nodes.clear();images.clear();}

@@ -9,7 +9,7 @@ export const ImageAlpha = {
   NoneSkipFirst: 6,
   Only: 7,
 } as const;
-export const ImageComponents = { RGB: 3, RGBA: 4 } as const;
+export const ImageComponents = { Gray: 1, RGB: 3, RGBA: 4 } as const;
 const BITS_PER_BYTE = 8;
 export interface ImageMetadata {
   width: number;

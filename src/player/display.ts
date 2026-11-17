@@ -45,6 +45,7 @@ export class PlayerDisplay {
     canvas.addEventListener("webglcontextlost", () =>
       this.fault(new Error("The graphics context was lost.")),
     );
+    canvas.dataset["graphics"] = "";
     this.host.prepend(canvas);
     this.context = context;
     this.diagnostic("info", "graphics", "Graphics context created", graphicsContextInfo(context));

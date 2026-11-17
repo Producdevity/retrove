@@ -92,6 +92,14 @@ export function coreGraphics(cpu, heap, objc) {
     return p;
   }
   function current() { return stacks.get(thread())?.at(-1) ?? 0; }
+  // Bitmap contexts mirror guest memory, so UIKit drawing into one must load and store its pixels.
+  function drawCurrent(draw) {
+    const o = objects.get(current());
+    if (o?.kind !== 'context') return false;
+    o.bitmap?.refresh();
+    try { draw(o.canvas); } finally { o.bitmap?.commit(); }
+    return true;
+  }
   async function withContext(canvas, callback) {
     const id = thread(), stack = stacks.get(id) ?? [];
     const p = create('context', {canvas, saves:0, antialias:true, bounds:null});
@@ -182,6 +190,18 @@ export function coreGraphics(cpu, heap, objc) {
     _CGImageRetain: a => retain(a(0)),
     _CGImageRelease: a => release(a(0)),
     _UIGraphicsGetCurrentContext: current,
+    _UIGraphicsPushContext: a => {
+      const p = a(0);
+      if (objects.get(p)?.kind !== 'context') return;
+      const id = thread(), stack = stacks.get(id) ?? [];
+      stacks.set(id, stack); stack.push(p);
+    },
+    _UIGraphicsPopContext: () => {
+      const id = thread(), stack = stacks.get(id);
+      if (!stack) return;
+      stack.pop();
+      if (!stack.length) stacks.delete(id);
+    },
     _CGContextSaveGState: a => {
       const o=objects.get(a(0));
       if(o?.kind==='context'){o.canvas.save();o.saves++;}
@@ -228,5 +248,5 @@ export function coreGraphics(cpu, heap, objc) {
       c.beginPath();o.bounds=null;o.bitmap?.commit();
     },
   };
-  return { funcs, data:new Map(), colors, owns:p=>colors.has(p)||objects.has(p), retainCount:p=>colors.get(p)?.refs??objects.get(p)?.refs, equal:(a,b)=>colors.has(a)||colors.has(b)?colors.equal(a,b):objects.has(a)||objects.has(b)?a===b:undefined, hash:p=>colors.has(p)?colors.hash(p):objects.has(p)?p:undefined, createImage, pixels, retain, release, setColor, withContext, currentCanvas:()=>context(current()) };
+  return { funcs, data:new Map(), colors, owns:p=>colors.has(p)||objects.has(p), retainCount:p=>colors.get(p)?.refs??objects.get(p)?.refs, equal:(a,b)=>colors.has(a)||colors.has(b)?colors.equal(a,b):objects.has(a)||objects.has(b)?a===b:undefined, hash:p=>colors.has(p)?colors.hash(p):objects.has(p)?p:undefined, createImage, pixels, retain, release, setColor, withContext, drawCurrent, currentCanvas:()=>context(current()) };
 }

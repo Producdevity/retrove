@@ -4,6 +4,7 @@ import { Fonts, type Font } from "./fonts";
 import { LabelDrawing } from "./label-drawing";
 import { Labels } from "./label-state";
 import { lineBreak } from "./text-layout";
+import { installStringDrawing, type CurrentContext } from "./string-drawing";
 import { UIKitClass, structureMethod, type UIKitHost } from "./host";
 
 function installProperties(host: UIKitHost, labels: Labels): void {
@@ -55,7 +56,10 @@ function installProperties(host: UIKitHost, labels: Labels): void {
     labels.changed(self);
   });
 }
-export function installLabels(host: UIKitHost): {
+export function installLabels(
+  host: UIKitHost,
+  current?: CurrentContext,
+): {
   has(pointer: number): boolean;
   font(pointer: number): Font;
   size(pointer: number): [number, number];
@@ -83,6 +87,7 @@ export function installLabels(host: UIKitHost): {
   host.method(UIKitClass.Label, false, "sizeToFit", (self) => drawing.fit(self));
   host.method(UIKitClass.Label, false, "dealloc", (self) => labels.destroy(self));
   installProperties(host, labels);
+  installStringDrawing(host, fonts, (...input) => drawing.measure(...input), current);
   host.structure(
     UIKitClass.String,
     false,

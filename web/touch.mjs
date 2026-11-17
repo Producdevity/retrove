@@ -74,7 +74,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   };
   let textViews,pickerViews,pageControls,scrollers,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -100,7 +100,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const uiHost={hostClass,method,structure:method,alloc,destroy,autorelease,retain,release:releaseFromHost,send,text,string,write,read,ipa,document:mediaHost?.ownerDocument,view:data,setFrame,deallocateView};
   const animationGroups=installAnimationGroups({...uiHost,thread:()=>currentThread?.()??1,now:()=>performance.now(),selectorName});
   const alerts=installAlerts({...uiHost,responds:(p,name)=>!!p&&!!lookup(read(p),name)});
-  textViews=installLabels(uiHost);
+  textViews=installLabels(uiHost,draw=>getCoreGraphics?.()?.drawCurrent(draw)??false);
   pickerViews=installPickers({...uiHost,screenWidth:()=>phoneScreen.width,responds:(p,name)=>!!p&&!!lookup(read(p),name),
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   const controlHost={...uiHost,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown UIKit class '+name);return p;},selectorName,
