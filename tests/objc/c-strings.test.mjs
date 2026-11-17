@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('legacy and explicit NSString C-string constructors use the same decoder and preserve mutable subclasses',async t=>{
  const x=await fixture(t),pointer=x.heap.string('café 🎮');
  assert.equal(await x.send(x.cls('NSString'),'defaultCStringEncoding'),4);

@@ -1,4 +1,4 @@
-import {read32, write32} from './memory.mjs';
+import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
 import {ThreadAttributes} from '../src/runtime/ios/threads/attributes.ts';
 

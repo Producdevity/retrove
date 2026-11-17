@@ -1,4 +1,4 @@
-import {read32} from './memory.mjs';
+import {read32} from '../src/runtime/memory/guest-memory.ts';
 import {GuestLandingPad} from './sjlj.mjs';
 
 // The ARMv7 Darwin jmp_buf is 112 bytes. Store r4-r11, sp/lr and d8-d15

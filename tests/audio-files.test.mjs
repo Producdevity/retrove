@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {tag,audioFiles} from '../web/audio-file.mjs';
 import {audioQueues} from '../web/audio-queue.mjs';
 import {systemSounds} from '../web/system-sound.mjs';
-import {read32,write32} from '../web/memory.mjs';
+import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 
 function memory(){
   const b=new Uint8Array(512000);let next=1024;

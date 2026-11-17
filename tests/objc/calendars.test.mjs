@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 function words(value){const d=new DataView(new ArrayBuffer(8));d.setFloat64(0,value,true);return[d.getUint32(0,true),d.getUint32(4,true)];}
 test('named Foundation time zones and Gregorian components honor daylight saving and midnight boundaries',async t=>{
  const x=await fixture(t),text=async p=>readString(x.cpu,await x.send(p,'UTF8String')),str=s=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(s));

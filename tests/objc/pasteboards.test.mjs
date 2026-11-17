@@ -1,7 +1,7 @@
 import {test,vi} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('typed persistent pasteboards restore strings and bytes in a new guest runtime',async t=>{
   const saved=new Map();
   vi.stubGlobal('localStorage',{getItem:k=>saved.get(k)??null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)});

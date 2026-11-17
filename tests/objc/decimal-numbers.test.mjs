@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSDecimalNumber parses exact base-ten strings and canonicalizes without binary floating-point loss',async t=>{
  const x=await fixture(t),str=v=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(v)),text=async p=>readString(x.cpu,await x.send(p,'UTF8String'));
  for(const [input,expected] of [['1.2300','1.23'],['-0','0'],['0.1','0.1'],['12345678901234567890123456789012345678','12345678901234567890123456789012345678'],['1e127','1'+'0'.repeat(127)],['1e-128','0.'+'0'.repeat(127)+'1'],['1e128','NaN'],['1e-129','NaN'],['abc','NaN'],['12junk','12'],['  +12.5e-3','0.0125'],['-3.45','-3.45']]){

@@ -1,4 +1,4 @@
-import {fill, move, readCStringBytes, write32} from './memory.mjs';
+import {fill, move, readCStringBytes, write32} from '../src/runtime/memory/guest-memory.ts';
 
 const PAGE = 4096;
 const ADDRESS_SPACE = 0x100000000;

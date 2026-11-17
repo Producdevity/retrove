@@ -1,4 +1,4 @@
-import {read32,readString,write32} from './memory.mjs';
+import {read32,readString,write32} from '../src/runtime/memory/guest-memory.ts';
 
 const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const months=['January','February','March','April','May','June','July','August','September','October','November','December'];

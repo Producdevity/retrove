@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString,write32} from '../../web/memory.mjs';
+import {readString,write32} from '../../src/runtime/memory/guest-memory.ts';
 async function setup(t,callback,local=false){
  let thread=2,position=0;const bytes=Uint8Array.of(1,2,3,255);
  const x=await fixture(t,callback,new Map(),(cpu,heap)=>{

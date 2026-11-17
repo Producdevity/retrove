@@ -16,7 +16,7 @@ import {commonCrypto} from './commoncrypto.mjs';
 import {createCPU} from './cpu.mjs';
 import {prepareApplication} from '../src/runtime/ios/profiles/index.ts';
 import {parseMachO, loadMachO, prepareStartup} from './macho.mjs';
-import {Heap, read32, readString, write32} from './memory.mjs';
+import {Heap, read32, readString, write32} from '../src/runtime/memory/guest-memory.ts';
 import {systemImports} from './libsystem.mjs';
 import {glesImports} from './gles.mjs';
 import {audioQueues} from './audio-queue.mjs';

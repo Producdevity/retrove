@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
 import {crc32, deflateSync, inflateSync} from 'node:zlib';
 import {compressionImports} from '../web/compression.mjs';
-import {read32, write32} from '../web/memory.mjs';
+import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 const SRC = 0x1000, DEST = 0x80000, LENGTH = 0x20;
 function guest() {

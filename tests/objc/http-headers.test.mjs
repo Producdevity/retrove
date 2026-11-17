@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('native request headers copy dictionaries, preserve case-insensitive lookup and merge field updates',async t=>{
  const x=await fixture(t),pool=x.f('_objc_autoreleasePoolPush'),string=v=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(v));
  const text=async p=>p ? readString(x.cpu,await x.send(p,'UTF8String')) : null;

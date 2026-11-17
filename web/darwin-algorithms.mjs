@@ -1,6 +1,6 @@
 import {secureRandomImports} from "../src/runtime/ios/libc/secure-random.ts";
 import {randomImports} from "../src/runtime/ios/libc/random.ts";
-import {move, read32, write32} from './memory.mjs';
+import {move, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 export function darwinAlgorithms(cpu, callGuest) {
   let seed=1;

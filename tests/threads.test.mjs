@@ -13,7 +13,7 @@ test('ARM main joins a guest worker after it sleeps and receives its return valu
 
 test('ARM SJLJ leaves keep independent context chains across thread preemption', async t => {
   const {createCPU} = await import('../web/cpu.mjs');
-  const {Heap, read32} = await import('../web/memory.mjs');
+  const {Heap, read32} = await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports} = await import('../web/threads.mjs');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
   t.onTestFinished(() => cpu.close());
@@ -55,7 +55,7 @@ test('ARM SJLJ leaves keep independent context chains across thread preemption',
 test('Darwin longjmp restores copied ARM state, VFP data and the saved SjLj chain', async () => {
   const {nonlocalJumps}=await import('../web/nonlocal-jump.mjs');
   const {createCPU}=await import('../web/cpu.mjs');
-  const {Heap,read32,write32}=await import('../web/memory.mjs');
+  const {Heap,read32,write32}=await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports}=await import('../web/threads.mjs');
   const cpu=await createCPU();
   try {
@@ -92,7 +92,7 @@ test('a worker dispatch_once block can wait for a mutex held by its scheduling m
 
 test('Darwin realtime attributes create workers at FMOD priorities', async () => {
   const {createCPU} = await import('../web/cpu.mjs');
-  const {Heap,read32,write32} = await import('../web/memory.mjs');
+  const {Heap,read32,write32} = await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports} = await import('../web/threads.mjs');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
   cpu.map(done,4096);

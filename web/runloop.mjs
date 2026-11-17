@@ -1,5 +1,5 @@
 import {ThreadDeliveries} from "../src/runtime/ios/foundation/thread-delivery.ts";
-import {readString} from './memory.mjs';
+import {readString} from '../src/runtime/memory/guest-memory.ts';
 export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release,send,threads,destroy,read,callGuest,getDispatch,withAnimation,threadIdentity}) {
   const deliveries=new ThreadDeliveries({retain,release,send,currentThread:()=>threads?.funcs._pthread_self()??1});
   const timers=new Map(),scheduled=new Map(),queue=[],animations=[];

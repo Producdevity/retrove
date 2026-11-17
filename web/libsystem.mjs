@@ -3,7 +3,7 @@ import {scanImports} from './scan.mjs';
 import {networkImports} from './network.mjs';
 import {calendarImports} from './calendar.mjs';
 import {darwinAlgorithms} from './darwin-algorithms.mjs';
-import {fill, move, read32, readCStringBytes, readString, write32} from './memory.mjs';
+import {fill, move, read32, readCStringBytes, readString, write32} from '../src/runtime/memory/guest-memory.ts';
 import {defaultRuneLocale, stringImports} from './strings.mjs';
 import {guestZlibStreams} from './guest-zlib.mjs';
 import {formatImports} from './format.mjs';

@@ -1,4 +1,4 @@
-import {read32, readString, write32} from './memory.mjs';
+import {read32, readString, write32} from '../src/runtime/memory/guest-memory.ts';
 
 export class GuestLandingPad {
   constructor(pc, fp, sp, thread) {

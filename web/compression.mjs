@@ -1,5 +1,5 @@
 import {crc32, crcTable} from '../src/runtime/formats/crc32.ts';
-import {read32, write32} from './memory.mjs';
+import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {ZStream, inflateInit2, inflate, inflateEnd, deflateInit2, deflate, deflateEnd} from './vendor/pako-zlib.mjs';
 
 const OK = 0, STREAM_END = 1, NEED_DICT = 2, STREAM_ERROR = -2, DATA_ERROR = -3, BUF_ERROR = -5;

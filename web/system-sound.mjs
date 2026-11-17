@@ -1,4 +1,4 @@
-import {write32} from './memory.mjs';
+import {write32} from '../src/runtime/memory/guest-memory.ts';
 
 // Audio Services owns the decoded clip. Guest completions run on the application
 // thread when the scheduler next polls, outside the Web Audio event callback.

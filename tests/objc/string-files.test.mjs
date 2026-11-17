@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString,write32} from '../../web/memory.mjs';
+import {readString,write32} from '../../src/runtime/memory/guest-memory.ts';
 async function files(t){
  const bytesByPath=new Map([['/Documents/utf8',new TextEncoder().encode('café 🎮')],['/Documents/latin',Uint8Array.of(0xe9)],['/Documents/empty',new Uint8Array()],['/Documents/bad',Uint8Array.of(0xc3,0x28)]]);
  let bytes,position=0,closes=0;

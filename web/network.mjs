@@ -1,5 +1,5 @@
 // Safari has no raw TCP/UDP API. The guest has an isolated IPv4 loopback device.
-import {read32,readString,write32} from './memory.mjs';
+import {read32,readString,write32} from '../src/runtime/memory/guest-memory.ts';
 
 const LOCAL=0x0100007f, STREAM=1, DGRAM=2, WINDOW=262144;
 function ipv4(text) {

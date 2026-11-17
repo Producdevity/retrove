@@ -1,6 +1,6 @@
 import {IOSPlatform} from "../src/runtime/ios/platform.ts";
 import {unameImports} from "../src/runtime/ios/libc/uname.ts";
-import {read32, readString, write32} from './memory.mjs';
+import {read32, readString, write32} from '../src/runtime/memory/guest-memory.ts';
 
 const PAGE = 4096, HOST = 1;
 export const TASK = 2;

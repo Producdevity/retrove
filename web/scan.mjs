@@ -1,4 +1,4 @@
-import {read32,readCStringBytes,readString,write32} from './memory.mjs';
+import {read32,readCStringBytes,readString,write32} from '../src/runtime/memory/guest-memory.ts';
 
 const encoder=new TextEncoder();
 function wideText(cpu,ptr) {

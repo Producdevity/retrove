@@ -1,5 +1,5 @@
 import {sjljExceptions} from './sjlj.mjs';
-import { read32, readCStringBytes, write32 } from './memory.mjs';
+import { read32, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
 
 export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
   const bits = new DataView(new ArrayBuffer(8));

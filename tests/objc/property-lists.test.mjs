@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString,write32} from '../../web/memory.mjs';
+import {readString,write32} from '../../src/runtime/memory/guest-memory.ts';
 const native={"100": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPCFET0NUWVBFIHBsaXN0IFBVQkxJQyAiLS8vQXBwbGUvL0RURCBQTElTVCAxLjAvL0VOIiAiaHR0cDovL3d3dy5hcHBsZS5jb20vRFREcy9Qcm9wZXJ0eUxpc3QtMS4wLmR0ZCI+CjxwbGlzdCB2ZXJzaW9uPSIxLjAiPgo8ZGljdD4KCTxrZXk+Y291bnQ8L2tleT4KCTxpbnRlZ2VyPjc8L2ludGVnZXI+Cgk8a2V5PmRhdGE8L2tleT4KCTxkYXRhPgoJQVFMLwoJPC9kYXRhPgoJPGtleT5kYXRlPC9rZXk+Cgk8ZGF0ZT4yMDAxLTAxLTAxVDAwOjAwOjEyWjwvZGF0ZT4KCTxrZXk+ZW5hYmxlZDwva2V5PgoJPHRydWUvPgoJPGtleT5uYW1lPC9rZXk+Cgk8c3RyaW5nPmNhZsOpPC9zdHJpbmc+Cgk8a2V5Pm5lc3RlZDwva2V5PgoJPGRpY3Q+CgkJPGtleT5pdGVtczwva2V5PgoJCTxhcnJheT4KCQkJPHN0cmluZz5vbmU8L3N0cmluZz4KCQkJPGludGVnZXI+MzwvaW50ZWdlcj4KCQk8L2FycmF5PgoJPC9kaWN0Pgo8L2RpY3Q+CjwvcGxpc3Q+Cg==", "200": "YnBsaXN0MDDWAQIDBAUGBwgJCgsMVGRhdGVUZGF0YVdlbmFibGVkVWNvdW50VG5hbWVWbmVzdGVkM0AoAAAAAAAAQwEC/wkQB2QAYwBhAGYA6dENDlVpdGVtc6IPEFNvbmUQAwgVGh8nLTI5QkZHSVJVW15iAAAAAAAAAQEAAAAAAAAAEQAAAAAAAAAAAAAAAAAAAGQ="};
 async function files(t){
  const byPath=new Map(Object.entries(native).map(([format,base64])=>['/Documents/'+format,Buffer.from(base64,'base64')]));

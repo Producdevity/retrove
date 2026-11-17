@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSError copies its domain and user info and retains error metadata through the caller pool',async t=>{
  const x=await fixture(t),pool=x.f('_objc_autoreleasePoolPush'),str=v=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(v));
  const domain=await x.send(x.cls('NSMutableString'),'stringWithString:',await str('AppDomain'));

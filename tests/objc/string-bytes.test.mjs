@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSString byte constructors decode exact ranges, consume transferred storage, and preserve borrowed storage',async t=>{
  const x=await fixture(t);
  for(const transfer of [false,true]){

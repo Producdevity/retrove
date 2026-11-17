@@ -4,7 +4,7 @@ import {darwinSystem,TASK} from '../web/darwin-system.mjs';
 import {darwinAlgorithms} from '../web/darwin-algorithms.mjs';
 import {formatImports,formatDarwin} from '../web/format.mjs';
 import {dispatchImports} from '../web/dispatch.mjs';
-import {read32,write32,readString} from '../web/memory.mjs';
+import {read32,write32,readString} from '../src/runtime/memory/guest-memory.ts';
 
 function memory() {
   const bytes=new Uint8Array(65536);

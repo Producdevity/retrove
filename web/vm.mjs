@@ -1,4 +1,4 @@
-import {write32} from './memory.mjs';
+import {write32} from '../src/runtime/memory/guest-memory.ts';
 
 const PAGE = 4096;
 const LOW = 0x41000000, HIGH = 0x6fc00000; // Between the import gates and main stack.

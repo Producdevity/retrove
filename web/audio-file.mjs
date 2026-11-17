@@ -1,6 +1,6 @@
 import {audioFileReading} from "../src/runtime/audio/files/imports.ts";
 import {audioURLSource} from "../src/runtime/audio/files/source.ts";
-import {read32,write32} from './memory.mjs';
+import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 
 export const tag=s=>[...s].reduce((v,c)=>v*256+c.charCodeAt(0),0);
 const bytesView=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);

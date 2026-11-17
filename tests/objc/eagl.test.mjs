@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('EAGL preserves the requested API and current-context lifetime for ES1 and ES2',async t=>{
  const x=await fixture(t);const contexts=[];
  const selectors=new Map(["alloc","initWithAPI:","API","setCurrentContext:","release","UTF8String"].map(name=>[name,x.sel(name)]));

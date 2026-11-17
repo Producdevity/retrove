@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSObject alloc and new honor an inherited guest allocWithZone override and its returned singleton',async t=>{
  let singleton=0,child=0;const calls=[];
  const x=await fixture(t,async(pc,args)=>{

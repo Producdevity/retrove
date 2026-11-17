@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
 import { glesImports } from '../web/gles.mjs';
-import { write32 } from '../web/memory.mjs';
+import { write32 } from '../src/runtime/memory/guest-memory.ts';
 
 function setup(gl) {
   const memory = new Uint8Array(4096);

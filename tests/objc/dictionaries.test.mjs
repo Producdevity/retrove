@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSDictionary array construction copies keys, retains values and keeps the source arrays independent',async t=>{
  const x=await fixture(t),key=await x.send(x.cls('NSMutableString'),'stringWithUTF8String:',x.heap.string('score'));
  const value=await x.send(x.cls('NSObject'),'new'),keys=await x.send(x.cls('NSMutableArray'),'arrayWithObject:',key),values=await x.send(x.cls('NSMutableArray'),'arrayWithObject:',value);

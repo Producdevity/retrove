@@ -1,4 +1,4 @@
-import {read32, readCStringBytes, write32} from './memory.mjs';
+import {read32, readCStringBytes, write32} from '../src/runtime/memory/guest-memory.ts';
 
 const utf8 = new TextEncoder();
 const byteString = bytes => {

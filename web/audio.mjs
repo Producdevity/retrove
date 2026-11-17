@@ -1,4 +1,4 @@
-import { read32, write32 } from './memory.mjs';
+import { read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 import {AudioMetrics} from '../src/runtime/diagnostics/audio-metrics.ts';
 
 const fourcc = s => [...s].reduce((n,ch) => n*256 + ch.charCodeAt(0),0);

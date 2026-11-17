@@ -1,4 +1,4 @@
-import {read32, write32} from './memory.mjs';
+import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 export function guestZlibStreams(cpu, heap, hostGate) {
   let installed;

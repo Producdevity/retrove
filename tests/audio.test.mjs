@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
 import { audioImports } from '../web/audio.mjs';
-import { read32, write32 } from '../web/memory.mjs';
+import { read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 
 function audioFixture() {
   const mem=new Uint8Array(1<<20);

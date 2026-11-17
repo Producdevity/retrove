@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('NSMutableString replacement uses the ARM32 range ABI, returns a count and invalidates encoded bytes',async t=>{
  const x=await fixture(t),string=value=>x.send(x.cls('NSString'),'stringWithUTF8String:',x.heap.string(value));
  const self=await x.send(x.cls('NSMutableString'),'stringWithUTF8String:',x.heap.string('aa🌟aa🌟aa'));

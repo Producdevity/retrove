@@ -1,6 +1,6 @@
 // The guest has no routed BSD network interface. Return the corresponding Darwin
 // reachability flags and DNS error; a browser's own network remains independent.
-import {readString} from './memory.mjs';
+import {readString} from '../src/runtime/memory/guest-memory.ts';
 export function cfNetwork({cpu,read,write,hostClass,method,names,alloc,destroy,text,callGuest,heap,array,dataFrom,release}) {
   hostClass('SCNetworkReachability','NSObject');hostClass('CFHost','NSObject');
   const monitors=new Map(),hosts=new Map();

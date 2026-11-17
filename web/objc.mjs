@@ -56,7 +56,7 @@ import {foundation} from './foundation.mjs';
 import { touchUIKit } from './touch.mjs';
 import {moviePlayers} from './movie.mjs';
 import { eaglDrawable } from './drawable.mjs';
-import { read32, readString, readCStringBytes, write32 } from './memory.mjs';
+import { read32, readString, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
 
 const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder() };

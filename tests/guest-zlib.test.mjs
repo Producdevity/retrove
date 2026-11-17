@@ -3,7 +3,7 @@ import {test} from 'vite-plus/test';
 import {deflateSync, inflateSync} from 'node:zlib';
 import {createCPU} from '../web/cpu.mjs';
 import {guestZlibStreams} from '../web/guest-zlib.mjs';
-import {Heap, read32, write32} from '../web/memory.mjs';
+import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 async function fixture(t) {
   const cpu = await createCPU(), heap = new Heap(cpu), gates = new Map();

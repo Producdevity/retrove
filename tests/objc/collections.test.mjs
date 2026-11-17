@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 
 test('dictionary fast enumeration yields keys in bounded batches and exposes mutations',async t=>{
   const x=await fixture(t),dictionary=await x.send(x.cls('NSMutableDictionary'),'new');

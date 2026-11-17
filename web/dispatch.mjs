@@ -1,4 +1,4 @@
-import {move, read32, write32} from './memory.mjs';
+import {move, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 const ON_HEAP=1<<24, HELPERS=1<<25, GLOBAL=1<<28, COUNT=65535;
 

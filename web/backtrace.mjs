@@ -1,4 +1,4 @@
-import {read32,write32} from './memory.mjs';
+import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 
 // Darwin's ARMv7 frame pointer is r7. Each record contains the previous r7 and saved lr.
 export function guestStack(cpu, limit, image) {

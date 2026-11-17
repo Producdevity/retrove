@@ -29,7 +29,7 @@ import {installUserDefaults} from '../src/runtime/ios/foundation/user-defaults.t
 import {installValues} from '../src/runtime/ios/foundation/values.ts';
 import {installUrlPaths,installStringPaths} from '../src/runtime/ios/foundation/paths.ts';
 import {formatDarwin} from './format.mjs';
-import {readString} from './memory.mjs';
+import {readString} from '../src/runtime/memory/guest-memory.ts';
 
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
   read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries,webViews}) {

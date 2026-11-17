@@ -1,5 +1,5 @@
 import {IMA4Decoder} from "../src/runtime/audio/codecs/ima4.ts";
-import {read32,write32} from './memory.mjs';
+import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 import {tag} from './audio-file.mjs';
 const view=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);
 const LPCM=tag('lpcm'),IMA=tag('ima4');

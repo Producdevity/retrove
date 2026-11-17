@@ -1,6 +1,6 @@
 import {glesImports} from '../web/gles.mjs';
 import {eaglDrawable} from '../web/drawable.mjs';
-import {read32, write32} from '../web/memory.mjs';
+import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 export async function render(kind) {
   const canvas = document.createElement('canvas');

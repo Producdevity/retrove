@@ -1,7 +1,7 @@
 import {test,vi} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 
 test('virtual vendor identity persists across launches and provides the documented iOS 7 legacy form',async t=>{
   const stored=new Map();

@@ -1,7 +1,7 @@
 import { test } from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import { fixture } from './fixture.mjs';
-import {readString} from '../../web/memory.mjs';
+import {readString} from '../../src/runtime/memory/guest-memory.ts';
 test('UIAlertView copies its message and variadic titles, preserves indices and does not retain its delegate',async t=>{
  const x=await fixture(t),alert=await x.send(x.cls('UIAlertView'),'alloc'),delegate=await x.send(x.cls('NSObject'),'new');
  const text=async pointer=>readString(x.cpu,await x.send(pointer,'UTF8String'));

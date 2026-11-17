@@ -1,6 +1,6 @@
 import {test, vi} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import { readString, write32 } from '../web/memory.mjs';
+import { readString, write32 } from '../src/runtime/memory/guest-memory.ts';
 import { fixture } from './objc/fixture.mjs';
 
 

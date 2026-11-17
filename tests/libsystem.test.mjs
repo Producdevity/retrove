@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
 import {systemImports} from '../web/libsystem.mjs';
-import {Heap, read32, write32} from '../web/memory.mjs';
+import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {stringImports} from '../web/strings.mjs';
 
 function pageFixture() {

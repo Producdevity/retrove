@@ -1,6 +1,6 @@
 import {singleShotDigests} from "../src/runtime/ios/crypto/single-shot.ts";
 import {crypt} from "../src/runtime/ios/crypto/crypt.ts";
-import {write32} from "./memory.mjs";
+import {write32} from "../src/runtime/memory/guest-memory.ts";
 import {md5, sha1} from './vendor/noble-hashes/legacy.js';
 import {sha224, sha256, sha384, sha512} from './vendor/noble-hashes/sha2.js';
 

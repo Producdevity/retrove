@@ -1,5 +1,5 @@
 import { createCPU } from '../web/cpu.mjs';
-import { Heap, read32, write32 } from '../web/memory.mjs';
+import { Heap, read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 import { objcImports } from '../web/objc.mjs';
 
 // Exercise the same UIApplication loop and Objective-C dispatch as a loaded app.
