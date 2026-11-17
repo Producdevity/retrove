@@ -1,4 +1,4 @@
-import { numericEqual } from "./numeric-equality";
+import { numericCompare, numericEqual } from "./numeric-equality";
 import { floatBits, floatFromBits, WORD_BYTES } from "../abi/scalars";
 import type { FoundationHost, GuestArguments } from "../objc/host";
 const NUMBER_CLASS = "NSNumber";
@@ -125,6 +125,10 @@ export function installNumbers(host: NumberHost): (pointer: number) => void {
     host.method(NUMBER_CLASS, false, selector, (self, args) =>
       Number(host.isNumber(args(0)) && numericEqual(host.get(self), host.get(args(0)))),
     );
+  host.method(NUMBER_CLASS, false, "compare:", (self, args) => {
+    if (!host.isNumber(args(0))) throw new Error("NSNumber compare: requires a number.");
+    return numericCompare(host.get(self), host.get(args(0)));
+  });
   const types = new Map<number, string>(),
     encodings = new Map<string, number>();
   const storage = (self: number): string => types.get(self) ?? inferredEncoding(host.get(self));

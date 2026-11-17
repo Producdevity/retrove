@@ -47,6 +47,15 @@ export function installArrayMethods(host: ArrayHost): void {
     const values = [...host.items(args(0))];
     for (const value of values) await host.send(self, "addObject:", [value]);
   });
+  host.method("NSMutableArray", false, "replaceObjectAtIndex:withObject:", async (self, args) => {
+    const index = args(0),
+      object = args(1);
+    if (!object) throw new Error("Cannot insert nil into NSMutableArray.");
+    if (index >= word(await host.send(self, "count", [])))
+      throw new Error("NSArray index outside bounds");
+    await host.send(self, "insertObject:atIndex:", [object, index + 1]);
+    await host.send(self, "removeObjectAtIndex:", [index]);
+  });
   host.method("NSMutableArray", false, "removeLastObject", async (self) => {
     const count = word(await host.send(self, "count", []));
     if (count) return host.send(self, "removeObjectAtIndex:", [count - 1]);

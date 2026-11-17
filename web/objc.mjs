@@ -1,5 +1,7 @@
 import {ColorSymbols} from "../src/runtime/graphics/core-graphics/colors/bindings.ts";
 import {LayerGravitySymbols} from "../src/runtime/ios/uikit/image/content-gravity.ts";
+import {AnimationSymbols} from "../src/runtime/ios/uikit/animation/basic.ts";
+import {installMutableStringEdits} from "../src/runtime/ios/foundation/text/mutable-string.ts";
 import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
 import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
 import {invocationForwarding} from "../src/runtime/ios/objc/invocation/forwarding.ts";
@@ -324,6 +326,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSMutableString',false,'appendString:',(s,a)=>{makeString(text(s)+text(a(0)),s);});
   method('NSMutableString',false,'appendFormat:',(s,a)=>{makeString(text(s)+foundationObjects.formatted(a(0),i=>a(i+1)),s);});
   method('NSMutableString',false,'copy',s=>makeString(text(s)));
+  installMutableStringEdits({method,text,assign:(self,value)=>{makeString(value,self);}});
   method('NSString',false,'mutableCopy',s=>makeString(text(s),alloc(names.get('NSMutableString'))));
   installPercentEscapes({method,text,string});
   installStringReplacement({method,text,string,assign:(p,v)=>{makeString(v,p);}});
@@ -756,6 +759,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   ]);
   for(const [symbol,value]of Object.entries(ColorSymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value]of Object.entries(LayerGravitySymbols))exportedStringNames.set(symbol,value);
+  for(const [symbol,value]of Object.entries(AnimationSymbols))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);

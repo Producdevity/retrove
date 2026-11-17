@@ -60,3 +60,24 @@ test('array selector broadcasts retain the complete snapshot while callbacks rem
  await x.send(array,'makeObjectsPerformSelector:',x.sel('act'));
  assert.deepEqual(calls,values);assert.ok(values.every(value=>!x.heap.live.has(value)));await x.send(array,'release');
 });
+
+test('NSMutableArray replaces owned elements in place, including with the same object',async t=>{
+ const x=await fixture(t),self=await x.send(x.cls('NSMutableArray'),'new');
+ const first=await x.send(x.cls('NSObject'),'new'),second=await x.send(x.cls('NSObject'),'new');
+ await x.send(self,'addObject:',first);await x.send(self,'addObject:',first);await x.send(first,'release');
+ await x.send(self,'replaceObjectAtIndex:withObject:',0,second);await x.send(second,'release');
+ assert.equal(await x.send(self,'objectAtIndex:',0),second);assert.equal(await x.send(self,'objectAtIndex:',1),first);
+ await x.send(self,'replaceObjectAtIndex:withObject:',1,first);assert.equal(await x.send(first,'retainCount'),1);
+ const selector=x.sel('replaceObjectAtIndex:withObject:');
+ await assert.rejects(()=>x.f('_objc_msgSend',self,selector,2,first),/outside bounds/);
+ await x.send(self,'release');assert.equal(x.heap.live.has(first),false);assert.equal(x.heap.live.has(second),false);
+});
+
+test('NSMutableArray sorts in place with the element comparison selector',async t=>{
+ const x=await fixture(t),self=await x.send(x.cls('NSMutableArray'),'new');
+ const values=[3,1,2];
+ for(const value of values){const number=await x.send(x.cls('NSNumber'),'numberWithInt:',value);await x.send(self,'addObject:',number);}
+ await x.send(self,'sortUsingSelector:',x.sel('compare:'));
+ const sorted=[];for(let i=0;i<3;i++)sorted.push(await x.send(await x.send(self,'objectAtIndex:',i),'intValue'));
+ assert.deepEqual(sorted,[1,2,3]);await x.send(self,'release');
+});

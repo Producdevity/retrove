@@ -145,6 +145,7 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     return result;
   }
   method('NSArray',false,'sortedArrayUsingSelector:',async(s,a)=>autorelease(array(await sorted(items(s),readString(cpu,a(0))))));
+  method('NSMutableArray',false,'sortUsingSelector:',async(s,a)=>{const list=items(s),result=await sorted(list,readString(cpu,a(0)));list.splice(0,list.length,...result);});
   method('NSArray',false,'componentsJoinedByString:',(s,a)=>string(items(s).map(description).join(text(a(0)))));
   method('NSArray',false,'objectEnumerator',s=>enumerate(items(s)??[]));
   method('NSArray',false,'reverseObjectEnumerator',s=>enumerate([...(items(s)??[])].reverse()));

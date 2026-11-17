@@ -1,6 +1,7 @@
 import {installLayerColors} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {installLayerProperties} from "../src/runtime/ios/uikit/layer-properties.ts";
 import {installAnimationGroups} from "../src/runtime/ios/uikit/animation/groups.ts";
+import {installBasicAnimations} from "../src/runtime/ios/uikit/animation/basic.ts";
 import {installTransactions} from "../src/runtime/ios/uikit/animation/transactions.ts";
 import {drawScrollIndicators} from "../src/runtime/ios/uikit/scroll/indicators.ts";
 import {installScrollViews} from "../src/runtime/ios/uikit/scroll/bindings.ts";
@@ -118,6 +119,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const transactions=installTransactions({...uiHost,thread:()=>currentThread?.()??1,now:()=>performance.now()});
   const layerGeometry=self=>data(data(self).backingView||self);
   installLayerProperties({...uiHost,geometry:layerGeometry,changed:(self,opacity)=>{layerGeometry(self)[opacity?"opacityAnimation":"layoutAnimation"]=transactions.context();},pixels:p=>getCoreGraphics?.()?.pixels(p),retainImage:p=>getCoreGraphics().retain(p),releaseImage:async p=>{await getCoreGraphics().release(p);}});
+  const basicAnimations=installBasicAnimations({...uiHost,responds:(p,name)=>!!p&&!!lookup(read(p),name),layer:layerGeometry,now:()=>performance.now()});
   installLayerColors({...uiHost,rgba:p=>getCoreGraphics?.()?.colors.rgba(p),retainColor:p=>getCoreGraphics().retain(p),releaseColor:async p=>{await getCoreGraphics().release(p);}});
   installLayerFactory({...uiHost,view:layerGeometry,setFrame:(self,rect)=>{setFrame(data(self).backingView||self,rect);layerGeometry(self).layoutAnimation=transactions.context();return self;}});
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
@@ -221,6 +223,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   installNibViews({...uiHost,items,bytes:pointer=>readBytes(read(pointer+DataField.Bytes),read(pointer+DataField.Length))});
   method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
   method('UIApplication',false,'keyWindow',()=>window);
+  method('UIApplication',false,'windows',()=>autorelease(collection('NSArray',window?[window]:[])));
   method('UIViewController',false,'setView:',async(self,a)=>{
     const view=a(0), old=controllerViews.get(self);
     if(old===view)return;
@@ -487,6 +490,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   }
   async function pump() {
     await animationGroups.pump();
+    await basicAnimations.pump();
     await scrollers.pump();
     if(window)await layout(window);
     await imageViews.render(window);await textFields.pump();webViews.render();
