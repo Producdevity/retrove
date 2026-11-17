@@ -12,6 +12,11 @@ import { withArchiveMaintenance } from "../archive-maintenance";
 import { withStorageUse, withStorageMaintenance } from "../coordination";
 import { withIdleApplications } from "../../runtime/session-lock";
 import type { SavedAppData, SavedData } from "./saved-data";
+import {
+  noTranslationData,
+  type TranslationData,
+  type TranslationSummary,
+} from "../../runtime/cpu/translation/translation-data";
 interface Archives extends ArchiveInventory {
   read(reference: ArchiveReference): Promise<Blob>;
   clearFiles(): Promise<void>;
@@ -31,6 +36,7 @@ export class StorageManagement {
     private readonly saves: SavedData,
     private readonly environment: Pick<LibraryEnvironment, "mutateArchive">,
     private readonly locks: LockManager = navigator.locks,
+    private readonly translations: TranslationData = noTranslationData,
   ) {}
   private async unused() {
     const identity = (ref: ArchiveReference) => JSON.stringify([ref.kind, ref.key]);
@@ -69,7 +75,15 @@ export class StorageManagement {
       await this.archives.remove(app.archive);
       if (includeData) await this.saves.remove(app.bundleId, namespaces, blocked);
       await this.db.remove(id);
+      await this.translations.removeApp(app.bundleId);
     });
+  }
+  translationSummary(): Promise<TranslationSummary> {
+    return this.translations.summary();
+  }
+  /** Translated code is rebuilt the next time each app runs. */
+  clearTranslations(): Promise<void> {
+    return this.translations.clear();
   }
   removeSaved(namespace: string, blocked?: (message: string) => void): Promise<void> {
     return this.environment.mutateArchive(applicationId(Platform.IOS, namespace), async () =>
@@ -113,6 +127,7 @@ export class StorageManagement {
                 await this.saves.remove(namespace, namespaces, blocked);
               this.saves.clearPreferences();
               await this.db.reset();
+              await this.translations.clear();
             },
             this.locks,
           );

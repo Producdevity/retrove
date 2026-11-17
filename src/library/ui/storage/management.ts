@@ -11,16 +11,19 @@ export function connectStorageManagement(
   const panel = element("manage-storage", HTMLDetailsElement),
     list = element("stored-apps", HTMLDivElement),
     unused = element("unused-storage", HTMLParagraphElement),
+    translated = element("translation-storage", HTMLParagraphElement),
     status = element("storage-status", HTMLParagraphElement);
   const clean = element("clean-unused", HTMLButtonElement),
-    clear = element("clear-apps", HTMLButtonElement);
+    clear = element("clear-apps", HTMLButtonElement),
+    forget = element("clear-translations", HTMLButtonElement);
   let busy = false,
-    unusedCount = 0;
+    unusedCount = 0,
+    translatedCount = 0;
   const execute = async (operation: () => Promise<void>) => {
     if (busy) return;
     busy = true;
     panel.classList.add("busy");
-    clean.disabled = clear.disabled = true;
+    clean.disabled = clear.disabled = forget.disabled = true;
     try {
       await operation();
       await changed();
@@ -32,6 +35,7 @@ export function connectStorageManagement(
       panel.classList.remove("busy");
       clear.disabled = false;
       clean.disabled = !unusedCount;
+      forget.disabled = !translatedCount;
     }
   };
   const refresh = async () => {
@@ -51,8 +55,15 @@ export function connectStorageManagement(
       ? `${formatBytes(bytes)} in ${inventory.unused.length} unfinished ${inventory.unused.length === 1 ? "import" : "imports"}.`
       : "No unfinished imports.";
     clean.disabled = busy || !inventory.unused.length;
+    const summary = await manager.translationSummary();
+    translatedCount = summary.modules + summary.apps;
+    translated.textContent = translatedCount
+      ? `Translated code for ${summary.apps} ${summary.apps === 1 ? "app" : "apps"} (${summary.modules} ${summary.modules === 1 ? "module" : "modules"}). Retrove rebuilds it the next time an app runs.`
+      : "No translated code stored.";
+    forget.disabled = busy || !translatedCount;
   };
   connectCleanupButtons(manager, clean, clear, status, execute, failure);
+  connectTranslationButton(manager, forget, status, execute, failure);
   panel.addEventListener(
     "toggle",
     action(async () => {
@@ -97,7 +108,7 @@ function connectCleanupButtons(
         !(await confirmAction({
           title: "Delete all apps & saves?",
           description:
-            "This removes every imported IPA, unfinished import, save and app setting from Retrove on this device. This cannot be undone.",
+            "This removes every imported IPA, unfinished import, save, app setting and translated code from Retrove on this device. This cannot be undone.",
           action: "Delete all",
         }))
       )
@@ -105,6 +116,32 @@ function connectCleanupButtons(
       await execute(async () => {
         await manager.clear(deleting);
         status.textContent = "All apps and saved data removed.";
+      });
+    }, failure),
+  );
+}
+function connectTranslationButton(
+  manager: StorageManagement,
+  forget: HTMLButtonElement,
+  status: HTMLParagraphElement,
+  execute: (operation: () => Promise<void>) => Promise<void>,
+  failure: (error: unknown) => void,
+): void {
+  forget.addEventListener(
+    "click",
+    action(async () => {
+      if (
+        !(await confirmAction({
+          title: "Clear translated code?",
+          description:
+            "Delete the ARM code Retrove translated for faster starts. Apps and saves are kept. The next launch of each app is slower while it translates again.",
+          action: "Clear",
+        }))
+      )
+        return;
+      await execute(async () => {
+        await manager.clearTranslations();
+        status.textContent = "Translated code cleared.";
       });
     }, failure),
   );

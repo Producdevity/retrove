@@ -4,6 +4,7 @@ import { ApplicationLibrary } from "./service";
 import { BrowserArchives } from "../storage/archive-repository";
 import { LibraryDatabase } from "../storage/library-database";
 import { browserLibraryEnvironment } from "../storage/environment";
+import { BrowserTranslationData } from "../runtime/cpu/translation/translation-data";
 
 import { collectOrphanArchives } from "../storage/archive-maintenance";
 interface BrowserLibrary {
@@ -21,10 +22,18 @@ export function browserLibrary(report: (error: unknown) => void): BrowserLibrary
   };
   const archives = new BrowserArchives(database);
   const environment = browserLibraryEnvironment(report);
-  const library = new ApplicationLibrary(database, archives, inspector, environment);
+  const translations = new BrowserTranslationData();
+  const library = new ApplicationLibrary(database, archives, inspector, environment, translations);
   return {
     library,
-    storage: new StorageManagement(database, archives, new SavedData(), environment),
+    storage: new StorageManagement(
+      database,
+      archives,
+      new SavedData(),
+      environment,
+      navigator.locks,
+      translations,
+    ),
     recover: () => collectOrphanArchives(database, archives),
   };
 }

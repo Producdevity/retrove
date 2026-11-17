@@ -4,12 +4,29 @@ export const TranslationStore = { Profiles: "profiles", Modules: "modules" } as 
 export type TranslationStore = (typeof TranslationStore)[keyof typeof TranslationStore];
 const DATABASE_NAME = "retrove.translation";
 const DATABASE_VERSION = 1;
-/** Separates a module key's build version from its hex digest; sorts below every digest character. */
+/** Separates a module key's build version from its app key; sorts below every hex digit. */
 export const VERSION_SEPARATOR = "!";
-/** Sorts above every hex digest character. */
+const SLOT_SEPARATOR = "/";
+/** Sorts above every hex digit. */
 const AFTER_DIGEST = "~";
 
-/** Translation profiles (per executable) and translated modules (per build), kept apart from app data. */
+export interface TranslationSummary {
+  readonly apps: number;
+  readonly modules: number;
+}
+/** Cache key for one replayed batch of an app (hex app key + batch index). */
+export function moduleSlot(app: string, index: number): string {
+  return app + SLOT_SEPARATOR + String(index);
+}
+function completion(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = transaction.onabort = () =>
+      reject(transaction.error ?? new Error("Translation storage transaction failed."));
+  });
+}
+
+/** Translation profiles and translated modules, keyed by app; kept apart from apps and saves. */
 export class TranslationDatabase {
   #connection: Promise<IDBDatabase> | undefined;
   readonly #factory: IDBFactory;
@@ -48,24 +65,54 @@ export class TranslationDatabase {
     } catch (error) {
       return Promise.reject(error instanceof Error ? error : new Error(String(error)));
     }
-    return new Promise((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = transaction.onabort = () =>
-        reject(transaction.error ?? new Error("Translation storage write failed."));
-    });
+    return completion(transaction);
   }
   /** Deletes modules translated by other builds. */
   async prune(version: string): Promise<void> {
-    const db = await this.database(),
-      transaction = db.transaction(TranslationStore.Modules, "readwrite"),
+    const transaction = (await this.database()).transaction(TranslationStore.Modules, "readwrite"),
       modules = transaction.objectStore(TranslationStore.Modules);
     modules.delete(IDBKeyRange.upperBound(version + VERSION_SEPARATOR, true));
     modules.delete(IDBKeyRange.lowerBound(version + VERSION_SEPARATOR + AFTER_DIGEST, true));
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = transaction.onabort = () =>
-        reject(transaction.error ?? new Error("Translation storage cleanup failed."));
-    });
+    await completion(transaction);
+  }
+  /** Deletes an app's profile and its modules from every build. */
+  async removeApp(app: string): Promise<void> {
+    const transaction = (await this.database()).transaction(
+        [TranslationStore.Profiles, TranslationStore.Modules],
+        "readwrite",
+      ),
+      modules = transaction.objectStore(TranslationStore.Modules),
+      marker = VERSION_SEPARATOR + app + SLOT_SEPARATOR,
+      keys = modules.openKeyCursor();
+    transaction.objectStore(TranslationStore.Profiles).delete(app);
+    keys.onsuccess = () => {
+      const cursor = keys.result;
+      if (!cursor) return;
+      const key = cursor.primaryKey;
+      if (typeof key === "string" && key.includes(marker)) modules.delete(key);
+      cursor.continue();
+    };
+    await completion(transaction);
+  }
+  async clear(): Promise<void> {
+    const transaction = (await this.database()).transaction(
+      [TranslationStore.Profiles, TranslationStore.Modules],
+      "readwrite",
+    );
+    transaction.objectStore(TranslationStore.Profiles).clear();
+    transaction.objectStore(TranslationStore.Modules).clear();
+    await completion(transaction);
+  }
+  async summary(): Promise<TranslationSummary> {
+    const transaction = (await this.database()).transaction(
+      [TranslationStore.Profiles, TranslationStore.Modules],
+      "readonly",
+    );
+    const [apps, modules] = await Promise.all([
+      requestResult(transaction.objectStore(TranslationStore.Profiles).count()),
+      requestResult(transaction.objectStore(TranslationStore.Modules).count()),
+    ]);
+    return { apps, modules };
   }
 }
 export function translationDatabase(): TranslationDatabase | undefined {

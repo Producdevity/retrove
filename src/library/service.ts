@@ -1,4 +1,8 @@
 import {
+  noTranslationData,
+  type TranslationData,
+} from "../runtime/cpu/translation/translation-data";
+import {
   applicationId,
   type ApplicationId,
   type InstalledApplication,
@@ -18,6 +22,7 @@ export class ApplicationLibrary {
     private readonly archives: ArchiveRepository,
     private readonly inspector: ApplicationInspector,
     private readonly environment: LibraryEnvironment,
+    private readonly translations: Pick<TranslationData, "removeApp"> = noTranslationData,
   ) {}
 
   list(): Promise<InstalledApplication[]> {
@@ -85,6 +90,11 @@ export class ApplicationLibrary {
       if (!app) return;
       await this.archives.remove(app.archive);
       await this.records.remove(id);
+      try {
+        await this.translations.removeApp(app.bundleId);
+      } catch (error) {
+        this.environment.cleanupFailure(error);
+      }
     });
   }
 

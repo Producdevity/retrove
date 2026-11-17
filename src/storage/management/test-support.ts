@@ -5,6 +5,8 @@ import { StorageManagement } from "./service";
 import { withApplicationSession } from "../../runtime/session-lock";
 import { withArchiveMutation } from "../archive-maintenance";
 import { SaveStorage } from "../../runtime/storage/save-storage";
+import { BrowserTranslationData } from "../../runtime/cpu/translation/translation-data";
+import { TranslationDatabase } from "../../runtime/cpu/translation/translation-store";
 import {
   applicationId,
   Platform,
@@ -69,7 +71,9 @@ export function storageFixture() {
     mutateArchive: <T>(id: InstalledApplication["id"], operation: () => Promise<T>) =>
       withApplicationSession(id, () => withArchiveMutation(operation, locks), locks),
   };
-  const manager = new StorageManagement(db, archives, saves, environment, locks);
+  const translationDatabase = new TranslationDatabase(factory),
+    translations = new BrowserTranslationData(translationDatabase);
+  const manager = new StorageManagement(db, archives, saves, environment, locks, translations);
   const app = async (namespace: string): Promise<InstalledApplication> => {
     const archive = await db.storeArchive(new File(["archive"], "test.ipa"), crypto.randomUUID());
     const value: InstalledApplication = {
@@ -97,5 +101,17 @@ export function storageFixture() {
     });
     await storage.close();
   };
-  return { factory, db, preferences, locks, saves, state, archives, manager, app, save };
+  return {
+    factory,
+    db,
+    preferences,
+    locks,
+    saves,
+    state,
+    archives,
+    manager,
+    app,
+    save,
+    translationDatabase,
+  };
 }

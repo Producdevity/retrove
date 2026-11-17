@@ -8,6 +8,7 @@ import { ForeignPages, ForeignQueue, FOREIGN_SLOTS } from "./foreign-pages";
 import { discoverExecutable, functionAt, type Executable } from "./executable";
 import { emptyStatistics, recordError, type TierStatistics } from "./tier-statistics";
 import { collectBatch } from "./collect";
+import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches, type TranslationProfile } from "./translation-profile";
 
 export type { TierStatistics } from "./tier-statistics";
@@ -20,7 +21,6 @@ const Batch = { instructions: 60_000, functions: 400 } as const;
 /** A short wait lets functions noted close together share one module. */
 const Coalesce = { Functions: 32, DelayMs: 30 } as const;
 const PROFILE_SAVE_MS = 5000;
-const CACHE_SLOT_SEPARATOR = "/";
 const WORD_BYTES = 4;
 const HALFWORD_BYTES = 2;
 const THUMB_BIT = 1;
@@ -31,7 +31,7 @@ export interface TierOptions {
   /** Functions translated in earlier launches; replayed in large batches when the executable is found. */
   readonly profile?: TranslationProfile | undefined;
   readonly onProfile?: ((profile: TranslationProfile) => void) | undefined;
-  /** Identifies this executable's modules in the worker's cache; without it nothing is cached. */
+  /** The app's key for its modules in the worker's cache; without it nothing is cached. */
   readonly cache?: string | undefined;
 }
 export class TranslatedTier {
@@ -117,7 +117,7 @@ export class TranslatedTier {
     if (!this.#options.profile) return;
     const cache = this.#options.cache;
     profileBatches(this.#options.profile, executable, Batch).forEach((functions, index) => {
-      const slot = cache && `${cache}${CACHE_SLOT_SEPARATOR}${index}`;
+      const slot = cache && moduleSlot(cache, index);
       this.#replay.push(this.#job(functions, this.#profile.entriesOf(functions), [], slot));
       for (const range of functions) this.#planned.add(range.start);
     });
