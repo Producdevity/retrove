@@ -35,11 +35,11 @@ export class BrowserTranslationData implements TranslationData {
     await this.#database?.clear();
   }
   async summary(): Promise<TranslationSummary> {
-    return (await this.#database?.summary()) ?? { apps: 0, modules: 0 };
+    return (await this.#database?.summary()) ?? { apps: 0, modules: 0, bytes: 0 };
   }
 }
 export const noTranslationData: TranslationData = {
   removeApp: () => Promise.resolve(),
   clear: () => Promise.resolve(),
-  summary: () => Promise.resolve({ apps: 0, modules: 0 }),
+  summary: () => Promise.resolve({ apps: 0, modules: 0, bytes: 0 }),
 };

@@ -29,9 +29,9 @@ test("deleting an app deletes its translated code from every build and keeps oth
     second = await x.app("test.other");
   await seed(x, first.bundleId);
   const kept = await seed(x, second.bundleId);
-  expect(await x.manager.translationSummary()).toEqual({ apps: 2, modules: 4 });
+  expect(await x.manager.translationSummary()).toEqual({ apps: 2, modules: 4, bytes: 32 });
   await x.manager.remove(first.id, false);
-  expect(await x.manager.translationSummary()).toEqual({ apps: 1, modules: 2 });
+  expect(await x.manager.translationSummary()).toEqual({ apps: 1, modules: 2, bytes: 16 });
   expect(await x.translationDatabase.get(TranslationStore.Profiles, kept)).toEqual({
     functions: [],
     entries: [],
@@ -44,10 +44,30 @@ test("translated code can be cleared alone and is cleared with all data", async 
     app = await x.app("test.game");
   await seed(x, app.bundleId);
   await x.manager.clearTranslations();
-  expect(await x.manager.translationSummary()).toEqual({ apps: 0, modules: 0 });
+  expect(await x.manager.translationSummary()).toEqual({ apps: 0, modules: 0, bytes: 0 });
   expect(await x.db.get(app.id)).toEqual(app);
   await seed(x, app.bundleId);
   await x.manager.clear();
-  expect(await x.manager.translationSummary()).toEqual({ apps: 0, modules: 0 });
+  expect(await x.manager.translationSummary()).toEqual({ apps: 0, modules: 0, bytes: 0 });
+  await x.db.close();
+});
+
+test("the summary counts the bytes of stored modules", async () => {
+  const x = storageFixture(),
+    app = await x.app("test.game"),
+    key = await translationAppKey(app.bundleId),
+    database = x.translationDatabase,
+    db = await database.database();
+  if (!key) throw new Error("Missing translation key");
+  await database.put(
+    db,
+    TranslationStore.Modules,
+    "/a.js" + VERSION_SEPARATOR + moduleSlot(key, 0),
+    {
+      job: "ab",
+      translation: new Uint8Array(1000),
+    },
+  );
+  expect(await x.manager.translationSummary()).toEqual({ apps: 0, modules: 1, bytes: 1004 });
   await x.db.close();
 });
