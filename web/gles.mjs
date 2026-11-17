@@ -2,7 +2,7 @@ import {installFixedFunction} from "../src/runtime/graphics/fixed-function/impor
 import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
 import {GLErrorState} from '../src/runtime/graphics/driver-errors.ts';
 import { read32, readString, write32 } from './memory.mjs';
-import { decodePVRTC } from './pvrtc.mjs';
+import { decodePVRTC } from '../src/runtime/graphics/pvrtc.ts';
 
 const ARRAY_BUFFER = 0x8892;
 const ELEMENT_ARRAY_BUFFER = 0x8893;

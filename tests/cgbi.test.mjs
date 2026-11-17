@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {deflateRawSync} from 'node:zlib';
-import {crc32} from '../web/crc32.mjs';
+import {crc32} from '../src/runtime/formats/crc32.ts';
 import {decodeCgBI} from '../web/cgbi.mjs';
 
 function chunk(type,data) {

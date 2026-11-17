@@ -22,7 +22,7 @@ import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
-import {phoneScreen} from './screen.mjs';
+import {phoneScreen} from '../src/runtime/ios/uikit/screen.ts';
 import {uiImages} from './uikit-images.mjs';
 
 const floatBits = new DataView(new ArrayBuffer(8));

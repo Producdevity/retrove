@@ -1,6 +1,6 @@
 import type { Diagnostic } from "../../web/ipa.mjs";
 import { graphicsContextInfo } from "../runtime/graphics/context-info";
-import { initialOrientation, phoneScreen } from "../../web/screen.mjs";
+import { initialOrientation, phoneScreen } from "../runtime/ios/uikit/screen";
 import { element } from "../ui/dom";
 const LAST_PORTRAIT_ORIENTATION = 2;
 export class PlayerDisplay {

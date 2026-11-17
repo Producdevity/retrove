@@ -109,7 +109,7 @@ export async function leaveOrphan(namespace) {
   same(await call("_unlink", path), 0);
 }
 export async function verifyRecovery(namespace) {
-  const { SaveStorage } = await import("../web/storage.mjs");
+  const { SaveStorage } = await import("../src/runtime/storage/save-storage.ts");
   const storage = new SaveStorage(namespace);
   try {
     await storage.run("readonly", async ({ inodes, chunks }) => {

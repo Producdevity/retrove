@@ -45,12 +45,12 @@ import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/app
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
-import {initialOrientation} from './screen.mjs';
+import {initialOrientation} from '../src/runtime/ios/uikit/screen.ts';
 import {coreFoundation} from './corefoundation.mjs';
 import {bundleStrings} from './localized-strings.mjs';
 import {foundationRunLoop} from './runloop.mjs';
 import {cfNetwork} from './cfnetwork.mjs';
-import {geometry} from './geometry.mjs';
+import {geometry} from '../src/runtime/graphics/core-graphics/geometry.ts';
 import {fileManager} from './foundation-files.mjs';
 import {foundation} from './foundation.mjs';
 import { touchUIKit } from './touch.mjs';

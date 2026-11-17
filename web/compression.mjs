@@ -1,4 +1,4 @@
-import {crc32, crcTable} from './crc32.mjs';
+import {crc32, crcTable} from '../src/runtime/formats/crc32.ts';
 import {read32, write32} from './memory.mjs';
 import {ZStream, inflateInit2, inflate, inflateEnd, deflateInit2, deflate, deflateEnd} from './vendor/pako-zlib.mjs';
 

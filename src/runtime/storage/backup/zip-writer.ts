@@ -1,4 +1,4 @@
-import { crc32 } from "../../../../web/crc32.mjs";
+import { crc32 } from "../../formats/crc32";
 const Limits = { Entries: 65_535, Bytes: 0xffffffff, NameBytes: 65_535 } as const;
 const Signature = { Local: 0x04034b50, Central: 0x02014b50, End: 0x06054b50 } as const;
 const Length = { Local: 30, Central: 46, End: 22 } as const;

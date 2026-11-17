@@ -1,5 +1,5 @@
 import {ZStream,inflateInit2,inflate,inflateEnd} from './vendor/pako-zlib.mjs';
-import {crc32} from './crc32.mjs';
+import {crc32} from '../src/runtime/formats/crc32.ts';
 
 const IHDR=0x49484452, IDAT=0x49444154, IEND=0x49454e44, CGBI=0x43674249;
 const adam7=[[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]];

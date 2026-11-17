@@ -1,7 +1,7 @@
 import {test} from "vite-plus/test";
 import assert from "node:assert/strict";
 import { prepareBioShockConfig } from "../web/bioshock-config.mjs";
-import { homeDirectories } from "../web/storage.mjs";
+import { homeDirectories } from "../src/runtime/storage/records.ts";
 import { fixture, writeSave, verifySave, isolated } from "./files-cases.mjs";
 
 // Use identical guest calls against real IndexedDB in files-browser.py.

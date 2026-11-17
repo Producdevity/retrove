@@ -1,6 +1,6 @@
-import {DIRENT_BYTES, direntBytes, statBytes, virtualInode} from './file-metadata.mjs';
+import {DIRENT_BYTES, direntBytes, statBytes, virtualInode} from '../src/runtime/ios/libc/file-metadata.ts';
 import { readCStringBytes, readString, write32 } from "./memory.mjs";
-import { SaveStorage } from "./storage.mjs";
+import { SaveStorage } from "../src/runtime/storage/save-storage.ts";
 
 const E = { PERM: 1, NOENT: 2, IO: 5, BADF: 9, NOMEM: 12, ACCESS: 13, FAULT: 14, EXIST: 17,
   NOTDIR: 20, ISDIR: 21, INVAL: 22, FBIG: 27, NOSPC: 28, SPIPE: 29, ROFS: 30, RANGE: 34,

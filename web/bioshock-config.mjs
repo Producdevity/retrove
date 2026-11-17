@@ -1,5 +1,5 @@
 // The native port prepares Documents/BioshockConfig before running game constructors.
-import {SaveStorage} from './storage.mjs';
+import {SaveStorage} from '../src/runtime/storage/save-storage.ts';
 
 export async function prepareBioShockConfig(ipa, diagnostic, storage) {
   if (ipa.info?.CFBundleIdentifier !== 'com.hip.180282' || !ipa.entries) return;

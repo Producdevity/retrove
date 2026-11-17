@@ -1,4 +1,4 @@
-import { crc32 } from './crc32.mjs';
+import { crc32 } from '../src/runtime/formats/crc32.ts';
 import { parsePlist } from "./plist.mjs";
 export { parsePlist } from "./plist.mjs";
 
