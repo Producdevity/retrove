@@ -9,6 +9,7 @@ export const ControlEvent = {
   UpInside: 64,
   UpOutside: 128,
   Cancel: 256,
+  ValueChanged: 0x1000,
   EditingDidBegin: 0x10000,
   EditingChanged: 0x20000,
   EditingDidEnd: 0x40000,

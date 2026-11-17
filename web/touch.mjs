@@ -22,6 +22,7 @@ import {InputMetrics, DropReason} from '../src/runtime/diagnostics/input-metrics
 import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
+import {installPageControls} from '../src/runtime/ios/uikit/page-control/bindings.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
 import {phoneScreen} from '../src/runtime/ios/uikit/screen.ts';
 import {uiImages} from './uikit-images.mjs';
@@ -71,9 +72,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  let textViews,pickerViews,scrollers,uiColors;
+  let textViews,pickerViews,pageControls,scrollers,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),hasHostDrawing:p=>textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -113,6 +114,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     return {clipPath:clip(self),left:(p[0]-screen[0])*sx+'px',top:(p[1]-screen[1])*sy+'px',width:w+'px',height:h+'px',opacity:String(alpha),transform:'matrix('+[(qx[0]-p[0])*sx,(qx[1]-p[1])*sy,(qy[0]-p[0])*sx,(qy[1]-p[1])*sy,0,0].join(',')+')'};
   };
   const controls=installControls(controlHost);installButtons({...controlHost,adjustImage:(pointer,brightness,opacity)=>{data(pointer).imageAdjustment={brightness,opacity};},imageSize:imageViews.size,labelSize:textViews.size},controls);
+  pageControls=installPageControls({...controlHost,touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
   const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});
   const textFields=installTextFields({...controlHost,selector,mount:mediaHost,font:p=>textViews.font(p),layout:fieldLayout,enabled:p=>controls.get(p).enabled,dispatch:(p,events)=>controls.dispatch(p,events)});
   scrollers=installScrollViews({...uiHost,parent:p=>data(p).parent,now:()=>performance.now(),isControl:p=>!!lookup(read(p),'sendActionsForControlEvents:'),local:(self,point)=>{const value=convertPoint(point,window,self),bounds=data(self).bounds;return [value[0]-bounds[0],value[1]-bounds[1]];},boundsChanged:self=>{const v=data(self);if(v.layer){setFrame(v.layer,[...v.bounds]);data(v.layer).bounds=[...v.bounds];}}});

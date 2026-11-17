@@ -9,6 +9,14 @@ import {
 export type { RGBA } from "../../graphics/core-graphics/colors/model";
 const COLOR_CLASS = "UIColor";
 const COLOR_INSTANCE_BYTES = (COLOR_COMPONENTS + 1) * WORD_BYTES;
+const Level = {
+  Third: 0.333,
+  Half: 0.5,
+  TwoThirds: 0.667,
+  Brown: 0.6,
+  BrownGreen: 0.4,
+  BrownBlue: 0.2,
+} as const;
 const PALETTE = {
   blackColor: [0, 0, 0, 1],
   whiteColor: [1, 1, 1, 1],
@@ -20,6 +28,13 @@ const PALETTE = {
   magentaColor: [1, 0, 1, 1],
   clearColor: [0, 0, 0, 0],
   darkTextColor: [0, 0, 0, 1],
+  lightTextColor: [1, 1, 1, Level.Brown],
+  darkGrayColor: [Level.Third, Level.Third, Level.Third, 1],
+  grayColor: [Level.Half, Level.Half, Level.Half, 1],
+  lightGrayColor: [Level.TwoThirds, Level.TwoThirds, Level.TwoThirds, 1],
+  orangeColor: [1, Level.Half, 0, 1],
+  purpleColor: [Level.Half, 0, Level.Half, 1],
+  brownColor: [Level.Brown, Level.BrownGreen, Level.BrownBlue, 1],
 } satisfies Record<string, RGBA>;
 interface ColorHost extends UIKitHost {
   setColor(channels: RGBA, fill: boolean, stroke: boolean): void;
