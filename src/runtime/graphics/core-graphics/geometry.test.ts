@@ -49,3 +49,19 @@ test("constants are written once into zeroed guest memory", () => {
   const identity = cg.constants.get("_CGAffineTransformIdentity");
   expect(identity && writes.get(identity)).toEqual([1, 0, 0, 1, 0, 0]);
 });
+
+test("containment, insets and scaled transforms follow CoreGraphics", () => {
+  const { cg, writes } = setup();
+  expect(call(cg.funcs["_CGRectGetMinX"], [10, 0, -4, 2].map(bits))).toBe(bits(6));
+  expect(call(cg.funcs["_CGRectGetMaxY"], [0, 10, 0, -4].map(bits))).toBe(bits(10));
+  const rect = [0, 0, 10, 10];
+  expect(call(cg.funcs["_CGRectContainsPoint"], [...rect, 0, 9.5].map(bits))).toBe(1);
+  expect(call(cg.funcs["_CGRectContainsPoint"], [...rect, 10, 5].map(bits))).toBe(0);
+  expect(call(cg.funcs["_CGRectContainsRect"], [...rect, 2, 2, 8, 8].map(bits))).toBe(1);
+  call(cg.funcs["_CGRectInset"], [0x2000, ...[...rect, 2, 3].map(bits)]);
+  expect(writes.get(0x2000)).toEqual([2, 3, 6, 4]);
+  call(cg.funcs["_CGRectInset"], [0x3000, ...[...rect, 6, 0].map(bits)]);
+  expect(writes.get(0x3000)).toEqual([Infinity, Infinity, 0, 0]);
+  call(cg.funcs["_CGAffineTransformScale"], [0x4000, ...[1, 0, 0, 1, 5, 6, 2, 3].map(bits)]);
+  expect(writes.get(0x4000)).toEqual([2, 0, 0, 3, 5, 6]);
+});

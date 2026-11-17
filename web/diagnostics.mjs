@@ -102,7 +102,7 @@ function formatEntry(e) {
 // nearly full. The export in the currently open tab retains its full detail.
 function compactCheckpoint(run) {
   const compact = entry => ({...entry, message: clip(entry.message, 320), details: clip(entry.details, 450)});
-  return {...run, linker: undefined, metadata: clip(run.metadata, 1000), snapshot: clip(run.snapshot, 4500),
+  return {...run, linker: undefined, coverage: undefined, metadata: clip(run.metadata, 1000), snapshot: clip(run.snapshot, 4500),
     head: run.head.slice(0, 4).map(compact), tail: [...run.head.slice(4), ...run.tail].slice(-8).map(compact),
     firstError: run.firstError && {...run.firstError, details: clip(run.firstError.details, 1500)},
     compact: true};
@@ -178,6 +178,10 @@ export class DiagnosticRecorder {
     if (e.area === 'linker' && details && typeof details === 'string') {
       run.linker = clip(details, 24000);
       e.details = 'See the unresolved import list at the end of this report.';
+    }
+    if (e.area === 'coverage' && details && typeof details === 'string') {
+      run.coverage = clip(details, 24000);
+      e.details = 'See the unimplemented class and selector list at the end of this report.';
     }
     if (run.head.length < HEAD_COUNT) run.head.push(e);
     else {
@@ -260,6 +264,7 @@ export class DiagnosticRecorder {
     }
     if (run.snapshot) rows.push('', 'Latest runtime snapshot', run.snapshot);
     if (typeof run.linker === 'string') rows.push('', 'Unresolved imports at load time', run.linker);
+    if (typeof run.coverage === 'string') rows.push('', 'Unimplemented classes and selectors referenced by the app', run.coverage);
     return rows.join('\n');
   }
 }

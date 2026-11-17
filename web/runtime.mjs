@@ -246,6 +246,10 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     signal?.throwIfAborted();
     milestone('Install Objective-C metadata', {initializers: load.initializers.length, unresolvedImports: unsupported.length});
     objc.install(image);
+    const missing = objc.coverage();
+    link = {...link, unimplementedClasses: missing.classes.length, unimplementedSelectors: missing.selectors.length};
+    if (missing.classes.length || missing.selectors.length) diagnostic('debug', 'coverage', 'Unimplemented classes and selectors',
+      'Classes (' + missing.classes.length + '): ' + missing.classes.join(', ') + '\n\nSelectors (' + missing.selectors.length + '):\n' + missing.selectors.join('\n'));
     let lastYield = performance.now(), lastService = lastYield;
     async function nested(entry, args, wide = false) {
       const state = cpu.saveState();

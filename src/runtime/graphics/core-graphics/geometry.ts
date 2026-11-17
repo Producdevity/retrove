@@ -7,6 +7,7 @@ const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 const RECT_FLOATS = 4;
 const POINT_FLOATS = 2;
 const TRANSFORM_AND_POINT_FLOATS = 8;
+const TRANSFORM_FLOATS = 6;
 const HALF = 2;
 const Rect = { X: 0, Width: 2, Height: 3 } as const;
 const Scale = { X: 1, Y: 2 } as const;
@@ -45,26 +46,9 @@ const edges = (args: GuestArguments, first = 0): Edges => {
   ];
 };
 
-export function geometry(cpu: GeometryHost, heap: GeometryHeap) {
-  const store = (destination: number, values: readonly number[]) => {
-    const view = new DataView(new ArrayBuffer(values.length * FLOAT_BYTES));
-    values.forEach((value, index) => view.setFloat32(index * FLOAT_BYTES, value, true));
-    cpu.write(destination, new Uint8Array(view.buffer));
-    return destination;
-  };
-  const constants = new Map<string, number>();
-  for (const [name, values] of [
-    ["_CGPointZero", [0, 0]],
-    ["_CGRectZero", [0, 0, 0, 0]],
-    ["_CGSizeZero", [0, 0]],
-    ["_CGRectNull", [Infinity, Infinity, 0, 0]],
-    ["_CGAffineTransformIdentity", [1, 0, 0, 1, 0, 0]],
-    ["_UIWindowLevelAlert", [UI_WINDOW_LEVEL_ALERT]],
-  ] as const)
-    constants.set(name, store(heap.zero(values.length * FLOAT_BYTES), values));
-  const funcs: Record<string, GeometryImport> = {
-    _CACurrentMediaTime: () => currentMediaTime(),
-    ...affineImports(),
+type Store = (destination: number, values: readonly number[]) => number;
+function rectImports(store: Store): Record<string, GeometryImport> {
+  return {
     _CGRectIsNull: (a) => Number(decode(a(0)) === Infinity || decode(a(1)) === Infinity),
     _CGRectIsEmpty: (a) =>
       Number(
@@ -98,6 +82,52 @@ export function geometry(cpu: GeometryHost, heap: GeometryHeap) {
         cos = Math.cos(radians);
       return store(a(0), [cos, sin, -sin, cos, 0, 0]);
     },
+    _CGRectContainsPoint: (a) => {
+      const [left, top, right, bottom] = edges(a),
+        [x = 0, y = 0] = floats(a, POINT_FLOATS, RECT_FLOATS);
+      return Number(x >= left && x < right && y >= top && y < bottom);
+    },
+    _CGRectContainsRect: (a) => {
+      const [l0, t0, r0, b0] = edges(a),
+        [l1, t1, r1, b1] = edges(a, RECT_FLOATS);
+      return Number(l1 >= l0 && t1 >= t0 && r1 <= r0 && b1 <= b0);
+    },
+    _CGRectInset: (a) => {
+      const [left, top, right, bottom] = edges(a, 1),
+        [dx = 0, dy = 0] = floats(a, POINT_FLOATS, 1 + RECT_FLOATS);
+      if (left + dx > right - dx || top + dy > bottom - dy)
+        return store(a(0), [Infinity, Infinity, 0, 0]);
+      return store(a(0), [left + dx, top + dy, right - left - dx - dx, bottom - top - dy - dy]);
+    },
+  };
+}
+
+export function geometry(cpu: GeometryHost, heap: GeometryHeap) {
+  const store = (destination: number, values: readonly number[]) => {
+    const view = new DataView(new ArrayBuffer(values.length * FLOAT_BYTES));
+    values.forEach((value, index) => view.setFloat32(index * FLOAT_BYTES, value, true));
+    cpu.write(destination, new Uint8Array(view.buffer));
+    return destination;
+  };
+  const constants = new Map<string, number>();
+  for (const [name, values] of [
+    ["_CGPointZero", [0, 0]],
+    ["_CGRectZero", [0, 0, 0, 0]],
+    ["_CGSizeZero", [0, 0]],
+    ["_CGRectNull", [Infinity, Infinity, 0, 0]],
+    ["_CGAffineTransformIdentity", [1, 0, 0, 1, 0, 0]],
+    ["_UIWindowLevelAlert", [UI_WINDOW_LEVEL_ALERT]],
+  ] as const)
+    constants.set(name, store(heap.zero(values.length * FLOAT_BYTES), values));
+  const funcs: Record<string, GeometryImport> = {
+    _CACurrentMediaTime: () => currentMediaTime(),
+    ...affineImports(),
+    ...rectImports(store),
+    _CGAffineTransformScale: (a) => {
+      const [xx = 0, xy = 0, yx = 0, yy = 0, tx = 0, ty = 0] = floats(a, TRANSFORM_FLOATS, 1),
+        [sx = 1, sy = 1] = floats(a, POINT_FLOATS, 1 + TRANSFORM_FLOATS);
+      return store(a(0), [xx * sx, xy * sx, yx * sy, yy * sy, tx, ty]);
+    },
     _CGAffineTransformMakeScale: (a) =>
       store(a(0), [decode(a(Scale.X)), 0, 0, decode(a(Scale.Y)), 0, 0]),
     _CGAffineTransformTranslate: (a) => {
@@ -111,6 +141,8 @@ export function geometry(cpu: GeometryHost, heap: GeometryHeap) {
   };
   const getters: Record<string, (edges: Edges) => number> = {
     Width: ([left, , right]) => right - left,
+    MinX: ([left]) => left,
+    MaxY: ([, , , bottom]) => bottom,
     Height: ([, top, , bottom]) => bottom - top,
     MinY: ([, top]) => top,
     MaxX: ([, , right]) => right,

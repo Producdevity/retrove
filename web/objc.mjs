@@ -717,6 +717,17 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       register(read(ptr), true, ptr);
     }
   }
+  const referencedSelectors = new Set();
+  // Static coverage: framework classes the app links that Retrove does not implement, and selectors the
+  // executable references that neither the app nor Retrove defines (optional or dynamic calls included).
+  function coverage() {
+    const defined = new Set();
+    for (const info of classes.values()) if (info.supported) for (const name of info.methods.keys()) defined.add(name);
+    return {
+      classes: [...classes.values()].filter(info => !info.isMeta && !info.supported).map(info => info.name).sort(),
+      selectors: [...referencedSelectors].filter(name => !defined.has(name)).sort(),
+    };
+  }
   function install(image) {
     const sections = image.segments.flatMap(segment => segment.sections);
     function each(sectionName, visit) {
@@ -725,7 +736,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
         for (let at = section.address; at < section.address + section.size; at += 4) visit(read(at), at);
       }
     }
-    each('__objc_selrefs', (p, at) => write(at, selector(readString(cpu, p))));
+    each('__objc_selrefs', (p, at) => { const name = readString(cpu, p); referencedSelectors.add(name); write(at, selector(name)); });
     each('__objc_classlist', p => register(p, false, p));
     const loaded = new Set();
     function queueClass(p) {
@@ -900,7 +911,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
     _NSStringFromSelector: a => a(0) ? string(readString(cpu, a(0))) : 0,
   };
-  return { funcs, resolveData, install, stringText:text, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAlerts:input.pumpAlerts, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
+  return { funcs, resolveData, install, coverage, stringText:text, graphicsAPI:()=>contextAPIs.get(currentContext())??RenderingAPI.OpenGLES2, graphicsContext:currentContext, isKindOf:isKind, attachCoreGraphics:cg=>{quartz=cg;}, currentThreadId:()=>threads?.funcs._pthread_self() ?? 0, setDispatch:d=>{dispatchService=d;}, blockClasses, retainObject:retain, releaseObject:releaseFromHost, pumpMovies: movies.pump, pumpAlerts:input.pumpAlerts, pumpAudioPlayers:audioPlayers.pump, audioPlayerSnapshot:audioPlayers.snapshot,
     audioReasonDictionary(key,value){return autorelease(foundationObjects.dictionary(names.get('NSDictionary'),[[string(key),foundationObjects.number(value)]]));},
     async audioSessionNotification(notification,key,value){
       const info=this.audioReasonDictionary(key,value);
