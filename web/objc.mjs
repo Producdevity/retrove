@@ -404,6 +404,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('NSBundle', true, 'mainBundle', mainBundle);
   method('NSBundle', true, 'bundleForClass:', (_,a)=>classes.has(a(0))?mainBundle():0);
   for (const name of ['bundlePath', 'resourcePath']) method('NSBundle', false, name, () => string('/' + ipa.bundlePath));
+  method('NSBundle', false, 'loadNibNamed:owner:options:', (self, a) => nibs.named(text(a(0)), a(1), self));
   method('NSBundle', false, 'bundleIdentifier', () => ipa.info.CFBundleIdentifier ? string(ipa.info.CFBundleIdentifier) : 0);
   method('NSBundle', false, 'executablePath', () => string('/' + ipa.executablePath));
   const localized = bundleStrings(ipa);
@@ -602,7 +603,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},send,
     scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
     initializeBuiltin:async(p,name,fields,graph)=>await nibs.initialize(p,name,fields,graph)??initializeFoundationArchive(p,name,fields,graph)});
-  nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,items:input.items,ipa,openArchive:source=>unarchiver.open(source),
+  nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,items:input.items,ipa,parse:parsePlist,openArchive:source=>unarchiver.open(source),
     setOutlet:(self,key,value)=>connectOutlet({read,write,cString:p=>readString(cpu,p),responds:(p,name)=>!!lookup(read(p),name),send,retain,release:releaseFromHost},self,key,value)});
   installArchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,
     classes:p=>{const result=[],seen=new Set();for(let cls=read(p);cls&&!seen.has(cls);cls=read(cls+4)){seen.add(cls);const info=classes.get(cls);if(!info)throw Error('Invalid archived class');result.push(info.name);}return result;},

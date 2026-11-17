@@ -6,6 +6,10 @@ import type { NibHost } from "./host";
 const PROXY_CLASS = "UIProxyObject";
 const OUTLET_CLASS = "UIRuntimeOutletConnection";
 const MAIN_NIB_KEY = "NSMainNibFile";
+const BINARY_PLIST = new TextEncoder().encode("bplist00");
+function binaryPlist(bytes: Uint8Array): boolean {
+  return BINARY_PLIST.every((byte, index) => bytes[index] === byte);
+}
 export class NibLoader {
   private readonly owners = new WeakMap<ArchiveGraph, number>();
   private readonly connections = new Map<number, ArchiveFields>();
@@ -32,7 +36,7 @@ export class NibLoader {
       if (identifier !== "IBFilesOwner" && identifier !== "IBFirstResponder")
         throw new Error("Unsupported external nib object: " + identifier);
       this.host.destroy(self);
-      return identifier === "IBFilesOwner" ? this.host.retain(owner) : 0;
+      return identifier === "IBFilesOwner" && owner ? this.host.retain(owner) : 0;
     }
     if (name === OUTLET_CLASS) {
       this.connections.set(self, fields);
@@ -49,7 +53,9 @@ export class NibLoader {
     if (source) await this.host.setOutlet(source, key, destination);
   }
   async load(bytes: Uint8Array, owner: number): Promise<number> {
-    const archive = this.host.openArchive(keyedNib(parseNib(bytes)));
+    const archive = this.host.openArchive(
+      binaryPlist(bytes) ? this.host.parse(bytes) : keyedNib(parseNib(bytes)),
+    );
     this.owners.set(archive.graph, owner);
     try {
       const graph = archive.graph;
@@ -61,9 +67,15 @@ export class NibLoader {
       const visible = await graph.decode(graph.top[NibKey.VisibleWindows]);
       for (const window of this.host.items(visible))
         await this.host.send(window, "makeKeyAndVisible");
-      return this.host.autorelease(
-        this.host.retain(await graph.decode(graph.top[NibKey.TopLevel])),
-      );
+      const top = this.host.retain(await graph.decode(graph.top[NibKey.TopLevel])),
+        items = this.host.items(top);
+      for (let index = items.length - 1; index >= 0; index--) {
+        const object = items[index];
+        if (object && object !== owner) continue;
+        items.splice(index, 1);
+        if (object) await this.host.release(object);
+      }
+      return this.host.autorelease(top);
     } finally {
       await this.host.release(archive.pointer);
     }
