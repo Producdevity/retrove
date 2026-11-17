@@ -1,13 +1,35 @@
-import { CodeMemory, runJob } from "./translation-job";
+import { ModuleCache } from "./module-cache";
+import { CodeMemory, runJob, type TranslationJob } from "./translation-job";
 import {
   TranslationMessage,
   isTranslationRequest,
   type TranslationResponse,
 } from "./translation-protocol";
+import { translationDatabase } from "./translation-store";
 
 declare function postMessage(message: TranslationResponse, transfer: Transferable[]): void;
 
 const memory = new CodeMemory();
+const word = (address: number): number | undefined => memory.word(address);
+/** Development builds change translator code without changing this module's URL, so they skip the cache. */
+const database = import.meta.env.DEV ? undefined : translationDatabase();
+const cache = database && new ModuleCache(database, new URL(import.meta.url).pathname);
+
+async function translate(id: number, job: TranslationJob): Promise<void> {
+  try {
+    const result = cache ? await cache.run(job, word) : runJob(job, word);
+    const transfer = new Set<ArrayBufferLike>([
+      result.translation.wasm.buffer,
+      ...result.translation.functions.map((translated) => translated.labels.buffer),
+    ]);
+    postMessage(
+      { type: TranslationMessage.Done, id, result },
+      [...transfer].filter((buffer) => buffer instanceof ArrayBuffer),
+    );
+  } catch (error) {
+    postMessage({ type: TranslationMessage.Failed, id, message: String(error) }, []);
+  }
+}
 addEventListener("message", (event: MessageEvent<unknown>) => {
   const request = event.data;
   if (!isTranslationRequest(request)) return;
@@ -19,21 +41,6 @@ addEventListener("message", (event: MessageEvent<unknown>) => {
       memory.patch(request.snapshot.start, request.snapshot.bytes);
       return;
     case TranslationMessage.Translate:
-      try {
-        const result = runJob(request.job, (address) => memory.word(address));
-        const transfer = new Set<ArrayBufferLike>([
-          result.translation.wasm.buffer,
-          ...result.translation.functions.map((translated) => translated.labels.buffer),
-        ]);
-        postMessage(
-          { type: TranslationMessage.Done, id: request.id, result },
-          [...transfer].filter((buffer) => buffer instanceof ArrayBuffer),
-        );
-      } catch (error) {
-        postMessage(
-          { type: TranslationMessage.Failed, id: request.id, message: String(error) },
-          [],
-        );
-      }
+      void translate(request.id, request.job);
   }
 });

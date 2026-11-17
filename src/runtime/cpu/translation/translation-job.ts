@@ -22,10 +22,13 @@ export interface TranslationJob {
   readonly code: { readonly start: number; readonly end: number } | undefined;
   /** Bytes that are only valid for this job (code pages outside the main executable). */
   readonly pages: readonly CodeSnapshot[];
+  /** Slot for this job's module in the worker's cache; replayed batches reuse their slot every launch. */
+  readonly cacheKey: string | undefined;
 }
 export interface JobResult {
   readonly translation: Translation;
   readonly elapsedMs: number;
+  readonly cached: boolean;
 }
 /** Guest code bytes for word reads; later snapshots and patches replace earlier bytes. */
 export class CodeMemory {
@@ -82,7 +85,7 @@ export function runJob(
       return address;
     },
   });
-  return { translation, elapsedMs: performance.now() - began };
+  return { translation, elapsedMs: performance.now() - began, cached: false };
 }
 /** Builds a job, allocating one label table (an i32 per halfword) for each function. */
 export function buildJob(

@@ -16,3 +16,12 @@ export function translationWorkerEnabled(): boolean {
     return true;
   }
 }
+const CACHE_KEY = "retrove.translationCache";
+/** Translated modules and profiles are kept between launches unless a tester turns that off (`retrove.translationCache=off`). */
+export function translationCacheEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(CACHE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}

@@ -21,6 +21,7 @@ describe("translation jobs", () => {
       layout: stateLayout(0x10000, 0x20000, { base: 0x30000, start: 0x2000, end: 0x3000 }),
       stopPC: 1,
       code: { start: 0x2000, end: 0x3000 },
+      cacheKey: undefined,
       allocate: (bytes) => {
         sizes.push(bytes);
         return 0x40000;

@@ -52,3 +52,32 @@ export class ForeignPages {
     return true;
   }
 }
+/** Foreign code pages waiting for translation, with the entries seen on each page. */
+export class ForeignQueue {
+  readonly #entries = new Map<number, Set<number>>();
+  readonly #queued = new Set<number>();
+  get size(): number {
+    return this.#queued.size;
+  }
+  /** Queues the page for an entry; false when the entry was already known. */
+  note(page: number, pc: number): boolean {
+    const entries = this.#entries.get(page) ?? new Set<number>();
+    if (entries.has(pc)) return false;
+    entries.add(pc);
+    this.#entries.set(page, entries);
+    this.#queued.add(page);
+    return true;
+  }
+  /** Queued pages with all their entries; empties the queue. */
+  take(): [number, number[]][] {
+    const pages = [...this.#queued].map((page): [number, number[]] => [
+      page,
+      [...(this.#entries.get(page) ?? [])],
+    ]);
+    this.#queued.clear();
+    return pages;
+  }
+  forget(page: number): void {
+    this.#entries.delete(page);
+  }
+}

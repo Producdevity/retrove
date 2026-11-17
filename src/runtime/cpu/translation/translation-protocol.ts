@@ -52,6 +52,7 @@ export function isTranslationResponse(value: unknown): value is TranslationRespo
     value.type === TranslationMessage.Done &&
     record(value.result) &&
     typeof value.result.elapsedMs === "number" &&
+    typeof value.result.cached === "boolean" &&
     record(value.result.translation) &&
     value.result.translation.wasm instanceof Uint8Array &&
     Array.isArray(value.result.translation.functions)

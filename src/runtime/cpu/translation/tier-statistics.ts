@@ -3,6 +3,10 @@ export interface TierStatistics {
   translatedFunctions: number;
   pendingFunctions: number;
   batches: number;
+  /** Batches built from the profile of earlier launches. */
+  replayModules: number;
+  /** Modules the worker reused from earlier launches instead of translating. */
+  cachedModules: number;
   translateMs: number;
   compileMs: number;
   wasmBytes: number;
@@ -19,6 +23,8 @@ export function emptyStatistics(): TierStatistics {
     translatedFunctions: 0,
     pendingFunctions: 0,
     batches: 0,
+    replayModules: 0,
+    cachedModules: 0,
     translateMs: 0,
     compileMs: 0,
     wasmBytes: 0,

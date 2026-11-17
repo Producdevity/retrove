@@ -7,7 +7,8 @@ import {TciTier, TciTierLimit} from '../src/runtime/cpu/tci/tier.ts';
 import {TranslatedTier} from '../src/runtime/cpu/translation/tier.ts';
 import {RegisterBridge} from '../src/runtime/cpu/translation/register-bridge.ts';
 import {runTranslated} from '../src/runtime/cpu/translation/runner.ts';
-import {translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
+import {translationCacheEnabled, translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
+import {loadTranslationProfile, saveTranslationProfile} from '../src/runtime/cpu/translation/profile-storage.ts';
 
 const PAGE = 4096;
 const COPY_CHUNK = 1 << 20;
@@ -30,8 +31,10 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled()} = {}) {
+export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled(), translationProfile} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
+  const profileKey = translation && translationCacheEnabled() ? translationProfile : undefined;
+  const profile = profileKey ? await loadTranslationProfile(profileKey) : undefined;
   const uc = await createUnicorn();
   const compiler = compilationThreshold === 0 ? undefined : new TciTier(uc, compilationThreshold);
   const engine = new uc.Unicorn(uc.ARCH_ARM, uc.MODE_ARM);
@@ -47,7 +50,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
   // Translated functions share guest memory with Unicorn (uc_mem_map_ptr) and fall back to it for
   // everything they cannot run: host traps, unsupported instructions and unrepresentable state.
-  const tier = translation ? new TranslatedTier(uc) : undefined;
+  const tier = translation ? new TranslatedTier(uc, {profile, cache: profileKey,
+    onProfile: profileKey ? p => saveTranslationProfile(profileKey, p) : undefined}) : undefined;
   const bridge = tier && new RegisterBridge(uc, handle, registerTransfer, {
     core: registers, doubles: Array.from({length: 32}, (_, n) => uc[`ARM_REG_D${n}`]), cpsr: uc.ARM_REG_CPSR,
     fpscr: uc.ARM_REG_FPSCR, pc: uc.ARM_REG_PC, threadPointer: uc.ARM_REG_C13_C0_3,

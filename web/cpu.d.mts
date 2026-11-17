@@ -23,4 +23,4 @@ export interface GuestCPU {
   freeState(state: unknown): void;
   close(): void;
 }
-export function createCPU(options?: {readonly budget?: ExecutionBudget; readonly compilationThreshold?: number; readonly translation?: boolean}): Promise<GuestCPU>;
+export function createCPU(options?: {readonly budget?: ExecutionBudget; readonly compilationThreshold?: number; readonly translation?: boolean; readonly translationProfile?: string | undefined}): Promise<GuestCPU>;
