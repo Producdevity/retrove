@@ -3,7 +3,7 @@ import type { GuestArguments } from "../objc/host";
 import { canvasFont, fontLineHeight, type Font, type Fonts } from "./fonts";
 import { MAX_TEXT_EXTENT } from "./label-drawing";
 import { LineBreak, TextAlignment, layoutText, lineBreak } from "./text-layout";
-import { UIKitClass, structureMethod, type UIKitHost } from "./host";
+import { UIKitClass, objectResult, structureMethod, type UIKitHost } from "./host";
 
 type TextContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 /** Runs `draw` against the current UIGraphics context; false when there is none. */
@@ -52,6 +52,69 @@ function drawLines(context: TextContext, text: string, font: Font, box: TextBox)
   }
 }
 
+const AttributeArgument = { Size: 0, Point: 2, Rect: 4 } as const;
+const FONT_ATTRIBUTE = "NSFont";
+/** iOS 7 attribute-dictionary variants; the text color comes from the context's fill. */
+function installAttributeDrawing(
+  host: UIKitHost,
+  fonts: Fonts,
+  measure: Measure,
+  draw: (self: number, font: number, box: TextBox) => [number, number],
+): void {
+  const font = async (attributes: number): Promise<number> =>
+    attributes
+      ? objectResult(await host.send(attributes, "objectForKey:", [host.string(FONT_ATTRIBUTE)]))
+      : 0;
+  const float = (args: GuestArguments, index: number): number => floatFromBits(args(index));
+  const method = (
+    selector: string,
+    result: (self: number, args: GuestArguments) => Promise<[number, number]>,
+  ) =>
+    host.structure(
+      UIKitClass.String,
+      false,
+      selector,
+      structureMethod(async (self, args, destination) => {
+        const [width, height] = await result(self, args);
+        host.write(destination, floatBits(width));
+        host.write(destination + WORD_BYTES, floatBits(height));
+      }),
+    );
+  method("sizeWithAttributes:", async (self, args) =>
+    measure(
+      host.text(self),
+      fonts.get(await font(args(AttributeArgument.Size))),
+      MAX_TEXT_EXTENT,
+      MAX_TEXT_EXTENT,
+      {
+        mode: LineBreak.Clip,
+        lines: 1,
+      },
+    ),
+  );
+  method("drawAtPoint:withAttributes:", async (self, args) => {
+    const pointer = await font(args(AttributeArgument.Point));
+    return draw(self, pointer, {
+      x: float(args, RectArgument.X),
+      y: float(args, RectArgument.Y),
+      width: MAX_TEXT_EXTENT,
+      height: fontLineHeight(fonts.get(pointer)),
+      mode: LineBreak.Clip,
+      alignment: TextAlignment.Left,
+    });
+  });
+  method("drawInRect:withAttributes:", async (self, args) =>
+    draw(self, await font(args(AttributeArgument.Rect)), {
+      x: float(args, RectArgument.X),
+      y: float(args, RectArgument.Y),
+      width: float(args, RectArgument.Width),
+      height: float(args, RectArgument.Height),
+      mode: LineBreak.Word,
+      alignment: TextAlignment.Left,
+    }),
+  );
+}
+
 /** NSString (UIStringDrawing): measuring and drawing into the current UIGraphics context. */
 export function installStringDrawing(
   host: UIKitHost,
@@ -70,14 +133,14 @@ export function installStringDrawing(
   };
   const sized = (
     selector: string,
-    result: (self: number, args: GuestArguments) => [number, number],
+    result: (self: number, args: GuestArguments) => [number, number] | Promise<[number, number]>,
   ): void =>
     host.structure(
       UIKitClass.String,
       false,
       selector,
-      structureMethod((self, args, destination) => {
-        const [width, height] = result(self, args);
+      structureMethod(async (self, args, destination) => {
+        const [width, height] = await result(self, args);
         host.write(destination, floatBits(width));
         host.write(destination + WORD_BYTES, floatBits(height));
       }),
@@ -124,6 +187,7 @@ export function installStringDrawing(
       height: fontLineHeight(fonts.get(args(WidthArgument.Font))),
     }),
   );
+  installAttributeDrawing(host, fonts, measure, draw);
   sized("sizeWithFont:", (self, args) =>
     measure(host.text(self), fonts.get(args(0)), MAX_TEXT_EXTENT, MAX_TEXT_EXTENT, {
       mode: LineBreak.Clip,
