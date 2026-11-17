@@ -7,3 +7,12 @@ export function translationEnabled(): boolean {
     return true;
   }
 }
+const WORKER_KEY = "retrove.translationWorker";
+/** Translation runs on a worker unless a tester keeps it on the main thread (`retrove.translationWorker=off`). */
+export function translationWorkerEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(WORKER_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}

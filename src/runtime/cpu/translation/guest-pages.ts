@@ -111,6 +111,24 @@ export class GuestPages {
     }
     return true;
   }
+  /** Copies of the mapped runs of pages in [start, end); unmapped pages are left out. */
+  snapshots(start: number, end: number): { start: number; bytes: Uint8Array }[] {
+    const runs: { start: number; bytes: Uint8Array }[] = [];
+    let run = -1;
+    for (let page = start - (start & PAGE_OFFSET_MASK); page < end; page += PageBytes) {
+      if (this.mapped(page)) {
+        if (run < 0) run = Math.max(page, start);
+        if (page + PageBytes < end) continue;
+      }
+      const runEnd = Math.min(this.mapped(page) ? page + PageBytes : page, end);
+      if (run >= 0 && runEnd > run) {
+        const bytes = new Uint8Array(runEnd - run);
+        if (this.read(run, bytes)) runs.push({ start: run, bytes });
+      }
+      run = -1;
+    }
+    return runs;
+  }
   close(): void {
     for (const region of this.#regions.values()) this.#heap._free(region.allocation);
     this.#regions.clear();

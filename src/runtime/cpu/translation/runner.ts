@@ -21,7 +21,10 @@ export function runTranslated(
   until: number,
   budget: number,
 ): TranslatedRun {
-  tier.resetStop(budget);
+  const view = tier.pages.view,
+    layout = tier.layout;
+  view.setUint32(layout.stopped, StopState.Running, true);
+  view.setInt32(layout.budget, budget, true);
   let pc = start;
   bridge.pc = pc;
   for (let entry = tier.entry(pc); entry; entry = tier.entry(pc)) {
@@ -30,13 +33,13 @@ export function runTranslated(
     if (!translatedEntry(run)) throw new Error("Translated function table entry is not callable.");
     pc = run(pc) >>> 0;
     bridge.pc = pc;
-    const stopped = tier.stopped();
+    const stopped = tier.pages.view.getUint32(layout.stopped, true);
     if (stopped === StopState.Budget) return { reason: "budget", pc };
     if (stopped === StopState.Exit) {
-      const view = tier.pages.view,
-        missing = tier.layout.missingLabel;
-      if (pc === entered || view.getUint32(missing, true) === pc) tier.discoveredEntry(pc);
-      view.setUint32(missing, 0, true);
+      const missing = layout.missingLabel;
+      if (pc === entered || tier.pages.view.getUint32(missing, true) === pc)
+        tier.discoveredEntry(pc);
+      tier.pages.view.setUint32(missing, 0, true);
       break;
     }
     if (pc === until) return { reason: "until", pc };

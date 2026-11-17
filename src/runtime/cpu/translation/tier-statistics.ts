@@ -12,6 +12,7 @@ export interface TierStatistics {
   retranslations: number;
   errors: number;
   lastError: string;
+  translator: string;
 }
 export function emptyStatistics(): TierStatistics {
   return {
@@ -27,6 +28,7 @@ export function emptyStatistics(): TierStatistics {
     retranslations: 0,
     errors: 0,
     lastError: "",
+    translator: "",
   };
 }
 export function recordError(statistics: TierStatistics, error: unknown): void {

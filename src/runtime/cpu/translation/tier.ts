@@ -1,5 +1,8 @@
-import { PageBytes, StateBytes, StopState, stateLayout, type StateLayout } from "./layout";
-import { translate, type FunctionRange, type Translation } from "./translate";
+import { PageBytes, StateBytes, stateLayout, type StateLayout } from "./layout";
+import type { FunctionRange, Translation } from "./translate";
+import { buildJob, runJob, type CodeSnapshot, type TranslationJob } from "./translation-job";
+import { Translator } from "./translator";
+import { installTranslation, instantiateTranslation } from "./install";
 import { GuestPages, type HostHeap } from "./guest-pages";
 import { ForeignPages, FOREIGN_SLOTS } from "./foreign-pages";
 import { discoverExecutable, functionAt, type Executable } from "./executable";
@@ -40,6 +43,11 @@ export class TranslatedTier {
   #discovered = false;
   #working = false;
   #closed = false;
+  /** Bumped when executable code is written, so in-flight jobs built from older bytes are dropped. */
+  #epoch = 0;
+  readonly #translator = new Translator((job) =>
+    runJob(job, (address) => this.pages.word(address)),
+  );
   constructor(module: TierModule) {
     this.#module = module;
     this.#memory = module.getTciMemory();
@@ -55,6 +63,7 @@ export class TranslatedTier {
       ...stateLayout(state, this.pages.table, { base: 0, start: 0, end: 0 }),
       foreign: { base: foreign, slots: FOREIGN_SLOTS },
     };
+    this.statistics.translator = this.#translator.kind;
   }
   get layout(): StateLayout {
     return this.#layout;
@@ -87,6 +96,8 @@ export class TranslatedTier {
       ...this.#layout,
       index: { base, start: executable.codeStart, end: executable.codeEnd },
     };
+    for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))
+      this.#translator.setCode(snapshot);
   }
   /** Function table slot + 1 for a guest PC, 0 when not translated. */
   entry(pc: number): number {
@@ -153,45 +164,43 @@ export class TranslatedTier {
         });
     }, 0);
   }
-  #translate(
+  #job(
     functions: readonly FunctionRange[],
     entries: readonly number[],
-    isCode: (address: number) => boolean,
-  ): Translation {
-    return translate({
+    pages: readonly CodeSnapshot[],
+  ): TranslationJob {
+    const executable = this.#executable;
+    return buildJob({
       functions,
-      readWord: (address) => this.pages.word(address),
-      isCode,
       entries,
-      stopPC: STOP_PC,
+      pages,
       layout: this.#layout,
-      labelAddress: (range) =>
-        this.#allocate(HALFWORD_BYTES * (range.end - (range.start & ~THUMB_BIT)), Alignment.Index),
+      stopPC: STOP_PC,
+      code:
+        executable && !pages.length
+          ? { start: executable.codeStart, end: executable.codeEnd }
+          : undefined,
+      allocate: (bytes) => this.#allocate(bytes, Alignment.Index),
     });
   }
-  async #instantiate(translation: Translation): Promise<WebAssembly.Exports | undefined> {
-    const compiled = performance.now();
-    const { instance } = await WebAssembly.instantiate(translation.wasm, {
-      env: { memory: this.#memory, table: this.table },
-    });
-    this.statistics.compileMs += performance.now() - compiled;
-    this.statistics.wasmBytes += translation.wasm.length;
-    return this.#closed ? undefined : instance.exports;
-  }
-  #install(exports: WebAssembly.Exports, translation: Translation): number[] {
-    const first = this.table.grow(translation.functions.length);
-    return translation.functions.map((translated, offset) => {
-      const exported = exports[translated.exportName];
-      if (typeof exported !== "function")
-        throw new Error(`Missing translated export ${translated.exportName}.`);
-      this.table.set(first + offset, exported);
-      const labels = translated.labels;
-      this.pages.bytes.set(
-        new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength),
-        translated.labelAddress,
-      );
-      return first + offset;
-    });
+  /** Translates and compiles a job; undefined when the tier closed or code changed meanwhile. */
+  async #compile(
+    job: TranslationJob,
+  ): Promise<{ translation: Translation; slots: number[] } | undefined> {
+    const epoch = this.#epoch,
+      { translation, elapsedMs } = await this.#translator.translate(job);
+    this.statistics.translateMs += elapsedMs;
+    this.statistics.unsupported += translation.statistics.unsupported;
+    const exports = await instantiateTranslation(
+      translation,
+      { memory: this.#memory, table: this.table },
+      this.statistics,
+    );
+    if (this.#closed || epoch !== this.#epoch) return undefined;
+    return {
+      translation,
+      slots: installTranslation(this.table, this.pages.bytes, exports, translation),
+    };
   }
   async #foreignBatch(): Promise<void> {
     const pages = [...this.#foreignQueued];
@@ -199,15 +208,12 @@ export class TranslatedTier {
     for (const page of pages) {
       const start = page * PageBytes,
         entries = [...(this.#foreignEntries.get(page) ?? [])];
-      const translation = this.#translate(
-        [{ start, end: start + PageBytes }],
-        entries,
-        () => false,
+      const pages = this.pages.snapshots(start, start + PageBytes + PageBytes);
+      const compiled = await this.#compile(
+        this.#job([{ start, end: start + PageBytes }], entries, pages),
       );
-      const exports = await this.#instantiate(translation);
-      if (!exports) return;
-      if (translation.functions.length !== 1) continue;
-      const [slot] = this.#install(exports, translation);
+      if (this.#closed) return;
+      const slot = compiled?.slots.length === 1 ? compiled.slots[0] : undefined;
       if (slot !== undefined && this.#foreign.set(page, slot)) this.statistics.foreignPages++;
     }
   }
@@ -243,17 +249,13 @@ export class TranslatedTier {
     const ranges = this.#collect(),
       executable = this.#executable;
     if (!ranges.length || !executable) return;
-    const began = performance.now();
-    const translation = this.#translate(
-      ranges,
-      ranges.flatMap((range) => [...(this.#extraEntries.get(range.start) ?? [])]),
-      (address) => address >= executable.codeStart && address < executable.codeEnd,
-    );
-    this.statistics.translateMs += performance.now() - began;
-    this.statistics.unsupported += translation.statistics.unsupported;
-    const exports = await this.#instantiate(translation);
-    if (!exports) return;
-    const slots = this.#install(exports, translation),
+    const entries = ranges.flatMap((range) => [...(this.#extraEntries.get(range.start) ?? [])]);
+    const compiled = await this.#compile(this.#job(ranges, entries, []));
+    if (!compiled) {
+      if (!this.#closed) for (const range of ranges) this.#queued.add(range.start);
+      return;
+    }
+    const { translation, slots } = compiled,
       view = this.pages.view;
     translation.functions.forEach((translated, offset) => {
       const slot = (slots[offset] ?? -1) + 1;
@@ -278,6 +280,12 @@ export class TranslatedTier {
       }
     const executable = this.#executable;
     if (!executable || end <= executable.codeStart || address >= executable.codeEnd) return;
+    this.#epoch++;
+    for (const snapshot of this.pages.snapshots(
+      Math.max(address, executable.codeStart),
+      Math.min(end, executable.codeEnd),
+    ))
+      this.#translator.patch(snapshot);
     const view = this.pages.view;
     for (const range of executable.ranges) {
       const start = range.start & ~THUMB_BIT;
@@ -288,16 +296,9 @@ export class TranslatedTier {
       this.statistics.invalidations++;
     }
   }
-  stopped(): number {
-    return this.pages.view.getUint32(this.#layout.stopped, true);
-  }
-  resetStop(budget: number): void {
-    const view = this.pages.view;
-    view.setUint32(this.#layout.stopped, StopState.Running, true);
-    view.setInt32(this.#layout.budget, budget, true);
-  }
   close(): void {
     this.#closed = true;
+    this.#translator.close();
     this.pages.close();
     for (const allocation of this.#allocations) this.#module._free(allocation);
     this.#allocations.length = 0;
