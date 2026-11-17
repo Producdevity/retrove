@@ -654,7 +654,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
             d.timestamp = time;
             await send(d.target, d.action, [ptr]);
           }
-          await service(8, true);
+          // Worker threads (often the game's own loop) use the rest of this refresh interval.
+          await service(Math.max(8, time + refreshMs - 2 - performance.now()), true);
         } finally { await poolPop(token); }
       }
     } finally { lifecycle.close(); input.disconnect(); }
