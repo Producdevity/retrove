@@ -1,4 +1,5 @@
 import { ClearThumb, DispatchIndex, LabelSlotShift } from "./emit-constants";
+import { nestedCall } from "./emit-depth";
 import { exit, loadAll, storeAll, tail } from "./emit-state";
 import type { Emitter } from "./emitter";
 import { Register } from "./instruction";
@@ -69,7 +70,12 @@ export function branchTo(e: Emitter, target: number, current: number): void {
     return;
   }
   storeAll(e);
-  c.i32(target).call(index).op(Op.Return);
+  nestedCall(
+    e,
+    () => c.i32(target),
+    () => c.call(index),
+  );
+  c.op(Op.Return);
 }
 
 /** Calls a translated function or the dispatcher, then continues here only if it returned to the link address. */
@@ -80,12 +86,13 @@ export function callTo(e: Emitter, pc: number, target: (() => void) | number): v
   c.i32(ret).set(e.register(Register.LR));
   storeAll(e);
   if (typeof target === "number") {
-    const index = e.functionIndex(target);
-    c.i32(target).call(index ?? DispatchIndex);
-  } else {
-    target();
-    c.call(DispatchIndex);
-  }
+    const index = e.functionIndex(target) ?? DispatchIndex;
+    nestedCall(
+      e,
+      () => c.i32(target),
+      () => c.call(index),
+    );
+  } else nestedCall(e, target, () => c.call(DispatchIndex));
   c.tee(result).i32(ret).op(Op.I32Ne).i32(e.L.stopped).memory(Op.I32Load).op(Op.I32Or);
   c.op(Op.If, BlockType.Empty).get(result).op(Op.Return).op(Op.End);
   loadAll(e);

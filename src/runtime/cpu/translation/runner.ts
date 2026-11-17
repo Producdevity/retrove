@@ -24,6 +24,7 @@ export function runTranslated(
   const view = tier.pages.view,
     layout = tier.layout;
   view.setUint32(layout.stopped, StopState.Running, true);
+  view.setUint32(layout.depth, 0, true);
   view.setInt32(layout.budget, budget, true);
   let pc = start;
   bridge.pc = pc;
@@ -35,6 +36,10 @@ export function runTranslated(
     bridge.pc = pc;
     const stopped = tier.pages.view.getUint32(layout.stopped, true);
     if (stopped === StopState.Budget) return { reason: "budget", pc };
+    if (stopped === StopState.Unwind) {
+      tier.pages.view.setUint32(layout.stopped, StopState.Running, true);
+      tier.statistics.stackUnwinds++;
+    }
     if (stopped === StopState.Exit) {
       const missing = layout.missingLabel;
       if (pc === entered || tier.pages.view.getUint32(missing, true) === pc)

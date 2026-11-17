@@ -18,6 +18,8 @@ export interface StateLayout {
   readonly logLimit: number;
   /** Guest PC of the last entry that had no label; the adapter retranslates its function with it as a root. */
   readonly missingLabel: number;
+  /** Nested calls between translated functions on the current Wasm stack. */
+  readonly depth: number;
   readonly vfp: number;
   readonly scratch: number;
   readonly pageTable: number;
@@ -40,6 +42,7 @@ const Offset = {
   LogCursor: 128,
   LogLimit: 132,
   MissingLabel: 136,
+  Depth: 140,
   Vfp: 256,
   Scratch: 512,
 } as const;
@@ -56,7 +59,8 @@ export const Guard = 0x1000;
 export const UnmappedDelta = (guestPage: number) => (LastPage - guestPage) | 0;
 export const MappedDelta = (guestPage: number, hostPage: number) =>
   (hostPage - guestPage - Guard) | 0;
-export const StopState = { Running: 0, Stopped: 1, Exit: 2, Budget: 3 } as const;
+/** Unwind: the call depth limit was reached; the runner continues at the returned PC with an empty stack. */
+export const StopState = { Running: 0, Stopped: 1, Exit: 2, Budget: 3, Unwind: 4 } as const;
 
 export function stateLayout(
   base: number,
@@ -78,6 +82,7 @@ export function stateLayout(
     logCursor: base + Offset.LogCursor,
     logLimit: base + Offset.LogLimit,
     missingLabel: base + Offset.MissingLabel,
+    depth: base + Offset.Depth,
     vfp: base + Offset.Vfp,
     scratch: base + Offset.Scratch,
     pageTable,

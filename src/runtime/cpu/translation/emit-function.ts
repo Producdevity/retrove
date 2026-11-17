@@ -1,6 +1,7 @@
 import { blockLabel, inMode, inRange, labelAt } from "./emit-control";
 import { DispatchIndex, ExitKind, Lanes } from "./emit-constants";
 import { emitInstruction } from "./emit-instruction";
+import { nestedCall } from "./emit-depth";
 import { emitBudget, emitStop, fail, loadAll, storeAll, tail } from "./emit-state";
 import { EntryParameter, type Emitter } from "./emitter";
 import { discover } from "./discover";
@@ -50,7 +51,12 @@ function emitEpilogue(e: Emitter): void {
   const { c } = e;
   storeAll(e);
   c.get(e.exitKind).i32(ExitKind.Tail).op(Op.I32Eq).op(Op.If, BlockType.Empty);
-  c.get(e.exitPC).call(DispatchIndex).op(Op.Return).op(Op.End);
+  nestedCall(
+    e,
+    () => c.get(e.exitPC),
+    () => c.call(DispatchIndex),
+  );
+  c.op(Op.Return).op(Op.End);
   c.get(e.exitKind).i32(ExitKind.Fail).op(Op.I32Eq).op(Op.If, BlockType.Empty);
   c.i32(e.L.stopped).i32(StopState.Exit).memory(Op.I32Store);
   c.i32(e.L.exitPC).get(e.exitPC).memory(Op.I32Store).op(Op.End);

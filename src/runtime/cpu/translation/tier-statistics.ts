@@ -14,6 +14,8 @@ export interface TierStatistics {
   unsupported: number;
   invalidations: number;
   retranslations: number;
+  /** Times translated code reached the call depth limit and continued from the runner. */
+  stackUnwinds: number;
   errors: number;
   lastError: string;
   translator: string;
@@ -32,6 +34,7 @@ export function emptyStatistics(): TierStatistics {
     unsupported: 0,
     invalidations: 0,
     retranslations: 0,
+    stackUnwinds: 0,
     errors: 0,
     lastError: "",
     translator: "",
