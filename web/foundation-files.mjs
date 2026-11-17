@@ -5,7 +5,7 @@ import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lis
 import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
 import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
 import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
-import {parsePlist} from './plist.mjs';
+import {parsePlist} from '../src/runtime/formats/plist/index.ts';
 import {readString} from '../src/runtime/memory/guest-memory.ts';
 
 // NSFileManager and libc share one filesystem, including current directory and saves.

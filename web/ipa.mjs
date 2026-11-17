@@ -1,6 +1,6 @@
 import { crc32 } from '../src/runtime/formats/crc32.ts';
-import { parsePlist } from "./plist.mjs";
-export { parsePlist } from "./plist.mjs";
+import { parsePlist } from "../src/runtime/formats/plist/index.ts";
+export { parsePlist } from "../src/runtime/formats/plist/index.ts";
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const signature = { local: 0x04034b50, central: 0x02014b50, end: 0x06054b50, zip64: 0x06064b50, locator: 0x07064b50 };
