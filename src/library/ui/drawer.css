@@ -1,0 +1,119 @@
+/* The app drawer: icons on the page itself, as on a Home Screen. */
+.drawer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  gap: var(--space-5) var(--space-1);
+  padding: var(--space-2) 0 var(--space-4);
+}
+.tile {
+  position: relative;
+  display: grid;
+  justify-items: center;
+}
+.tile-open {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--radius-m);
+  background: none;
+  color: var(--ink);
+  font: 500 12px / 1.25 var(--font);
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.tile-open:active:not(:disabled) {
+  transform: none;
+}
+.tile .app-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 15px;
+  object-fit: cover;
+  background: var(--fill);
+  box-shadow:
+    inset 0 0 0 0.5px rgb(0 0 0 / 12%),
+    0 1px 3px rgb(0 0 0 / 10%);
+  pointer-events: none;
+  transition: transform var(--duration-long) var(--ease-spring);
+}
+.tile-open.holding .app-icon,
+.tile-open:active .app-icon {
+  transform: scale(0.9);
+  transition-duration: 220ms;
+}
+.app-monogram {
+  display: grid;
+  place-items: center;
+  color: var(--tint);
+  font: 700 26px / 1 var(--font);
+}
+.tile-name {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile-details {
+  position: absolute;
+  top: -6px;
+  right: calc(50% - 44px);
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink-2);
+  box-shadow: var(--glass-shadow);
+  opacity: 0;
+  pointer-events: none;
+}
+.tile-details .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 3.2;
+}
+.tile-details:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tile.entering .app-icon {
+  animation: icon-enter 700ms var(--ease-spring) both;
+}
+.tile.entering .tile-name {
+  animation: name-enter var(--duration-long) var(--ease-out) 120ms both;
+}
+@keyframes icon-enter {
+  from {
+    transform: scale(0.4);
+    filter: blur(6px);
+    opacity: 0;
+  }
+}
+@keyframes name-enter {
+  from {
+    opacity: 0;
+  }
+}
+#library-count {
+  margin: var(--space-2) 0 0;
+}
+@media (min-width: 700px) {
+  .drawer {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: var(--space-6) var(--space-3);
+  }
+  .tile .app-icon {
+    width: 76px;
+    height: 76px;
+    border-radius: 18px;
+  }
+  .tile-open {
+    font-size: 13px;
+  }
+}

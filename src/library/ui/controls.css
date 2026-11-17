@@ -1,0 +1,147 @@
+:root {
+  font: var(--text-body);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button,
+a,
+label,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+[hidden] {
+  display: none !important;
+}
+a {
+  color: var(--tint);
+  text-decoration: none;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.footnote {
+  font: var(--text-footnote);
+  color: var(--ink-2);
+}
+.centered {
+  text-align: center;
+}
+
+/* Buttons. Plain buttons created by scripts get the standard look. */
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--fill);
+  color: var(--tint);
+  font: 600 15px / 1.2 var(--font);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform var(--duration-medium) var(--ease-spring),
+    background-color var(--duration-short) var(--ease-out),
+    opacity var(--duration-short) var(--ease-out);
+}
+button:active:not(:disabled),
+.button:active {
+  transform: scale(0.96);
+  transition-duration: 90ms;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.button.filled,
+button.filled {
+  background: var(--tint);
+  color: var(--on-tint);
+}
+.danger,
+button.danger {
+  background: var(--danger-fill);
+  color: var(--danger);
+}
+.text-button,
+button.text-button {
+  background: none;
+  min-height: 0;
+  padding: var(--space-2) 0;
+}
+.icon-button,
+button.icon-button {
+  width: var(--control);
+  min-height: var(--control);
+  padding: 0;
+  border-radius: var(--radius-pill);
+}
+label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0;
+}
+label.button {
+  cursor: pointer;
+}
+select {
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: var(--fill)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c93a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m8 10 4 4 4-4'/%3E%3C/svg%3E")
+    no-repeat right 8px center / 18px;
+  padding: 7px 32px 7px 12px;
+  color: var(--ink);
+  font: var(--text-callout);
+}
+@media (hover: hover) {
+  button:hover:not(:disabled),
+  .button:hover {
+    filter: brightness(1.04) saturate(1.05);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

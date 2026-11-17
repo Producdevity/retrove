@@ -26,7 +26,6 @@ export class SaveActions {
     private readonly onBusy: (busy: boolean) => void,
   ) {
     const heading = node("h3", "", "Progress & settings");
-    const help = node("p", "secondary", "Keep a backup or move your progress to another device.");
     this.status.setAttribute("role", "status");
     this.input.type = "file";
     this.input.accept = ".zip";
@@ -56,7 +55,7 @@ export class SaveActions {
     this.preview.append(this.summary, confirm, cancel);
     this.preview.hidden = true;
     this.controls.append(this.preview);
-    this.element.append(heading, help, this.controls, this.status);
+    this.element.append(heading, this.controls, this.status);
   }
   private failure = (error: unknown): void => {
     if (!this.controller.signal.aborted) this.status.textContent = errorMessage(error);

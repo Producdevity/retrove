@@ -1,0 +1,298 @@
+:root {
+  --storage-apps: var(--tint);
+  --storage-saves: light-dark(#28b463, #3ccf7a);
+  --storage-translations: light-dark(#f08c1a, #ffa53a);
+  --storage-imports: light-dark(#e0457b, #ff6b9a);
+  --storage-other: light-dark(#a4a8b4, #5d6270);
+}
+
+/* Segmented control: radio buttons under one sliding thumb. */
+.segmented {
+  --count: 3;
+  --index: 0;
+  position: relative;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--fill);
+}
+.group > .segmented {
+  margin: var(--space-3);
+}
+.segmented .thumb {
+  position: absolute;
+  inset: 3px auto 3px 3px;
+  width: calc((100% - 6px) / var(--count));
+  border-radius: calc(var(--radius-m) - 3px);
+  background: var(--surface-raised);
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 12%),
+    0 0 0 0.5px rgb(0 0 0 / 4%);
+  transform: translateX(calc(var(--index) * 100%));
+  transition: transform var(--duration-long) var(--ease-spring);
+}
+.segmented:has(label:nth-of-type(2) input:checked) {
+  --index: 1;
+}
+.segmented:has(label:nth-of-type(3) input:checked) {
+  --index: 2;
+}
+.segmented label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  border-radius: calc(var(--radius-m) - 3px);
+  color: var(--ink-2);
+  font: 500 13px / 1.2 var(--font);
+  cursor: pointer;
+  transition: color var(--duration-short) var(--ease-out);
+}
+.segmented label:has(input:checked) {
+  color: var(--ink);
+}
+.segmented label:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segmented.compact {
+  --count: 2;
+  width: 190px;
+}
+.segmented.compact label {
+  min-height: 28px;
+}
+
+/* Storage, laid out like the system storage settings. */
+.storage-summary {
+  padding: var(--space-4);
+}
+#storage {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-2);
+  font: var(--text-callout);
+}
+#storage strong {
+  color: var(--ink);
+  font: var(--text-headline);
+}
+.storage-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--fill);
+}
+.storage-bar .segment {
+  min-width: 4px;
+  transition: flex-grow var(--duration-long) var(--ease-out);
+}
+.storage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font: var(--text-footnote);
+}
+.storage-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.storage-legend li::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--swatch);
+}
+.storage-legend .value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+[data-category="apps"] {
+  --swatch: var(--storage-apps);
+}
+[data-category="saves"] {
+  --swatch: var(--storage-saves);
+}
+[data-category="translations"] {
+  --swatch: var(--storage-translations);
+}
+[data-category="imports"] {
+  --swatch: var(--storage-imports);
+}
+[data-category="other"] {
+  --swatch: var(--storage-other);
+}
+.storage-bar .segment {
+  background: var(--swatch);
+}
+.storage-app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--separator);
+}
+.storage-app .app-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--fill);
+}
+.storage-app .app-monogram {
+  font-size: 16px;
+}
+.storage-app > div {
+  display: grid;
+  min-width: 0;
+}
+.storage-app strong {
+  overflow: hidden;
+  font: 500 15px / 1.3 var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-app div span {
+  overflow: hidden;
+  color: var(--ink-2);
+  font: var(--text-footnote);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-app .value {
+  color: var(--ink-2);
+  font: var(--text-callout);
+  font-variant-numeric: tabular-nums;
+}
+.storage-app button {
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+}
+.storage.busy .storage-app button {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Installation */
+.install-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  text-align: center;
+}
+.install-card img {
+  border-radius: 14px;
+  box-shadow: var(--glass-shadow);
+}
+.install-card h2 {
+  margin: var(--space-2) 0 0;
+  font: var(--text-title);
+}
+.install-card > p {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--ink-2);
+  font: var(--text-callout);
+}
+.install-steps {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--fill);
+  counter-reset: step;
+  list-style: none;
+  text-align: left;
+  font: var(--text-callout);
+}
+.install-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  counter-increment: step;
+}
+.install-steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 600 12px / 1 var(--font);
+}
+.install-steps .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--tint);
+}
+.install-card .button {
+  margin-top: var(--space-2);
+  min-width: 160px;
+}
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3);
+  border-radius: var(--radius-l);
+}
+.install-banner img {
+  border-radius: 10px;
+}
+.install-banner p {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.install-banner strong {
+  font: 600 15px / 1.3 var(--font);
+}
+.install-banner span {
+  color: var(--ink-2);
+  font: var(--text-footnote);
+}
+.install-banner .button {
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+}
+.install-banner .icon-button {
+  width: 32px;
+  min-height: 32px;
+  background: none;
+  color: var(--ink-3);
+}
+.install-banner .icon-button .icon {
+  width: 18px;
+  height: 18px;
+}

@@ -1,0 +1,119 @@
+/* Liquid Glass belongs to the control layer only: bars, floating buttons, menus and sheets. */
+.glass {
+  --light: 135deg;
+  --px: 50%;
+  --py: 50%;
+  --glow: 0;
+  position: relative;
+  isolation: isolate;
+  color: var(--glass-ink);
+  background: var(--glass-base);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-pill);
+  transition:
+    transform var(--duration-long) var(--ease-spring),
+    background-color var(--duration-medium) var(--ease-out),
+    color var(--duration-medium) var(--ease-out);
+}
+.glass.thick {
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: var(--glass-filter-thick);
+  backdrop-filter: var(--glass-filter-thick);
+  box-shadow: var(--glass-shadow-deep);
+}
+/* The rim catches light from a direction that follows the pointer. */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--light),
+    var(--glass-rim),
+    transparent 34%,
+    transparent 66%,
+    color-mix(in srgb, var(--glass-rim) 70%, transparent)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+/* Touch lights the material from the fingertip. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--glow);
+  background: radial-gradient(
+    circle at var(--px) var(--py),
+    light-dark(rgb(255 255 255 / 85%), rgb(255 255 255 / 30%)),
+    transparent 70%
+  );
+  transition: opacity var(--duration-long) var(--ease-out);
+}
+.glass.pressed {
+  transform: scale(1.06);
+  transition-duration: var(--duration-short);
+}
+.glass.pressed::before {
+  transition-duration: 80ms;
+}
+.glass.tinted {
+  background: color-mix(in srgb, var(--tint) 88%, transparent);
+  color: var(--on-tint);
+}
+/* The WebGL layer draws the material behind these controls. */
+.glass[data-glass="webgl"] {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.glass.tinted[data-glass="webgl"] {
+  background: color-mix(in srgb, var(--tint) 62%, transparent);
+}
+.glass-layer {
+  position: fixed;
+  pointer-events: none;
+  z-index: 19;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass[data-glass="webgl"] {
+    background: var(--glass-thick);
+    -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(40px);
+  }
+  .glass.tinted,
+  .glass.tinted[data-glass="webgl"] {
+    background: var(--tint);
+  }
+  .glass-layer {
+    display: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .glass {
+    outline: 1px solid var(--glass-rim);
+    outline-offset: -1px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass.pressed {
+    transform: none;
+  }
+}
+.glass-layer.above {
+  z-index: 21;
+}

@@ -4,6 +4,7 @@ import type { InstalledApplication } from "../../domain/application";
 import type { ApplicationLibrary } from "../service";
 import { action, element, node } from "../../ui/dom";
 import { formatBytes } from "../../ui/format";
+import { morph } from "../../ui/morph";
 import { AppIcons } from "./app-list";
 import { SaveActions } from "./save-actions";
 import "./save-actions.css";
@@ -14,7 +15,7 @@ export function appDetails(
   launch: (app: InstalledApplication) => void,
   refresh: () => Promise<void>,
   failure: (error: unknown) => void,
-): (app: InstalledApplication) => void {
+): (app: InstalledApplication, origin: HTMLElement) => void {
   const dialog = element("app-details", HTMLDialogElement);
   const contents = element("details-content", HTMLDivElement);
   const remove = element("remove", HTMLButtonElement);
@@ -58,7 +59,8 @@ export function appDetails(
     selected = undefined;
     open.disabled = remove.disabled = erase.disabled = false;
   });
-  return (app) => {
+  return (app, origin) => {
+    if (dialog.open) return;
     selected = app;
     element("remove-status", HTMLParagraphElement).textContent = "";
     saves?.close();
@@ -69,10 +71,11 @@ export function appDetails(
       icons.create(app),
       node("h2", "", app.name),
       node("p", "", app.bundleId),
-      node("p", "", `Version ${app.version} • ${formatBytes(app.size)}`),
+      node("p", "", `Version ${app.version} · ${formatBytes(app.size)}`),
     );
     contents.append(saves.element);
     dialog.showModal();
+    void morph(dialog, origin, true);
   };
 }
 
@@ -93,8 +96,7 @@ function connectDelete(
       if (
         !(await confirmAction({
           title: `Delete ${app.name}?`,
-          description:
-            "Delete the IPA, saves and settings from this device? This cannot be undone.",
+          description: "Its IPA, saves and settings are deleted. This cannot be undone.",
           action: "Delete app & data",
         }))
       )

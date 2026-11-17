@@ -1,0 +1,113 @@
+.header-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.header-actions .button {
+  min-height: 34px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+}
+#report-status:empty {
+  display: none;
+}
+#last-session strong {
+  font: var(--text-headline);
+}
+#last-session .badge[data-state="failed"],
+#last-session .problem {
+  color: var(--danger);
+}
+#last-session .badge[data-state="failed"] {
+  background: var(--danger-fill);
+}
+#last-session .badge[data-state="completed"] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+#last-session .problem {
+  font: var(--text-footnote);
+  overflow-wrap: anywhere;
+}
+#last-session .footnote {
+  margin: 0;
+  min-height: 0;
+}
+.log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.log-list li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.log-list li + li {
+  border-top: 1px solid var(--separator);
+}
+.log-list li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--fill-strong);
+}
+.log-list li.problem::before {
+  background: var(--danger);
+}
+.log-list li.empty-row {
+  display: block;
+  color: var(--ink-2);
+  font: var(--text-callout);
+}
+.log-list li.empty-row::before {
+  display: none;
+}
+.log-list div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.log-list strong {
+  font: 500 15px / 1.35 var(--font);
+}
+.log-list span {
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  font: var(--text-footnote);
+}
+.log-list li.problem span {
+  color: var(--danger);
+}
+.log-list time {
+  color: var(--ink-3);
+  font: var(--text-footnote);
+  font-variant-numeric: tabular-nums;
+}
+.raw-log {
+  margin-top: var(--space-5);
+}
+.raw-log summary {
+  margin: 0 var(--space-4) var(--space-2);
+  color: var(--tint);
+  font: var(--text-callout);
+  cursor: pointer;
+}
+#report {
+  display: block;
+  width: 100%;
+  min-height: 50dvh;
+  resize: vertical;
+  padding: var(--space-4);
+  border: 0;
+  color: var(--ink-2);
+  font: 12px / 1.6 var(--font-mono);
+}
+.log-list .repeat {
+  color: var(--ink-3);
+  font: inherit;
+  font-weight: 400;
+}

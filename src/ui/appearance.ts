@@ -27,14 +27,18 @@ export function initializeAppearance(): void {
     if (event.key === STORAGE_KEY) apply(readPreference());
   });
 }
+/** The theme control: one radio button per preference, styled as a segmented control. */
 export function connectAppearance(failed: (error: unknown) => void): void {
-  const select = element("appearance", HTMLSelectElement);
-  select.value = readPreference();
-  select.addEventListener("change", () => {
-    if (!isPreference(select.value)) return;
-    apply(select.value);
+  const control = element("appearance", HTMLFieldSetElement);
+  const options = [...control.querySelectorAll("input")];
+  const current = readPreference();
+  for (const option of options) option.checked = option.value === current;
+  control.addEventListener("change", (event) => {
+    const option = event.target;
+    if (!(option instanceof HTMLInputElement) || !isPreference(option.value)) return;
+    apply(option.value);
     try {
-      localStorage.setItem(STORAGE_KEY, select.value);
+      localStorage.setItem(STORAGE_KEY, option.value);
     } catch (error) {
       failed(error);
     }

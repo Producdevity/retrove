@@ -1,8 +1,17 @@
-import { element } from "../ui/dom";
+import { element, node } from "../ui/dom";
 import { download } from "../ui/download";
 import { libraryJournal } from "./journal";
 import { connectCopy } from "./clipboard";
+import {
+  groupRepeats,
+  parseEntry,
+  parseSession,
+  SESSION_STATES,
+  type GroupedEntry,
+  type SessionSummary,
+} from "./log-view";
 export const LAST_REPORT_KEY = "retrove.last-report";
+const FILTER_PROBLEMS = "problems";
 export function readLastReport(): string | null {
   try {
     return localStorage.getItem(LAST_REPORT_KEY);
@@ -13,23 +22,70 @@ export function readLastReport(): string | null {
 export function saveLastReport(value: string): void {
   localStorage.setItem(LAST_REPORT_KEY, value);
 }
+const clock = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+
+function renderSession(container: HTMLElement, session: SessionSummary | undefined): void {
+  if (!session) {
+    container.replaceChildren(node("p", "row footnote", "No app has run yet."));
+    return;
+  }
+  const head = node("div", "row");
+  const state = node("span", "badge", SESSION_STATES[session.state] ?? session.state);
+  state.dataset["state"] = session.state;
+  head.append(node("strong", "", session.app), state);
+  const facts = [
+    session.started ? clock.format(session.started) : undefined,
+    session.seconds === undefined ? undefined : `${Math.round(session.seconds)} s`,
+  ].filter((fact) => fact !== undefined);
+  const rows = [head, node("p", "row footnote", facts.join(" · "))];
+  if (session.firstError) rows.push(node("p", "row problem", session.firstError));
+  container.replaceChildren(...rows);
+}
+function renderEntry(entry: GroupedEntry): HTMLLIElement {
+  const item = node("li", entry.problem ? "problem" : "");
+  const text = node("div");
+  const title = node("strong", "", entry.title);
+  if (entry.count > 1) title.append(node("span", "repeat", ` ×${entry.count}`));
+  text.append(title, node("span", "", entry.detail));
+  item.append(text, node("time", "", entry.time ? time.format(entry.time) : ""));
+  return item;
+}
+
+/** The Logs page: a summary of the last app session and the library's own events. */
 export function connectActivity(): () => void {
   const report = element("report", HTMLTextAreaElement);
   const status = element("report-status", HTMLParagraphElement);
-  const exportButton = element("export-log", HTMLButtonElement);
+  const session = element("last-session", HTMLDivElement);
+  const entries = element("log-entries", HTMLOListElement);
+  const filter = element("log-filter", HTMLFieldSetElement);
   const refresh = (): void => {
+    const lastReport = readLastReport();
+    const journal = libraryJournal.text();
     report.value = [
       "Retrove debug logs",
       `Build: ${import.meta.env.VITE_RETROVE_REVISION}`,
-      libraryJournal.text(),
-      readLastReport(),
+      journal,
+      lastReport,
     ]
       .filter(Boolean)
       .join("\n\n");
+    renderSession(session, parseSession(lastReport));
+    const problems = filter.querySelector<HTMLInputElement>(
+      `input[value="${FILTER_PROBLEMS}"]`,
+    )?.checked;
+    const parsed = journal.split("\n").filter(Boolean).map(parseEntry).reverse();
+    const shown = problems ? parsed.filter((entry) => entry.problem) : parsed;
+    entries.replaceChildren(
+      ...(shown.length
+        ? groupRepeats(shown).map(renderEntry)
+        : [node("li", "empty-row", problems ? "No problems." : "No events.")]),
+    );
     status.textContent = "";
   };
+  filter.addEventListener("change", refresh);
   connectCopy(element("copy-log", HTMLButtonElement), report, status, refresh);
-  exportButton.addEventListener("click", () => {
+  element("export-log", HTMLButtonElement).addEventListener("click", () => {
     refresh();
     download(new Blob([report.value], { type: "text/plain" }), "retrove-report.txt");
   });

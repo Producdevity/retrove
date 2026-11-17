@@ -7,6 +7,8 @@ export function connectCopy(
   button.addEventListener("click", () => {
     refresh();
     const unavailable = (): void => {
+      const disclosure = report.closest("details");
+      if (disclosure) disclosure.open = true;
       report.focus();
       report.select();
       report.setSelectionRange(0, report.value.length);

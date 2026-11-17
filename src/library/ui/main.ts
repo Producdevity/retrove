@@ -6,18 +6,21 @@ import { registerOfflineShell } from "../../pwa/register";
 import type { InstalledApplication } from "../../domain/application";
 import { errorMessage } from "../../domain/validation";
 import { connectActivity } from "../../diagnostics/activity";
-import { element } from "../../ui/dom";
-import { browserLibrary } from "../browser";
-import { AppIcons, appRow } from "./app-list";
-import { appDetails } from "./details";
-import { connectImport } from "./import";
-import { connectNavigation } from "./navigation";
-import { connectSettings } from "./settings";
-
 import { libraryJournal } from "../../diagnostics/journal";
 import { DiagnosticOperation, failedOperation, observed } from "../../diagnostics/operations";
+import { element } from "../../ui/dom";
+import { browserLibrary } from "../browser";
+import { appDetails } from "./details";
+import { Dock } from "./dock";
+import { Drawer } from "./drawer";
+import { connectImport } from "./import";
+import { connectInstall } from "./install";
+import { connectNavigation, Page } from "./navigation";
+import { connectSettings } from "./settings";
+import { TabBar } from "./tab-bar";
+
 initializeAppearance();
-element("build-id", HTMLParagraphElement).textContent = `Build ${BUILD_ID}`;
+element("build-id", HTMLSpanElement).textContent = `Build ${BUILD_ID}`;
 libraryJournal.record(DiagnosticOperation.Session, {
   build: String(import.meta.env.VITE_RETROVE_REVISION),
   browser: navigator.userAgent,
@@ -25,53 +28,58 @@ libraryJournal.record(DiagnosticOperation.Session, {
   standalone: matchMedia("(display-mode: standalone)").matches,
 });
 const error = element("error", HTMLParagraphElement);
+const errorLogs = element("error-logs", HTMLButtonElement);
 const failure = (cause: unknown): void => {
   libraryJournal.record(DiagnosticOperation.Interface, {}, cause);
   error.textContent = failedOperation(cause, DiagnosticOperation.FileStorage)
-    ? "Local file storage could not be opened. Try a regular Safari tab if you opened Retrove in private browsing or inside another app. Debug logs contain the exact failure."
+    ? "Retrove could not open its storage. Private browsing and in-app browsers block it; open Retrove in Safari."
     : errorMessage(cause);
-  element("error-logs", HTMLButtonElement).hidden = false;
+  errorLogs.hidden = false;
   error.hidden = false;
 };
 const { library, recover, storage: management } = browserLibrary(failure);
-const list = element("apps", HTMLDivElement);
-const search = element("search", HTMLInputElement);
-const count = element("library-count", HTMLParagraphElement);
-const empty = element("empty", HTMLDivElement);
-const noResults = element("no-results", HTMLParagraphElement);
-const icons = new AppIcons();
-let apps: InstalledApplication[] = [];
+const settingsPage = element(Page.Settings, HTMLElement);
 const launch = (app: InstalledApplication): void => {
+  dock.release();
   location.href = `/player.html?app=${encodeURIComponent(app.id)}`;
 };
 const storage = connectSettings(failure, management, () => refresh());
+const showStorage = (): void => void observed(DiagnosticOperation.Settings, storage).catch(failure);
 const refresh = async (): Promise<void> => {
   await observed(DiagnosticOperation.Maintenance, recover).catch(failure);
-  apps = (await observed(DiagnosticOperation.Refresh, () => library.list())).sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
-  render();
-  await observed(DiagnosticOperation.Settings, storage);
+  drawer.show(await observed(DiagnosticOperation.Refresh, () => library.list()));
+  if (!settingsPage.hidden) await observed(DiagnosticOperation.Settings, storage);
 };
-const details = appDetails(library, management, launch, refresh, failure);
-function render(): void {
-  icons.clear();
-  const query = search.value.toLowerCase();
-  const visible = apps.filter((app) => app.name.toLowerCase().includes(query));
-  count.textContent = apps.length
-    ? `${apps.length} ${apps.length === 1 ? "app" : "apps"} on this device`
-    : "Your personal app library";
-  empty.hidden = apps.length > 0;
-  noResults.hidden = !apps.length || visible.length > 0;
-  list.replaceChildren(...visible.map((app) => appRow(app, icons, details, launch)));
-}
-search.addEventListener("input", render);
-connectNavigation(connectActivity());
-connectImport(library, refresh, failure);
+const drawer = new Drawer(appDetails(library, management, launch, refresh, failure), launch);
+
+const sidebar = document.querySelector(".sidebar");
+const nav = document.querySelector(".tab-bar");
+const selection = document.querySelector(".tab-bar .selection");
+const add = element("import", HTMLInputElement).closest("label");
+if (
+  !(sidebar instanceof HTMLElement) ||
+  !(nav instanceof HTMLElement) ||
+  !(selection instanceof HTMLElement) ||
+  !add
+)
+  throw new Error("Missing navigation interface.");
+const importer = element("import-status", HTMLDivElement);
+const dock = new Dock({ sidebar, nav, add, importer });
+const navigate = connectNavigation(new TabBar(nav, selection, () => dock.lens), {
+  [Page.Activity]: connectActivity(),
+  [Page.Settings]: showStorage,
+});
+errorLogs.addEventListener("click", () => navigate(Page.Activity));
+connectInstall(() => {
+  navigate(Page.Settings);
+  element("install-card", HTMLDivElement).scrollIntoView({ block: "center" });
+}, failure);
+connectImport(library, refresh, failure, (milliseconds) => dock.wake(milliseconds));
 void refresh().catch(failure);
 
+const updateNotice = element("update-notice", HTMLSpanElement);
 void observed(DiagnosticOperation.Offline, () =>
-  registerOfflineShell((message) => {
-    element("install-help", HTMLParagraphElement).textContent = message;
+  registerOfflineShell(() => {
+    updateNotice.hidden = false;
   }),
 ).catch(failure);

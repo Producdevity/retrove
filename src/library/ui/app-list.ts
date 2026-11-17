@@ -1,6 +1,7 @@
 import type { InstalledApplication } from "../../domain/application";
 import { node } from "../../ui/dom";
-import { formatBytes } from "../../ui/format";
+import { Icon, icon } from "../../ui/icons";
+import { onLongPress } from "../../ui/long-press";
 
 export class AppIcons {
   private readonly urls = new Set<string>();
@@ -11,6 +12,7 @@ export class AppIcons {
     const image = node("img", "app-icon");
     image.src = url;
     image.alt = "";
+    image.draggable = false;
     return image;
   }
   clear(): void {
@@ -19,25 +21,28 @@ export class AppIcons {
   }
 }
 
-export function appRow(
+/**
+ * An app as it sits in the drawer: tapping the icon opens it and holding it shows its
+ * details. The details button is for keyboards and screen readers, and shows on focus.
+ */
+export function appTile(
   app: InstalledApplication,
   icons: AppIcons,
-  details: (app: InstalledApplication) => void,
+  details: (app: InstalledApplication, origin: HTMLElement) => void,
   launch: (app: InstalledApplication) => void,
 ): HTMLElement {
-  const row = node("article", "app-row");
-  const body = node("div", "app-main");
-  const title = node("button", "app-name", app.name);
-  title.addEventListener("click", () => details(app));
-  const metadata = node("p", "app-meta");
-  metadata.append(node("span", "", app.version), node("span", "", formatBytes(app.size)));
-  body.append(title, metadata);
-  const open = node("button", "launch", "Open");
+  const tile = node("div", "tile");
+  tile.setAttribute("role", "listitem");
+  const open = node("button", "tile-open");
   open.setAttribute("aria-label", `Open ${app.name}`);
+  const image = icons.create(app);
+  open.append(image, node("span", "tile-name", app.name));
   open.addEventListener("click", () => launch(app));
-  const more = node("button", "more", "•••");
+  onLongPress(open, () => details(app, image));
+  const more = node("button", "tile-details");
+  more.append(icon(Icon.More));
   more.setAttribute("aria-label", `Details for ${app.name}`);
-  more.addEventListener("click", () => details(app));
-  row.append(icons.create(app), body, open, more);
-  return row;
+  more.addEventListener("click", () => details(app, image));
+  tile.append(open, more);
+  return tile;
 }

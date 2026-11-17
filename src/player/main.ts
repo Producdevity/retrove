@@ -9,6 +9,7 @@ import { errorMessage } from "../domain/validation";
 import { browserLibrary } from "../library/browser";
 import { action, element } from "../ui/dom";
 import { onUserActivation } from "./activation";
+import { BootSequence } from "./boot/sequence";
 import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
 import { PlayerSession } from "./session";
@@ -18,6 +19,11 @@ const LOADER_AREAS = new Set(["ipa", "guest"]);
 const status = element("status", HTMLHeadingElement);
 const detail = element("detail", HTMLParagraphElement);
 const tapHint = element("tap-hint", HTMLParagraphElement);
+const loading = element("loading", HTMLDivElement);
+const tile = loading.querySelector("canvas");
+const steps = loading.querySelector(".boot-steps");
+if (!tile || !(steps instanceof HTMLElement)) throw new Error("Missing loading interface.");
+const boot = new BootSequence(tile, steps, status, detail);
 let motionPending = false;
 window.addEventListener(MOTION_ACCESS_REQUESTED, () => {
   motionPending = true;
@@ -43,22 +49,25 @@ onUserActivation(
   (error) => report.diagnostic("warn", "activation", errorMessage(error)),
 );
 const fail = (error: unknown): void => {
+  boot.stop();
   document.body.classList.remove("playing");
   document.body.classList.add("failed");
   status.textContent = errorMessage(error);
   detail.textContent = "Open the report for details, or return to your library.";
 };
 const showImage = (): void => {
+  if (imageVisible) return;
   imageVisible = true;
-  document.body.classList.add("playing");
+  void boot.finish(display.host, loading).finally(() => document.body.classList.add("playing"));
 };
 const report = new SessionReport(
   (state) => {
     if (state.fault) fail(new Error(state.fault));
     else if (state.frames > 0) showImage();
   },
-  (level, area, message) => {
-    if (level === "info" && LOADER_AREAS.has(area) && !imageVisible) detail.textContent = message;
+  (level, area, message, details) => {
+    if (level !== "info" || !LOADER_AREAS.has(area) || imageVisible) return;
+    if (!boot.signal(area, message, details)) detail.textContent = message;
   },
 );
 const display = new PlayerDisplay(
@@ -84,6 +93,8 @@ async function prepare(): Promise<void> {
   const app = await library.get(id);
   if (!app) throw new Error("This app is no longer in your library.");
   element("title", HTMLSpanElement).textContent = app.name;
+  boot.setIcon(app.icon);
+  status.textContent = `Opening ${app.name}`;
   document.title = `${app.name} — Retrove`;
   report.start(app.name);
   const archive = await openIPA(await library.open(app), report.diagnostic);
@@ -98,8 +109,8 @@ async function prepare(): Promise<void> {
       updateMedia();
     },
   });
-  status.textContent = `Opening ${app.name}`;
   await session.start();
+  boot.stop();
   document.body.classList.add("finished");
   status.textContent = "App closed";
   detail.textContent = "";

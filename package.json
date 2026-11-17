@@ -10,6 +10,9 @@
     "build": "vp build",
     "preview": "vp preview"
   },
+  "dependencies": {
+    "apple-liquid-glass-webgl": "2.6.0"
+  },
   "devDependencies": {
     "@types/node": "26.6.6",
     "fake-indexeddb": "6.2.8",

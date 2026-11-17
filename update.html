@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f6fa" />
+    <meta name="theme-color" content="#eef0f5" />
     <title>Update Retrove</title>
     <link rel="icon" href="/icons/icon.svg" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -11,15 +11,15 @@
   <body>
     <main class="update-page">
       <a class="brand" href="/"
-        ><img src="/icons/icon.svg" alt="" width="34" height="34" />Retrove</a
+        ><img src="/icons/icon.svg" alt="" width="32" height="32" />Retrove</a
       >
-      <div class="settings-group">
-        <h1>Update Retrove</h1>
-        <p id="update-build"></p>
+      <h1>Update Retrove</h1>
+      <div class="group">
         <p id="update-status" role="status">Checking for an update…</p>
-        <div class="storage-actions">
-          <button id="apply-update" class="primary" disabled>Apply update</button
-          ><a href="/">Return to library</a>
+        <p id="update-build" class="footnote"></p>
+        <div class="update-actions">
+          <button id="apply-update" class="button filled" disabled>Apply update</button
+          ><a class="button" href="/">Back to library</a>
         </div>
       </div>
     </main>

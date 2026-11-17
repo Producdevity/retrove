@@ -16,6 +16,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      apple-liquid-glass-webgl:
+        specifier: 2.6.0
+        version: 2.6.0
     devDependencies:
       '@types/node':
         specifier: 26.6.6
@@ -602,6 +606,10 @@ packages:
   ansi-styles@5.2.0:
     resolution: {integrity: sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==}
     engines: {node: '>=10'}
+
+  apple-liquid-glass-webgl@2.6.0:
+    resolution: {integrity: sha512-fwxbpJnB5jj8/8EmaR5Baqp9Ad/x5M+feSL7UfV0jpUI1NNJJDeAZzoNdY0tEJcl2CC3Pc1ilQ00hxxwfJI1BA==}
+    engines: {node: '>=18'}
 
   aria-query@5.3.0:
     resolution: {integrity: sha512-b0P0sZPKtyu8HkeRAfCq0IfURZK+SuwMjY1UXGBU27wpAiTwQAIlq56IbIO+ytk/JjS1fMR14ee5WBBfKi5J6A==}
@@ -1282,6 +1290,8 @@ snapshots:
   ansi-regex@5.0.1: {}
 
   ansi-styles@5.2.0: {}
+
+  apple-liquid-glass-webgl@2.6.0: {}
 
   aria-query@5.3.0:
     dependencies:
