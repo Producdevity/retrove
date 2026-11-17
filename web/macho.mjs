@@ -126,7 +126,7 @@ function executable(segments, target) {
     segments.some(s => (s.protection & 4) && pc >= s.address && pc + width <= s.address + s.fileSize);
 }
 
-function fixupStream(bytes, image, mode) {
+export function fixupStream(bytes, image, mode) {
   if (!bytes.length) return;
   const cursor = new Cursor(bytes);
   const rebase = mode === 'rebase';
@@ -197,7 +197,7 @@ function fixupStream(bytes, image, mode) {
       }
     }
   }
-  throw new Error('Mach-O: unterminated ' + mode + ' stream');
+  // dyld stops at the end of the opcode bytes as well as at DONE; some linkers omit the final DONE.
 }
 
 function exportAddress(bytes, base, name) {
