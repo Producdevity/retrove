@@ -35,3 +35,11 @@ export function nextDisplayRefresh(
       timer = setTimeout(() => finish(performance.now()), DISPLAY_INTERVAL_MS);
   });
 }
+const MINIMUM_WORKER_SLICE_MS = 8;
+const MAIN_THREAD_RESERVE_MS = 2;
+export function workerSliceMs(refreshTime: number, now: number): number {
+  return Math.max(
+    MINIMUM_WORKER_SLICE_MS,
+    refreshTime + DISPLAY_INTERVAL_MS - MAIN_THREAD_RESERVE_MS - now,
+  );
+}

@@ -1,5 +1,6 @@
 import {installFixedFunction} from "../src/runtime/graphics/fixed-function/imports.ts";
 import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
+import {GLErrorState} from '../src/runtime/graphics/driver-errors.ts';
 import { read32, readString, write32 } from './memory.mjs';
 import { decodePVRTC } from './pvrtc.mjs';
 
@@ -10,7 +11,6 @@ const HALF_FLOAT_OES = 0x8d61, HALF_FLOAT = 0x140b, BGRA = 0x80e1, RGBA = 0x1908
 const bytesPerType = new Map([[0x1400,1],[0x1401,1],[0x1402,2],[0x1403,2],[0x1405,4],[0x1406,4]]);
 const pixelComponents = new Map([[0x1906,1],[0x1909,1],[0x190a,2],[0x1907,3],[RGBA,4],[BGRA,4],[0x1902,1]]);
 const packedTypes = new Set([0x8363,0x8033,0x8034]);
-const DRIVER_ERROR_INTERVAL_MS = 16;
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
@@ -27,8 +27,8 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   const enabledAttribs = new Set();
   const bufferData = new Map();
   const mapped = new Map();
-  let pendingError = 0;
-  const setError = code => { pendingError ||= code; };
+  const errors = new GLErrorState();
+  const setError = code => errors.record(code);
   const scratch = new DataView(new ArrayBuffer(4));
   let nextLocation = 0, array = 0, elements = 0;
   let indexStaging, context;
@@ -174,17 +174,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
       backing.bytes.set(bytes,a(1));
     }
   });
-  // WebGL getError is a synchronous GPU-process round trip; games call it hundreds of times per frame.
-  // Emulated errors are always reported; driver errors are sampled at most once per display interval.
-  let lastDriverError = -Infinity;
-  bind('GetError',() => {
-    const code=pendingError; pendingError=0;
-    if (code) return code;
-    const now=performance.now();
-    if (now-lastDriverError<DRIVER_ERROR_INTERVAL_MS) return 0;
-    lastDriverError=now;
-    return gl().getError();
-  });
+  bind('GetError',() => errors.take(() => gl().getError(), performance.now()));
   function boundBuffer(target) { return target===ARRAY_BUFFER ? array : target===ELEMENT_ARRAY_BUFFER ? elements : 0; }
   bind('MapBufferOES',a => {
     if (a(1)!==0x88b9) { setError(0x0500); return 0; } // GL_WRITE_ONLY_OES

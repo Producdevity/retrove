@@ -42,7 +42,7 @@ import {parsePlist} from "./plist.mjs";
 import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
 import {propertyAccessors,structCopyImports,installUnobservedPropertyChanges} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
-import {DISPLAY_INTERVAL_MS, nextDisplayRefresh} from "../src/runtime/ios/uikit/application/display-refresh.ts";
+import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from './screen.mjs';
@@ -654,8 +654,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
             d.timestamp = time;
             await send(d.target, d.action, [ptr]);
           }
-          // Worker threads (often the game's own loop) use the rest of this refresh interval.
-          await service(Math.max(8, time + refreshMs - 2 - performance.now()), true);
+          await service(workerSliceMs(time, performance.now()), true);
         } finally { await poolPop(token); }
       }
     } finally { lifecycle.close(); input.disconnect(); }
