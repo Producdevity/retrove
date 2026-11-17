@@ -16,6 +16,8 @@ const encoder = new TextEncoder();
 export interface GuestMemory {
   read(address: number, size: number): Uint8Array;
   write(address: number, bytes: Uint8Array): void;
+  /** CPUs with direct access to guest pages read words without a copy. */
+  read32?(address: number): number;
 }
 export interface MappableMemory extends GuestMemory {
   map(address: number, size: number, permissions: number): void;
@@ -26,6 +28,7 @@ interface FreeBlock {
 }
 
 export function read32(cpu: GuestMemory, address: number): number {
+  if (cpu.read32) return cpu.read32(address);
   const bytes = cpu.read(address, WORD_BYTES);
   return (
     ((bytes[0] ?? 0) |

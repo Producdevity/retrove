@@ -4,9 +4,14 @@ import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
 import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
 import {UnicornBudget} from '../src/runtime/cpu/unicorn/budget.ts';
 import {TciTier, TciTierLimit} from '../src/runtime/cpu/tci/tier.ts';
+import {TranslatedTier} from '../src/runtime/cpu/translation/tier.ts';
+import {RegisterBridge} from '../src/runtime/cpu/translation/register-bridge.ts';
+import {runTranslated} from '../src/runtime/cpu/translation/runner.ts';
+import {translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
 
 const PAGE = 4096;
 const COPY_CHUNK = 1 << 20;
+const EXECUTE = 4;
 
 function uint32(value, label) {
   if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
@@ -25,7 +30,7 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold} = {}) {
+export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled()} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
   const uc = await createUnicorn();
   const compiler = compilationThreshold === 0 ? undefined : new TciTier(uc, compilationThreshold);
@@ -40,6 +45,21 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   try { registerTransfer = new UnicornRegisters(uc, handle); }
   catch (error) { uc._free(transfer); engine.close(); throw error; }
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
+  // Translated functions share guest memory with Unicorn (uc_mem_map_ptr) and fall back to it for
+  // everything they cannot run: host traps, unsupported instructions and unrepresentable state.
+  const tier = translation ? new TranslatedTier(uc) : undefined;
+  const bridge = tier && new RegisterBridge(uc, handle, registerTransfer, {
+    core: registers, doubles: Array.from({length: 32}, (_, n) => uc[`ARM_REG_D${n}`]), cpsr: uc.ARM_REG_CPSR,
+    fpscr: uc.ARM_REG_FPSCR, pc: uc.ARM_REG_PC, threadPointer: uc.ARM_REG_C13_C0_3,
+  }, () => tier.layout, () => tier.pages.view);
+  const traps = [];
+  const trapAt = pc => traps.find(t => pc >= t.first && pc <= t.last);
+  if (tier) tier.excluded = pc => traps.some(t => pc >= t.first && pc <= t.last + 4);
+  // Pages without execute permission hold no Unicorn blocks or translations, so host writes skip invalidation.
+  const dataPages = tier ? new Uint8Array(1 << 20) : undefined;
+  const markPages = (address, size, permissions) => dataPages?.fill(permissions & EXECUTE ? 0 : 1, address >>> 12, Math.ceil((address + size) / PAGE));
+  const dataOnly = (address, size) => !!dataPages && size > 0 && dataPages.subarray(address >>> 12, Math.ceil((address + size) / PAGE)).every(flag => flag === 1);
+  const leaveTranslated = () => bridge?.leave();
   const hooks = new Set();
   let blocks;
   try { blocks = budget === ExecutionBudget.Blocks ? new UnicornBudget(uc, handle) : undefined; }
@@ -87,28 +107,38 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   const cpu = {
     get budget() { return budget; },
     get compiler() { return compiler?.statistics; },
+    get translation() { return tier?.statistics; },
     get mappedBytes() { return mappedBytes; },
     get executedMilliseconds() { return executedMilliseconds; },
     // Darwin ARM code reads its thread pointer from TPIDRURO. Unicorn includes
     // this register when saving and restoring a cooperative thread context.
-    set threadPointer(address) { registerTransfer.write(uc.ARM_REG_C13_C0_3, address); },
+    set threadPointer(address) { registerTransfer.write(uc.ARM_REG_C13_C0_3, address); bridge?.setThreadPointer(address); },
     map(address, size, permissions = 7) {
       range(address, size, true);
-      engine.mem_map(address, size, permissions);
+      if (tier) {
+        const status = uc.ccall('uc_mem_map_ptr', 'number', ['pointer', 'number', 'number', 'number', 'pointer'], [handle, BigInt(address), BigInt(size), permissions, tier.pages.map(address, size)]);
+        if (status !== uc.ERR_OK) { tier.pages.unmap(address, size); throw Error('Guest mapping failed: ' + uc.strerror(status)); }
+      } else engine.mem_map(address, size, permissions);
+      markPages(address, size, permissions);
       mappedBytes += size;
     },
     unmap(address, size) {
       range(address, size, true);
       engine.mem_unmap(address, size);
+      tier?.invalidate(address, size);
+      tier?.pages.unmap(address, size);
+      markPages(address, size, EXECUTE);
       mappedBytes -= size;
     },
     protect(address, size, permissions) {
       range(address, size, true);
       engine.mem_protect(address, size, permissions);
+      markPages(address, size, permissions);
     },
     write(address, bytes) {
       if (!(bytes instanceof Uint8Array)) bytes = new Uint8Array(bytes);
       range(address, bytes.length);
+      if (dataOnly(address, bytes.length) && tier.pages.write(address, bytes)) return;
       for (let i = 0; i < bytes.length; i += COPY_CHUNK) {
         const chunk = bytes.subarray(i, i + COPY_CHUNK);
         uc.HEAPU8.set(chunk, transfer);
@@ -116,11 +146,13 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
         if (code !== uc.ERR_OK) throw Error('Guest memory write failed: ' + uc.strerror(code));
         const invalidation = uc._retrove_tci_invalidate(handle, address + i, chunk.length);
         if (invalidation !== uc.ERR_OK) throw Error('Guest code invalidation failed: ' + uc.strerror(invalidation));
+        tier?.invalidate(address + i, chunk.length);
       }
     },
     read(address, length) {
       range(address, length);
       const bytes = new Uint8Array(length);
+      if (tier?.pages.read(address, bytes)) return bytes;
       for (let i = 0; i < length; i += COPY_CHUNK) {
         const count = Math.min(COPY_CHUNK, length - i);
         const code = uc._uc_mem_read(handle, BigInt(address + i), transfer, BigInt(count));
@@ -129,13 +161,29 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       }
       return bytes;
     },
-    getReg(n) { return registerTransfer.read(register(n)) >>> 0; },
-    setReg(n, value) { registerTransfer.write(register(n), value >>> 0); },
-    get cpsr() { return registerTransfer.read(uc.ARM_REG_CPSR) >>> 0; },
-    set cpsr(value) { registerTransfer.write(uc.ARM_REG_CPSR, value >>> 0); },
-    get nextPC() { return (cpu.getReg(15) + ((cpu.cpsr >>> 5) & 1)) >>> 0; },
+    read32(address) {
+      const host = tier && (address & 4095) <= 4092 ? tier.pages.host(address) : -1;
+      if (host >= 0) return tier.pages.view.getUint32(host, true);
+      const b = cpu.read(address, 4);
+      return (b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0;
+    },
+    getReg(n) {
+      if (bridge?.translated) { register(n); return bridge.get(n); }
+      return registerTransfer.read(register(n)) >>> 0;
+    },
+    setReg(n, value) {
+      if (bridge?.translated) { register(n); bridge.set(n, value); return; }
+      registerTransfer.write(register(n), value >>> 0);
+    },
+    get cpsr() { return bridge ? bridge.cpsr : registerTransfer.read(uc.ARM_REG_CPSR) >>> 0; },
+    set cpsr(value) { leaveTranslated(); registerTransfer.write(uc.ARM_REG_CPSR, value >>> 0); },
+    get nextPC() { return bridge?.translated ? bridge.pc : (cpu.getReg(15) + ((cpu.cpsr >>> 5) & 1)) >>> 0; },
     // Preserve the low bit when returning from a host call (ARM/Thumb interworking).
-    branch(target) { registerTransfer.write(uc.ARM_REG_PC, uint32(target, 'target')); },
+    branch(target) {
+      uint32(target, 'target');
+      if (bridge?.translated) bridge.pc = target;
+      else registerTransfer.write(uc.ARM_REG_PC, target);
+    },
     trap(address, fn) {
       const pc = uint32(address, 'trap address') & ~1;
       return cpu.trapRange(pc >>> 0, pc >>> 0, fn);
@@ -144,6 +192,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       uint32(first, 'first trap address');
       uint32(last, 'last trap address');
       if (first > last || typeof fn !== 'function') throw new TypeError('Invalid trap range or callback');
+      const record = {first, last, fn};
+      traps.push(record);
       const hook = engine.hook_add(uc.HOOK_CODE, (_, address) => {
         pending = { address: Number(address), fn };
         engine.emu_stop();
@@ -151,6 +201,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       hooks.add(hook);
       blocks?.invalidateTraps();
       return () => {
+        const at = traps.indexOf(record);
+        if (at >= 0) traps.splice(at, 1);
         if (hooks.delete(hook)) { engine.hook_del(hook); blocks?.invalidateTraps(); }
       };
     },
@@ -163,22 +215,33 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       pending = null;
       memoryFault = null;
       const before = performance.now();
+      let pc = startPC;
       try {
+        if (tier && tier.entry(pc) && bridge.enter()) {
+          const result = runTranslated(tier, bridge, pc, until, count);
+          if (result.reason !== 'fallback') return result;
+          pc = result.pc;
+          const trap = trapAt(pc & ~1);
+          if (trap) { trap.fn(cpu, pc & ~1); return {reason: 'trap', address: pc & ~1, pc: cpu.nextPC}; }
+        }
+        if (tier) { tier.note(pc); bridge.leave(); }
         if (blocks?.requiresRefresh(until)) {
           // Unicorn flushes translated blocks when removing its instruction-count hook.
           // Stop before guest execution while installing that hook, then remove it below.
           blocks.stop();
-          engine.emu_start(startPC, until, 0, 1);
+          engine.emu_start(pc, until, 0, 1);
         }
         blocks?.start(count, until);
-        engine.emu_start(startPC, until, 0, blocks ? 0 : count);
+        engine.emu_start(pc, until, 0, blocks ? 0 : count);
       } catch (err) {
-        failedWasm = err instanceof WebAssembly.RuntimeError;
-        let pc;
-        try { pc = cpu.getReg(15); } catch { /* Preserve the original failure if Wasm already aborted. */ }
+        const translated = !!bridge?.translated;
+        failedWasm = err instanceof WebAssembly.RuntimeError && !translated;
+        let faultPC;
+        try { faultPC = cpu.getReg(15); } catch { /* Preserve the original failure if Wasm already aborted. */ }
         const address = memoryFault ? ` accessing 0x${memoryFault.faultAddress.toString(16)}` : '';
-        const error = new Error(`Guest CPU fault${pc === undefined ? '' : ' at 0x' + pc.toString(16)}${address}: ${String(err)}`, {cause: err});
-        throw Object.assign(error, { pc }, memoryFault);
+        const where = translated ? ' in translated code' : '';
+        const error = new Error(`Guest CPU fault${faultPC === undefined ? '' : ' at 0x' + faultPC.toString(16)}${where}${address}: ${String(err)}`, {cause: err});
+        throw Object.assign(error, { pc: faultPC }, memoryFault);
       } finally {
         executedMilliseconds += performance.now() - before;
       }
@@ -190,9 +253,20 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       }
       return { reason: cpu.getReg(15) === until ? 'until' : 'budget', pc: cpu.nextPC };
     },
-    saveState() { return states.save(); },
-    restoreState(state) { states.restore(state); },
-    freeState(state) { states.release(state); },
+    saveState() {
+      if (bridge?.translated) return {translated: bridge.save(), threadPointer: registerTransfer.read(uc.ARM_REG_C13_C0_3) >>> 0};
+      return {unicorn: states.save()};
+    },
+    restoreState(saved) {
+      if (saved.translated) {
+        bridge.restore(saved.translated);
+        cpu.threadPointer = saved.threadPointer;
+        return;
+      }
+      if (bridge) bridge.translated = false;
+      states.restore(saved.unicorn);
+    },
+    freeState(saved) { if (saved.unicorn) states.release(saved.unicorn); },
     close() {
       if (closed) return;
       closed = true;
@@ -207,6 +281,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       registerTransfer.close();
       uc._free(transfer);
       engine.close();
+      tier?.close();
     },
   };
   return cpu;
