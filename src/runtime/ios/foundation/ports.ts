@@ -10,6 +10,8 @@ const MILLISECONDS_PER_SECOND = 1000;
 const DOUBLE_BYTES = 8;
 export interface PortHost extends FoundationHost {
   hasPendingSource?(loop: number, mode: string): boolean;
+  /** Whether a CFRunLoopSource keeps the loop alive in this mode. */
+  hasRunLoopSource?(loop: number, mode: string): boolean;
   pollSources?(loop: number, mode: string): Promise<boolean>;
   send(self: number, name: string, args?: number[]): Promise<HostResult>;
   waitMethod(
@@ -65,12 +67,15 @@ export class PortRunLoops {
       for (const entry of entries) if (entry.port === port) await this.host.release(port);
     }
   }
-  private hasSource(loop: number, mode: string): boolean {
+  hasPort(loop: number, mode: string): boolean {
     return (
       this.registrations
         .get(loop)
         ?.some((entry) => entry.mode === mode && this.valid(entry.port)) ?? false
     );
+  }
+  private hasSource(loop: number, mode: string): boolean {
+    return this.hasPort(loop, mode) || (this.host.hasRunLoopSource?.(loop, mode) ?? false);
   }
   async run(
     loop: number,

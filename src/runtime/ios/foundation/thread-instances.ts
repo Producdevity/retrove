@@ -7,12 +7,32 @@ interface State {
   selector: string;
   argument: number;
 }
+/** A guest method the worker starts in directly, so its waits yield to every other thread. */
+export interface ThreadEntry {
+  readonly receiver: number;
+  readonly selector: string;
+  readonly args: readonly number[];
+}
 interface ThreadHost extends FoundationHost {
   selector(pointer: number): string;
   send(self: number, selector: string, args?: number[]): Promise<HostResult>;
-  spawn(self: number, task: () => Promise<void>, exited: () => Promise<void>): void;
+  /** Whether the receiver's implementation of `selector` is guest code. */
+  guestMethod(receiver: number, selector: string): boolean;
+  spawn(
+    self: number,
+    entry: ThreadEntry | undefined,
+    task: () => Promise<void>,
+    exited: () => Promise<void>,
+  ): void;
 }
 export function installThreadInstances(host: ThreadHost) {
+  const entry = (self: number, value: State): ThreadEntry | undefined => {
+    if (value.cancelled) return undefined;
+    if (host.guestMethod(self, "main")) return { receiver: self, selector: "main", args: [] };
+    return value.target && host.guestMethod(value.target, value.selector)
+      ? { receiver: value.target, selector: value.selector, args: [value.argument] }
+      : undefined;
+  };
   const states = new Map<number, State>();
   const get = (self: number): State => {
     let value = states.get(self);
@@ -43,6 +63,7 @@ export function installThreadInstances(host: ThreadHost) {
     try {
       host.spawn(
         self,
+        entry(self, value),
         async () => {
           if (!value.cancelled) await host.send(self, "main");
         },

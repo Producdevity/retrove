@@ -17,6 +17,7 @@ const Level = {
   BrownGreen: 0.4,
   BrownBlue: 0.2,
 } as const;
+const TRANSPARENT: RGBA = [0, 0, 0, 0];
 const PALETTE = {
   blackColor: [0, 0, 0, 1],
   whiteColor: [1, 1, 1, 1],
@@ -47,6 +48,7 @@ class UIKitColors {
   readonly klass: number;
   readonly gray = new Set<number>();
   readonly native = new Map<number, number>();
+  readonly patterns = new Map<number, number>();
   constructor(readonly host: ColorHost) {
     this.klass = host.hostClass(COLOR_CLASS, "NSObject", COLOR_INSTANCE_BYTES);
   }
@@ -73,9 +75,17 @@ class UIKitColors {
     ];
   }
   async clear(self: number): Promise<void> {
-    const color = this.native.get(self);
+    const color = this.native.get(self),
+      pattern = this.patterns.get(self);
     this.native.delete(self);
+    this.patterns.delete(self);
     if (color) await this.host.releaseCG(color);
+    if (pattern) await this.host.release(pattern);
+  }
+  async pattern(self: number, image: number): Promise<number> {
+    await this.initialize(self, TRANSPARENT, false);
+    if (image) this.patterns.set(self, this.host.retain(image));
+    return self;
   }
   async initialize(self: number, channels: RGBA, gray: boolean): Promise<number> {
     await this.clear(self);
@@ -132,6 +142,12 @@ export function installColors(host: ColorHost) {
         ? colors.initialize(self, value.channels, value.gray)
         : colors.create(value.channels, value.gray);
     });
+  host.method(COLOR_CLASS, false, "initWithPatternImage:", (self, args) =>
+    colors.pattern(self, args(Argument.First)),
+  );
+  host.method(COLOR_CLASS, true, "colorWithPatternImage:", async (_, args) =>
+    host.autorelease(await colors.pattern(host.alloc(colors.klass), args(Argument.First))),
+  );
   host.method(COLOR_CLASS, false, "colorWithAlphaComponent:", (self, args) => {
     const channels = colors.rgba(self);
     channels[Component.Alpha] = floatFromBits(args(Argument.First));

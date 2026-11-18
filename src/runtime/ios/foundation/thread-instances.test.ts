@@ -1,13 +1,17 @@
 import { expect, test, vi } from "vite-plus/test";
-import { installThreadInstances } from "./thread-instances";
+import { installThreadInstances, type ThreadEntry } from "./thread-instances";
 import type { HostMethod, HostResult } from "../objc/host";
 const SELF = 100,
   TARGET = 101,
   ARGUMENT = 102,
   SELECTOR = 103;
-function fixture() {
+function fixture(guest = false) {
   const methods = new Map<string, HostMethod>();
-  const workers: { task(): Promise<void>; exited(): Promise<void> }[] = [];
+  const workers: {
+    entry: ThreadEntry | undefined;
+    task(): Promise<void>;
+    exited(): Promise<void>;
+  }[] = [];
   const retain = vi.fn((value: number) => value),
     release = vi.fn(async (_value: number) => {}),
     delivered = vi.fn();
@@ -33,8 +37,9 @@ function fixture() {
       delivered(self, selector, args);
       return 0;
     },
-    spawn: (_self, task, exited) => {
-      workers.push({ task, exited });
+    guestMethod: (receiver) => guest && receiver === TARGET,
+    spawn: (_self, entry, task, exited) => {
+      workers.push({ entry, task, exited });
     },
   });
   return { invoke, workers, delivered, retain, release, threads };
@@ -68,4 +73,10 @@ test("cancellation before a new thread starts avoids invoking the target", async
   expect(await x.invoke("isCancelled")).toBe(1);
   expect(await x.invoke("isFinished")).toBe(1);
   expect(x.delivered).not.toHaveBeenCalled();
+});
+test("a guest target selector becomes the worker's entry point", async () => {
+  const x = fixture(true);
+  await x.invoke("initWithTarget:selector:object:", [TARGET, SELECTOR, ARGUMENT]);
+  await x.invoke("start");
+  expect(x.workers[0]?.entry).toEqual({ receiver: TARGET, selector: "work:", args: [ARGUMENT] });
 });

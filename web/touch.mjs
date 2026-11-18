@@ -23,6 +23,7 @@ import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
 import {installPageControls} from '../src/runtime/ios/uikit/page-control/bindings.ts';
+import {installSegmentedControls} from '../src/runtime/ios/uikit/segmented-control/bindings.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
 import {installToolbars} from '../src/runtime/ios/uikit/toolbar/bindings.ts';
 import {installTables} from '../src/runtime/ios/uikit/table/bindings.ts';
@@ -75,9 +76,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     v.frame=r; v.bounds[2]=r[2]; v.bounds[3]=r[3]; return self;
   };
-  let textViews,pickerViews,pageControls,toolbars,scrollers,tables,uiColors;
+  let textViews,pickerViews,pageControls,segmentedControls,toolbars,scrollers,tables,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),uiPattern:p=>uiColors?.patterns.get(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||segmentedControls?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):segmentedControls?.has(p)?segmentedControls.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -120,6 +121,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   toolbars=installToolbars({...controlHost,elements:p=>items(p),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   pageControls=installPageControls({...controlHost,touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
+  segmentedControls=installSegmentedControls({...controlHost,elements:p=>items(p),isString:p=>!!lookup(read(p),'UTF8String'),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
+    touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
   const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});
   const textFields=installTextFields({...controlHost,selector,mount:mediaHost,font:p=>textViews.font(p),layout:fieldLayout,enabled:p=>controls.get(p).enabled,dispatch:(p,events)=>controls.dispatch(p,events)});
   scrollers=installScrollViews({...uiHost,parent:p=>data(p).parent,now:()=>performance.now(),isControl:p=>!!lookup(read(p),'sendActionsForControlEvents:'),local:(self,point)=>{const value=convertPoint(point,window,self),bounds=data(self).bounds;return [value[0]-bounds[0],value[1]-bounds[1]];},boundsChanged:self=>{const v=data(self);if(v.layer){setFrame(v.layer,[...v.bounds]);data(v.layer).bounds=[...v.bounds];}}});
@@ -233,6 +236,10 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   uiColors=installColors({...uiHost,deallocateObject:async p=>{await deallocObject(p);},setColor:(channels,fill,stroke)=>getCoreGraphics?.()?.setColor(channels,fill,stroke),createCG:(channels,gray)=>{const cg=getCoreGraphics?.();if(!cg)throw Error('Quartz color registry unavailable');return cg.colors.generic(gray?[channels[0],channels[3]]:channels);},colorInfo:p=>{const cg=getCoreGraphics?.(),channels=cg?.colors.rgba(p);return channels?{channels,gray:cg.colors.get(p).components.length===2}:undefined;},releaseCG:async p=>{await getCoreGraphics().release(p);}});
   installNibViews({...uiHost,items,classNamed:name=>names.get(name),isString:pointer=>!!lookup(read(pointer),'UTF8String'),bytes:pointer=>readBytes(read(pointer+DataField.Bytes),read(pointer+DataField.Length))});
   method('UIWindow',false,'makeKeyAndVisible',key); method('UIWindow',false,'makeKeyWindow',key);
+  let ignoring=0;const ignoredPointers=new Set();
+  method('UIApplication',false,'beginIgnoringInteractionEvents',()=>{ignoring++;});
+  method('UIApplication',false,'endIgnoringInteractionEvents',()=>{ignoring=Math.max(0,ignoring-1);});
+  method('UIApplication',false,'isIgnoringInteractionEvents',()=>Number(ignoring>0));
   method('UIApplication',false,'keyWindow',()=>window);
   method('UIApplication',false,'windows',()=>autorelease(collection('NSArray',window?[window]:[])));
   method('UIViewController',false,'setView:',async(self,a)=>{
@@ -410,6 +417,12 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     const list=items(s),at=a(0);if(at>=list.length)throw Error('NSArray index outside bounds');
     return releaseFromHost(list.splice(at,1)[0]);
   });
+  method('NSMutableArray',false,'removeObjectsInArray:',async(s,a)=>{
+    const other=a(0);if(!other)return;
+    let targets=collections.get(other)?.slice();
+    if(!targets){targets=[];const count=Number(await send(other,'count'));for(let i=0;i<count;i++)targets.push(Number(await send(other,'objectAtIndex:',[i])));}
+    for(const target of targets){retain(target);try{await send(s,"removeObject:",[target]);}finally{await releaseFromHost(target);}}
+  });
   method('NSMutableArray',false,'insertObject:atIndex:',(s,a)=>{
     const p=a(0),i=a(1),list=items(s);if(!p||i>list.length)throw Error('Invalid NSMutableArray insertion');
     list.splice(i,0,retain(p));
@@ -466,6 +479,8 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
         try {canvas.setPointerCapture(e.pointerId);} catch { /* Synthetic events have no active pointer. */ }
       }
       if(e.type==='pointermove' && !e.buttons && e.pointerType==='mouse') return;
+      if(ignoring&&e.type==='pointerdown')ignoredPointers.add(e.pointerId);
+      if(ignoredPointers.has(e.pointerId)){if(e.type!=='pointermove')ignoredPointers.delete(e.pointerId);e.preventDefault();return;}
       inputMetrics.receive();
       queue.push({id:e.pointerId,type:e.type,point,time:e.timeStamp/1000});
       e.preventDefault();

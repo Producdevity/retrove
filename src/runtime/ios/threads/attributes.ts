@@ -3,7 +3,7 @@ const PAGE_BYTES = 4096;
 const MINIMUM_STACK_BYTES = 8192;
 const MAXIMUM_STACK_BYTES = 33_554_432;
 const DEFAULT_STACK_BYTES = 524_288;
-const DEFAULT_PRIORITY = 31;
+export const DEFAULT_PRIORITY = 31;
 export const ThreadPolicy = { Other: 1, RoundRobin: 2, Fifo: 4 } as const;
 export const ThreadDetach = { Joinable: 1, Detached: 2 } as const;
 export interface ThreadOptions {

@@ -324,8 +324,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       else result = cpu.run(pc, {until: RETURN, count: 65536});
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
       if (result.reason === 'budget') { budgetSlices++; executionMetrics.sample(threads.funcs._pthread_self(),result.pc,image.symbolAt(result.pc)); return {pc:result.pc, budget:true}; }
-      const host = stubs.get(pending);
-      if (!host) throw Error('Invalid import gate ' + hex(pending));
+      const gate = pending, host = stubs.get(gate);
+      if (!host) throw Error('Invalid import gate ' + hex(gate));
       const lr = cpu.getReg(14);
       const lastSymbol = label(host.binding.name);
       const thread=threads.funcs._pthread_self();
@@ -361,7 +361,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         if (value instanceof GuestLandingPad) return {pc:value.pc, unwind:value};
         if ('exit' in value) throw new GuestExit(value.exit);
         if ('threadExit' in value) return {done:true, value:value.threadExit};
-        if ('wait' in value) return {pc:lr, wait:value.wait};
+        // A resumed import re-enters through its gate with r0 set to the wait's value.
+        if ('wait' in value) return {pc:value.again ? gate : lr, wait:value.wait};
         if ('jump' in value) return {pc:value.jump};
         throw Error('Invalid host call result');
       }

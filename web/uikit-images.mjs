@@ -9,7 +9,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,glLayer}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,uiPattern,glLayer}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -67,6 +67,14 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       image.source=canvas;
     }
     return image.source;
+  }
+  function tile(image,ctx,[x,y,width,height]) {
+    const pixels=source(image),fill=image.width&&image.height?ctx.createPattern(pixels,'repeat'):null;
+    if(!fill)return;
+    fill.setTransform(new DOMMatrix().scale(image.width/pixels.width,image.height/pixels.height));
+    ctx.save();ctx.fillStyle=fill;
+    try {ctx.fillRect(x,y,width,height);}
+    finally {ctx.restore();}
   }
   function draw(image,ctx,x,y,width,height) {
     if(!image||!ctx||!width||!height)return;
@@ -151,7 +159,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       if(state.hidden||(alpha<=0&&!opacityTiming))return;
       const image=images.get((state.highlighted&&state.highlightedImage)||state.image), layerContent=state.contents&&cg()?.pixels(state.contents), custom=typeof lookup(read(view),'drawRect:')==='number';
       const hostDrawing=hasHostDrawing?.(view),background=state.backgroundColor?uiColor?.(state.backgroundColor):undefined;
-      const colored=background||state.layerBackgroundColor||state.borderColor;
+      const pattern=state.backgroundColor?images.get(uiPattern?.(state.backgroundColor)):undefined;
+      const colored=background||pattern||state.layerBackgroundColor||state.borderColor;
       const [bx,by,vw,vh]=state.bounds;
       if(vw>0&&vh>0&&(image||custom||hostDrawing||layerContent||colored)) {
         let node=nodes.get(view);
@@ -179,6 +188,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           ctx.setTransform(px/vw,0,0,py/vh,-bx*px/vw,-by*py/vh);
           if(state.clearsContextBeforeDrawing!==0)ctx.clearRect(bx,by,vw,vh);
           if(colored)drawLayerBackground(ctx,state,p=>cg()?.colors.rgba(p),background);
+          if(pattern&&!state.layerBackgroundColor)tile(pattern,ctx,state.bounds);
           if(image)draw(image,ctx,...imageRect(image,state.contentMode,state.bounds));
           if(layerContent) {
             const buffer=ctx.createImageData(layerContent.width,layerContent.height);buffer.data.set(layerContent.rgba);

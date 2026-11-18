@@ -37,7 +37,7 @@ export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,
     for(const [name,count] of [['performSelector:',0],['performSelector:withObject:',1],['performSelector:withObject:withObject:',2]])
       method('NSObject',isMeta,name,(s,a)=>send(s,readString(cpu,a(0)),Array.from({length:count},(_,i)=>a(i+1))));
     method('NSObject',isMeta,'performSelector:withObject:afterDelay:',(s,a)=>{
-      queue.push({target:retain(s),name:readString(cpu,a(0)),arg:retain(a(1)),at:performance.now()+1000*number(a(2),a(3))});
+      queue.push({target:retain(s),name:readString(cpu,a(0)),arg:retain(a(1)),at:performance.now()+1000*number(a(2),a(3)),delayed:true});
     });
     const deliver=(s,sel,arg,wait)=>{
       const name=readString(cpu,sel);
@@ -52,6 +52,17 @@ export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,
       return deliveries.deliver(threadIdentity(thread),s,readString(cpu,selector),arg,Boolean(wait));
     });
   }
+  async function cancelDelayed(target,matches){
+    for(const call of queue.slice()){
+      if(!call.delayed||call.target!==target||!await matches(call))continue;
+      queue.splice(queue.indexOf(call),1);await release(call.target);await release(call.arg);
+    }
+  }
+  method('NSObject',true,'cancelPreviousPerformRequestsWithTarget:',(_,a)=>cancelDelayed(a(0),()=>true));
+  method('NSObject',true,'cancelPreviousPerformRequestsWithTarget:selector:object:',(_,a)=>{
+    const name=readString(cpu,a(1)),arg=a(2);
+    return cancelDelayed(a(0),async call=>call.name===name&&(call.arg===arg||(!!call.arg&&!!arg&&!!await send(call.arg,'isEqual:',[arg]))));
+  });
   // UIView immediately applies model changes. The completion block runs on
   // the main run loop after both the requested delay and the duration.
   async function animate(seconds, delay, options, changes, completion) {
@@ -70,10 +81,11 @@ export function foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,
   method('UIView', true, 'animateWithDuration:animations:completion:', (_,a)=>
     animate(number(a(0),a(1)),0,0,a(2),a(3)));
   method('UIView', true, 'animateWithDuration:animations:', (_,a)=>animate(number(a(0),a(1)),0,0,a(2),0));
-  return {pollThread:(id,mode)=>deliveries.pump(id,mode),hasThreadSource:(id,mode)=>deliveries.pending(id,mode),pending:()=>scheduled.size+queue.length+animations.length,async pump(){
+  return {later:run=>{queue.push({run,at:0});},async unscheduleTimer(p){if(scheduled.delete(p))await release(p);},pollThread:(id,mode)=>deliveries.pump(id,mode),hasThreadSource:(id,mode)=>deliveries.pending(id,mode),pending:()=>scheduled.size+queue.length+animations.length,async pump(){
     const now=performance.now();
     for (const call of queue.slice())if(call.at<=now){
       queue.splice(queue.indexOf(call),1);
+      if(call.run){await call.run();continue;}
       try {await send(call.target,call.name,[call.arg]);}finally{await release(call.target);await release(call.arg);call.done=true;}
     }
     for (const animation of animations.slice()) if (animation.at <= now) {

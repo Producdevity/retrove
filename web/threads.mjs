@@ -1,6 +1,6 @@
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
-import {ThreadAttributes} from '../src/runtime/ios/threads/attributes.ts';
+import {ThreadAttributes, ThreadPolicy, DEFAULT_PRIORITY} from '../src/runtime/ios/threads/attributes.ts';
 
 const PAGE = 4096, MAIN = 1;
 const asWait = poll => {
@@ -12,6 +12,8 @@ export function threadImports(cpu, heap, returnAddress) {
   const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
+  // Priorities are recorded for the guest to read back; the cooperative scheduler does not use them.
+  const schedules = new Map();
   function threadPointer(id) {
     // The first visible word contains pthread_self. A private word directly
     // before it holds the SJLJ context chain, outside the guest TLS slots.
@@ -107,6 +109,19 @@ export function threadImports(cpu, heap, returnAddress) {
     _pthread_attr_setdetachstate: a => attrs.detach(a(0),a(1)),
     _pthread_attr_setschedpolicy: a => attrs.policy(a(0),a(1)),
     _pthread_attr_setschedparam: a => a(1) ? attrs.priority(a(0),read32(cpu,a(1)) | 0) : 22,
+    _pthread_getschedparam: a => {
+      if (a(0) !== MAIN && !workers.has(a(0))) return 3;
+      const value = schedules.get(a(0)) ?? {policy: ThreadPolicy.Other, priority: DEFAULT_PRIORITY};
+      if (a(1)) write32(cpu, a(1), value.policy);
+      if (a(2)) write32(cpu, a(2), value.priority);
+      return 0;
+    },
+    _pthread_setschedparam: a => {
+      if (a(0) !== MAIN && !workers.has(a(0))) return 3;
+      if (!a(2) || !Object.values(ThreadPolicy).includes(a(1))) return 22;
+      schedules.set(a(0), {policy: a(1), priority: read32(cpu, a(2)) | 0});
+      return 0;
+    },
     _pthread_create: create,
     _pthread_self: () => current.id,
     _pthread_main_np: () => Number(current.id === MAIN),

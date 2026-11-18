@@ -20,6 +20,14 @@ export function networkImports(cpu,heap,errno,table) {
   const fail=n=>{write32(cpu,errno,n);return -1;};
   const bound=new Map(),interfaces=new Set();
   let nextPort=49152,ntoa,host;
+  // Darwin EAI_* codes; only loopback and numeric IPv4 names resolve on the isolated device.
+  const EAI={FAMILY:5,MEMORY:6,NONAME:8,SERVICE:9,SOCKTYPE:10},PASSIVE=1,SERVICES={http:80,https:443};
+  const addressInfos=new Set(),gaiMessages=new Map();
+  function port(service){
+    if(!service)return 0;
+    if(/^\d+$/.test(service))return Number(service)<65536?Number(service):null;
+    return SERVICES[service.toLowerCase()]??null;
+  }
   const portKey=(type,port)=>type+':'+port;
   function idlePort(type){
     for(let i=0;i<16384;i++){const p=nextPort; nextPort=p===65535?49152:p+1;if(!bound.has(portKey(type,p)))return p;}
@@ -168,6 +176,27 @@ export function networkImports(cpu,heap,errno,table) {
       interfaces.add(p);write32(cpu,a(0),p);return 0;
     },
     _freeifaddrs:a=>{if(interfaces.delete(a(0)))heap.free(a(0));},
+    _getaddrinfo:a=>{
+      const node=a(0)?readString(cpu,a(0)):'',service=a(1)?readString(cpu,a(1)):'',hints=a(2);
+      const flags=hints?read32(cpu,hints):0,family=hints?read32(cpu,hints+4):0,socktype=hints?read32(cpu,hints+8)||STREAM:STREAM;
+      if(!node&&!service)return EAI.NONAME;
+      if(family!==0&&family!==2)return EAI.FAMILY;
+      if(socktype!==STREAM&&socktype!==DGRAM)return EAI.SOCKTYPE;
+      const number=port(service);if(number===null)return EAI.SERVICE;
+      const ip=node?ipv4(node)??(['localhost','localhost.localdomain'].includes(node.toLowerCase())?LOCAL:null):flags&PASSIVE?0:LOCAL;
+      if(ip===null)return EAI.NONAME;
+      const info=heap.zero(48);if(!info)return EAI.MEMORY;
+      [flags,2,socktype,socktype===STREAM?6:17,16,0,info+32,0].forEach((v,i)=>write32(cpu,info+4*i,v));
+      cpu.write(info+32,addrBytes(ip,number));addressInfos.add(info);write32(cpu,a(3),info);return 0;
+    },
+    _freeaddrinfo:a=>{if(addressInfos.delete(a(0)))heap.free(a(0));},
+    _gai_strerror:a=>{
+      if(!gaiMessages.has(a(0))){
+        const text=(a(0)===EAI.NONAME?'nodename nor servname provided, or not known':a(0)===EAI.SERVICE?'servname not supported for ai_socktype':'Unknown error')+'\0';
+        const p=heap.zero(text.length);cpu.write(p,new TextEncoder().encode(text));gaiMessages.set(a(0),p);
+      }
+      return gaiMessages.get(a(0));
+    },
     _gethostbyname:a=>{
       const name=readString(cpu,a(0)),ip=ipv4(name)??(['localhost','localhost.localdomain'].includes(name.toLowerCase())?LOCAL:null);
       if(ip===null)return 0;

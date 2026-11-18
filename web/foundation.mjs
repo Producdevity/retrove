@@ -287,6 +287,10 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     });
   method('NSURL',false,'port',s=>urls.get(s).port?number(Number(urls.get(s).port)):0);
   method('NSURL',false,'absoluteString',s=>string(urls.get(s).href));
+  // URLs are stored resolved, so every NSURL is its own absolute URL with no base.
+  method('NSURL',false,'absoluteURL',s=>s);
+  method('NSURL',false,'baseURL',()=>0);
+  method('NSURL',false,'relativeString',s=>string(urls.get(s).href));
   method('NSURL',false,'path',s=>string(decodeURIComponent(urls.get(s).pathname)));
   method('NSURL',false,'fileSystemRepresentation',s=>utf8(string(decodeURIComponent(urls.get(s).pathname))));
   method('NSURL',false,'URLByAppendingPathComponent:',(s,a)=>{
@@ -457,8 +461,14 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   const threadId=()=>threads?.funcs._pthread_self()??1;
   const threadTasks=new Map();let threadGate;
   const threadInstances=installThreadInstances({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,selector:p=>readString(cpu,p),send,
-    spawn(self,task,exited){
+    guestMethod:(receiver,name)=>typeof lookup(read(receiver),name)==='number',
+    spawn(self,entry,task,exited){
       if(!threads)throw Error('NSThread workers are unavailable');
+      if(entry){
+        const id=threads.spawnDetached(lookup(read(entry.receiver),entry.selector),[entry.receiver,selector(entry.selector),...entry.args],async()=>{threadObjects.delete(id);await exited();});
+        if(!id)throw Error('Could not allocate NSThread stack');
+        threadObjects.set(id,self);return;
+      }
       threadGate??=hostGate({name:'NSThread main',library:'Foundation'},async a=>{const task=threadTasks.get(a(0));if(!task)throw Error('Unknown NSThread worker');await task();return 0;});
       threadTasks.set(self,task);
       const id=threads.spawnDetached(threadGate,[self],async()=>{threadTasks.delete(self);threadObjects.delete(id);await exited();});

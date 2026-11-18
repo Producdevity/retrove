@@ -45,6 +45,10 @@ import {zoneCopySelector} from "../src/runtime/ios/objc/host.ts";
 import {propertyAccessors,structCopyImports,installUnobservedPropertyChanges} from "../src/runtime/ios/objc/properties.ts";
 import {ApplicationLifecycle, LifecycleEvent} from "../src/runtime/ios/uikit/application/lifecycle.ts";
 import {installURLOpening, openInBrowser} from "../src/runtime/ios/uikit/application/url-opening.ts";
+import {RunLoopSources, runLoopSourceFunctions} from "../src/runtime/ios/foundation/run-loop-sources.ts";
+import {installCFNetwork, CFNetworkStrings} from "../src/runtime/ios/cfnetwork/bindings.ts";
+import {installCookieStorage} from "../src/runtime/ios/foundation/http-cookies.ts";
+import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
@@ -570,6 +574,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'setDelegate:', (_, a) => { delegate = a(0); });
   method('UIApplication', false, 'isIdleTimerDisabled', () => Number(idleDisabled));
   method('UIApplication', false, 'setIdleTimerDisabled:', (_, a) => { idleDisabled = Boolean(a(0)); });
+  let networkActivity = false;
+  method('UIApplication', false, 'isNetworkActivityIndicatorVisible', () => Number(networkActivity));
+  method('UIApplication', false, 'setNetworkActivityIndicatorVisible:', (_, a) => { networkActivity = Boolean(a(0)); });
   installURLOpening({method, text, send, open: openInBrowser});
   const input = touchUIKit({currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
@@ -578,7 +585,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   installStringSearch({text,write,structureMethod:(selector,implementation)=>{implementation.stret=true;method('NSString',false,selector,implementation);}},characterSets);
   installLocks({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,send,
     currentThread:()=>threads?.funcs._pthread_self()??1,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
-  installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(_,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);return await foundationObjects.pollConnections(loop,mode)||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
+  let runLoopSources;
+  const ports=installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(loop,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode)||!!runLoopSources?.signaled(loop,mode),hasRunLoopSource:(loop,mode)=>!!runLoopSources?.has(loop,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);const connected=await foundationObjects.pollConnections(loop,mode);return (await runLoopSources?.perform(loop,mode))||connected||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let dispatchService,cf;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
     read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,webViews:input.webViews,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
@@ -617,6 +625,19 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       return {buffer:await decodePlayerAudio(bytes,context,source=>inspectAudioFile(source.read,source.size)),output:new WebPlayerOutput(context)};}});
   const accelerometer=installAccelerometer({hostClass,method,alloc,destroy,release:releaseFromHost,send});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,threadIdentity:foundationObjects.threadIdentity,getDispatch:()=>dispatchService});
+  runLoopSources=new RunLoopSources({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,callGuest,currentLoop:()=>getRunLoop(),
+    poll:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);return await foundationObjects.pollConnections(loop,mode)||delivered;},
+    pending:(_,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode),hasPort:(loop,mode)=>ports.hasPort(loop,mode),
+    addTimer:async(loop,timer,mode)=>{await send(loop,'addTimer:forMode:',[timer,mode]);},removeTimer:timer=>scheduler.unscheduleTimer(timer)});
+  Object.assign(cf.funcs,runLoopSourceFunctions(runLoopSources,()=>threads?.funcs._pthread_self()??1),{_CFRunLoopGetMain:()=>getRunLoop(1)});
+  const network=installCFNetwork({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,zero,readBytes:(p,n)=>cpu.read(p,n),callGuest,
+    dataBytes:p=>cpu.read(read(p+DataField.Bytes),read(p+DataField.Length)),ownedData:bytes=>archivedData(bytes),ownedDictionary:entries=>retain(foundationObjects.property(entries)),ownedArray:values=>input.array([...values]),
+    ownedURL:async address=>retain(await send(names.get('NSURL'),'URLWithString:',[string(address)])),urlString:async url=>text(await send(url,'absoluteString')),
+    error:(domain,code)=>retain(fileObjects.error(code,domain))},runLoopSources);
+  Object.assign(cf.funcs,network.functions);
+  installCookieStorage({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,array:values=>autorelease(input.array([...values])),items:input.items,
+    urlHost:async url=>{const value=url?await send(url,'host'):0;return value?text(value).toLowerCase():'';}});
+  installRemoteNotifications({method,send,responds:(p,name)=>!!p&&!!lookup(read(p),name),delegate:()=>delegate,error:fileObjects.error,later:scheduler.later});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])
     method('UIApplication',false,name,(_,a)=>{statusBarHidden=!!a(0);});
@@ -774,6 +795,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   for(const [symbol,value]of Object.entries(AnimationSymbols))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
+  for(const [symbol,value] of Object.entries(CFNetworkStrings))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',
     'UIApplicationDidReceiveMemoryWarningNotification', 'UIApplicationWillEnterForegroundNotification',
@@ -811,6 +833,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
     if(name==='_kCFBooleanTrue'||name==='_kCFBooleanFalse'){if(!booleanConstants.has(name)){const slot=zero(4);write(slot,retain(foundationObjects.number(name==='_kCFBooleanTrue')));booleanConstants.set(name,slot);}return booleanConstants.get(name);}
     if(name.startsWith('_kCF')){const address=cf.resolveData(name);if(address!=null)return address;}
+    {const address=network.data(name);if(address!==undefined)return address;}
     if(blockClasses.has(name))return blockClasses.get(name);
     if(cg.constants.has(name))return cg.constants.get(name);
     if (name === '_kCFAllocatorDefault') return defaultAllocator ??= zero(4);
