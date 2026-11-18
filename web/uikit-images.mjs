@@ -9,7 +9,7 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,uiPattern,glLayer}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,uiPattern,glLayer,movieVideo}) {
   hostClass('UIImage','NSObject');
   hostClass('UIImageView','UIView');
   const images=new Map(), nodes=new Map();
@@ -200,6 +200,17 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           if(custom&&cg())await cg().withContext(ctx,()=>send(view,'drawRect:',state.bounds.map(bits)));
           if(state.borderColor)drawLayerBorder(ctx,state,p=>cg()?.colors.rgba(p));
         }
+      }
+      // A movie player's video draws as its view's content, above the view and below its subviews.
+      const video=movieVideo?.(view);
+      if(video&&vw>0&&vh>0){
+        let vx=x,vy=y,matrix='';
+        if(toDisplay){
+          const p=toDisplay([bx,by],view,window),qx=toDisplay([bx+1,by],view,window),qy=toDisplay([bx,by+1],view,window);
+          vx=p[0]-screen[0];vy=p[1]-screen[1];
+          matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
+        }
+        Object.assign(video.style,{position:'absolute',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
       }
       // GL content sits in the view order at its EAGL layer, so views behind it stay behind the game.
       if(state.layer&&glLayer?.(state.layer))glOrder=order++;

@@ -153,6 +153,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     destroy(self);
   });
   return {
+    videoForView: view => [...players.values()].find(player => player.view === view)?.video,
     async pump() {
       if (delivering) return;
       delivering = true;

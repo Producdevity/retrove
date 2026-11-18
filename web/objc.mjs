@@ -48,6 +48,7 @@ import {installURLOpening, openInBrowser} from "../src/runtime/ios/uikit/applica
 import {RunLoopSources, runLoopSourceFunctions} from "../src/runtime/ios/foundation/run-loop-sources.ts";
 import {installCFNetwork, CFNetworkStrings} from "../src/runtime/ios/cfnetwork/bindings.ts";
 import {installCookieStorage} from "../src/runtime/ios/foundation/http-cookies.ts";
+import {installBackgroundTasks} from "../src/runtime/ios/uikit/application/background-tasks.ts";
 import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
@@ -578,7 +579,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'isNetworkActivityIndicatorVisible', () => Number(networkActivity));
   method('UIApplication', false, 'setNetworkActivityIndicatorVisible:', (_, a) => { networkActivity = Boolean(a(0)); });
   installURLOpening({method, text, send, open: openInBrowser});
-  const input = touchUIKit({currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const input = touchUIKit({movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
@@ -637,6 +638,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   Object.assign(cf.funcs,network.functions);
   installCookieStorage({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,array:values=>autorelease(input.array([...values])),items:input.items,
     urlHost:async url=>{const value=url?await send(url,'host'):0;return value?text(value).toLowerCase():'';}});
+  installBackgroundTasks({method,state:()=>lifecycle.state,copyBlock:block=>dispatchService.copy(block),releaseBlock:block=>dispatchService.release(block)});
   installRemoteNotifications({method,send,responds:(p,name)=>!!p&&!!lookup(read(p),name),delegate:()=>delegate,error:fileObjects.error,later:scheduler.later});
   let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
   for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])

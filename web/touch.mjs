@@ -39,7 +39,7 @@ const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:
   [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread}) {
+  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread, movieVideo}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
@@ -78,7 +78,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   };
   let textViews,pickerViews,pageControls,segmentedControls,toolbars,scrollers,tables,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,uiColor:p=>uiColors?.rgba(p),uiPattern:p=>uiColors?.patterns.get(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||segmentedControls?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):segmentedControls?.has(p)?segmentedControls.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,movieVideo,uiColor:p=>uiColors?.rgba(p),uiPattern:p=>uiColors?.patterns.get(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||segmentedControls?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):segmentedControls?.has(p)?segmentedControls.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }

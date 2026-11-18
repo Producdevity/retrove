@@ -1,10 +1,16 @@
+/** How long a successful copy stays confirmed. */
+const CONFIRMATION_MS = 2500;
+
 export function connectCopy(
   button: HTMLButtonElement,
   report: HTMLTextAreaElement,
   status: HTMLElement,
   refresh: () => void,
 ): void {
+  let clearing = 0;
   button.addEventListener("click", () => {
+    clearTimeout(clearing);
+    status.textContent = "";
     refresh();
     const unavailable = (): void => {
       const disclosure = report.closest("details");
@@ -21,6 +27,9 @@ export function connectCopy(
     }
     void navigator.clipboard.writeText(report.value).then(() => {
       status.textContent = "Logs copied to clipboard.";
+      clearing = window.setTimeout(() => {
+        status.textContent = "";
+      }, CONFIRMATION_MS);
     }, unavailable);
   });
 }
