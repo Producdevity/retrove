@@ -69,5 +69,16 @@ export class DiagnosticJournal {
   text(): string {
     return this.#entries.join("\n");
   }
+  get size(): number {
+    return this.#entries.length;
+  }
+  clear(): void {
+    this.#entries.length = 0;
+    try {
+      this.storage?.setItem(JOURNAL_KEY, "");
+    } catch {
+      /* Nothing stored to clear. */
+    }
+  }
 }
 export const libraryJournal = new DiagnosticJournal();

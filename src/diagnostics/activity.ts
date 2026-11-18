@@ -2,19 +2,28 @@ import { element, node } from "../ui/dom";
 import { download } from "../ui/download";
 import { libraryJournal } from "./journal";
 import { connectCopy } from "./clipboard";
+import { groupRepeats, parseEntry, type GroupedEntry } from "./log-view";
+import { chooseClear, SessionSheet } from "./session-sheet";
+import { renderSessionGroups } from "./sessions-view";
 import {
-  groupRepeats,
-  parseEntry,
-  parseSession,
-  SESSION_STATES,
-  type GroupedEntry,
-  type SessionSummary,
-} from "./log-view";
-import { LAST_REPORT_KEY, readEarlierReports } from "./report-archive";
-const UNCLEAN_HINT =
-  "Retrove restarted while it was running; iOS likely closed it for using too much memory.";
-export { LAST_REPORT_KEY } from "./report-archive";
+  LAST_REPORT_KEY,
+  clearSessions,
+  deleteSession,
+  readSessions,
+  type ReportStorage,
+} from "./session-store";
+export { LAST_REPORT_KEY } from "./session-store";
 const FILTER_PROBLEMS = "problems";
+const VIEW_LIBRARY = "library";
+const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+
+function storage(): ReportStorage | undefined {
+  try {
+    return localStorage;
+  } catch {
+    return undefined;
+  }
+}
 export function readLastReport(): string | null {
   try {
     return localStorage.getItem(LAST_REPORT_KEY);
@@ -25,26 +34,6 @@ export function readLastReport(): string | null {
 export function saveLastReport(value: string): void {
   localStorage.setItem(LAST_REPORT_KEY, value);
 }
-const clock = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
-
-function renderSession(container: HTMLElement, session: SessionSummary | undefined): void {
-  if (!session) {
-    container.replaceChildren(node("p", "row footnote", "No app has run yet."));
-    return;
-  }
-  const head = node("div", "row");
-  const state = node("span", "badge", SESSION_STATES[session.state] ?? session.state);
-  state.dataset["state"] = session.state;
-  head.append(node("strong", "", session.app), state);
-  const facts = [
-    session.started ? clock.format(session.started) : undefined,
-    session.seconds === undefined ? undefined : `${Math.round(session.seconds)} s`,
-  ].filter((fact) => fact !== undefined);
-  const rows = [head, node("p", "row footnote", facts.join(" · "))];
-  if (session.firstError) rows.push(node("p", "row problem", session.firstError));
-  container.replaceChildren(...rows);
-}
 function renderEntry(entry: GroupedEntry): HTMLLIElement {
   const item = node("li", entry.problem ? "problem" : "");
   const text = node("div");
@@ -54,58 +43,26 @@ function renderEntry(entry: GroupedEntry): HTMLLIElement {
   item.append(text, node("time", "", entry.time ? time.format(entry.time) : ""));
   return item;
 }
+function checked(container: HTMLElement, value: string): boolean {
+  return container.querySelector<HTMLInputElement>(`input[value="${value}"]`)?.checked ?? false;
+}
 
-function earlierReports(): string[] {
-  try {
-    return readEarlierReports(localStorage);
-  } catch {
-    return [];
-  }
-}
-function renderEarlier(container: HTMLElement, reports: readonly string[]): void {
-  container.hidden = !reports.length;
-  const heading = container.querySelector("h2");
-  container.replaceChildren(
-    ...(heading ? [heading] : []),
-    ...reports.map((text) => {
-      const group = node("div", "group");
-      const summary = parseSession(text.replace(/^Ended unexpectedly:[^\n]*\n\n/u, ""));
-      renderSession(
-        group,
-        summary?.state === "running"
-          ? { ...summary, state: "unclean", firstError: summary.firstError ?? UNCLEAN_HINT }
-          : summary,
-      );
-      return group;
-    }),
-  );
-}
-/** The Logs page: a summary of the last app session and the library's own events. */
-export function connectActivity(): () => void {
+/** The library's own event journal, with its filter and export. */
+function connectLibrary(): () => void {
   const report = element("report", HTMLTextAreaElement);
   const status = element("report-status", HTMLParagraphElement);
-  const session = element("last-session", HTMLDivElement);
   const entries = element("log-entries", HTMLOListElement);
   const filter = element("log-filter", HTMLFieldSetElement);
-  const earlier = element("earlier-sessions", HTMLDivElement);
   const refresh = (): void => {
-    const lastReport = readLastReport();
-    const previous = earlierReports();
     const journal = libraryJournal.text();
     report.value = [
-      "Retrove debug logs",
+      "Retrove library log",
       `Build: ${import.meta.env.VITE_RETROVE_REVISION}`,
       journal,
-      lastReport,
-      ...previous.map((text, index) => `Earlier session ${index + 1}\n${text}`),
     ]
       .filter(Boolean)
       .join("\n\n");
-    renderSession(session, parseSession(lastReport));
-    renderEarlier(earlier, previous);
-    const problems = filter.querySelector<HTMLInputElement>(
-      `input[value="${FILTER_PROBLEMS}"]`,
-    )?.checked;
+    const problems = checked(filter, FILTER_PROBLEMS);
     const parsed = journal.split("\n").filter(Boolean).map(parseEntry).reverse();
     const shown = problems ? parsed.filter((entry) => entry.problem) : parsed;
     entries.replaceChildren(
@@ -119,7 +76,49 @@ export function connectActivity(): () => void {
   connectCopy(element("copy-log", HTMLButtonElement), report, status, refresh);
   element("export-log", HTMLButtonElement).addEventListener("click", () => {
     refresh();
-    download(new Blob([report.value], { type: "text/plain" }), "retrove-report.txt");
+    download(new Blob([report.value], { type: "text/plain" }), "retrove-library-log.txt");
   });
   return refresh;
 }
+
+/** The Logs page: app sessions grouped by app, and the library's own events. */
+export function connectActivity(): () => void {
+  const groups = element("session-groups", HTMLDivElement);
+  const views = element("logs-view", HTMLFieldSetElement);
+  const refreshLibrary = connectLibrary();
+  const refreshSessions = (): void => {
+    renderSessionGroups(groups, readSessions(storage() ?? emptyStorage), (session, detail) =>
+      sheet.open(session, detail),
+    );
+  };
+  const sheet = new SessionSheet((session) => {
+    const store = storage();
+    if (store) deleteSession(store, session.id);
+    refreshSessions();
+  });
+  const showView = (): void => {
+    const library = checked(views, VIEW_LIBRARY);
+    element("sessions-view", HTMLDivElement).hidden = library;
+    element("library-view", HTMLDivElement).hidden = !library;
+  };
+  views.addEventListener("change", showView);
+  element("clear-logs", HTMLButtonElement).addEventListener("click", () => {
+    const store = storage();
+    void chooseClear(store ? readSessions(store).length : 0, libraryJournal.size).then((choice) => {
+      if (store && (choice === "sessions" || choice === "all")) clearSessions(store);
+      if (choice === "library" || choice === "all") libraryJournal.clear();
+      refreshSessions();
+      refreshLibrary();
+    });
+  });
+  return () => {
+    showView();
+    refreshSessions();
+    refreshLibrary();
+  };
+}
+const emptyStorage: ReportStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};

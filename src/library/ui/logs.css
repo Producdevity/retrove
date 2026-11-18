@@ -10,27 +10,99 @@
 #report-status:empty {
   display: none;
 }
-#last-session strong {
-  font: var(--text-headline);
+.logs-view {
+  --count: 2;
+  margin: 0 0 var(--space-2);
 }
-#last-session .badge[data-state="failed"],
-#last-session .problem {
+.page-header .button.danger {
+  min-height: 34px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+}
+.session-group {
+  margin-top: var(--space-5);
+}
+.session-group .section-heading {
+  margin: 0 0 var(--space-2);
+}
+.session-count {
+  margin-right: var(--space-4);
+  color: var(--ink-2);
+  font: var(--text-footnote);
+}
+.session-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.session-list li + li {
+  border-top: 1px solid var(--separator);
+}
+.session-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+.session-row::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--ink-3);
+  border-right: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+}
+.session-row:active:not(:disabled) {
+  transform: none;
+  background: var(--fill);
+}
+.session-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.session-row[data-state="failed"] .session-dot,
+.session-row[data-state="unclean"] .session-dot {
+  background: var(--danger);
+}
+.session-row[data-state="completed"] .session-dot {
+  background: var(--success);
+}
+.session-row[data-state="running"] .session-dot {
+  background: var(--tint);
+}
+.session-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.session-text strong {
+  font: 600 16px / 1.3 var(--font);
+}
+.session-text span {
+  overflow: hidden;
+  color: var(--ink-2);
+  font: var(--text-footnote);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.session-row[data-state="failed"] .session-text span,
+.session-row[data-state="unclean"] .session-text span {
   color: var(--danger);
 }
-#last-session .badge[data-state="failed"] {
-  background: var(--danger-fill);
-}
-#last-session .badge[data-state="completed"] {
-  background: color-mix(in srgb, var(--success) 14%, transparent);
-  color: var(--success);
-}
-#last-session .problem {
-  font: var(--text-footnote);
-  overflow-wrap: anywhere;
-}
-#last-session .footnote {
-  margin: 0;
-  min-height: 0;
+.empty-sessions {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4);
+  color: var(--ink-2);
+  font: var(--text-callout);
 }
 .log-list {
   margin: 0;
@@ -110,4 +182,114 @@
   color: var(--ink-3);
   font: inherit;
   font-weight: 400;
+}
+
+/* Session detail sheet. */
+.session-sheet h2 {
+  margin: 0;
+  font: var(--text-title);
+}
+.session-sheet > .secondary {
+  margin: var(--space-1) 0 var(--space-4);
+}
+.session-reason {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-l);
+  background: var(--fill);
+}
+.session-reason[data-state="failed"],
+.session-reason[data-state="unclean"] {
+  background: var(--danger-fill);
+}
+.session-reason strong {
+  font: 600 13px / 1.3 var(--font);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.session-reason[data-state="failed"] strong,
+.session-reason[data-state="unclean"] strong {
+  color: var(--danger);
+}
+.session-reason span {
+  overflow-wrap: anywhere;
+  font: var(--text-callout);
+}
+.session-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+.session-facts div {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-m);
+  background: var(--fill);
+}
+.session-facts dt {
+  color: var(--ink-2);
+  font: var(--text-caption);
+}
+.session-facts dd {
+  margin: 2px 0 0;
+  font: 600 15px / 1.3 var(--font);
+}
+.session-sheet .section-title {
+  margin-left: var(--space-2);
+}
+.session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.session-actions .button {
+  flex: 1 1 auto;
+  border-radius: var(--radius-pill);
+}
+#session-status:empty {
+  display: none;
+}
+#session-report {
+  display: block;
+  width: 100%;
+  min-height: 40dvh;
+  padding: var(--space-4);
+  border: 0;
+  color: var(--ink-2);
+  font: 12px / 1.6 var(--font-mono);
+}
+
+/* Clear sheet. */
+.clear-sheet h2 {
+  margin: 0;
+  font: var(--text-headline);
+  text-align: center;
+}
+.clear-sheet .secondary {
+  margin: var(--space-1) 0 var(--space-4);
+  text-align: center;
+}
+.clear-options {
+  display: grid;
+  gap: var(--space-2);
+}
+.clear-options .button {
+  justify-content: space-between;
+  color: var(--ink);
+}
+.clear-options .button.danger {
+  justify-content: center;
+  color: var(--danger);
+}
+.clear-options .count {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+.clear-sheet .cancel {
+  width: 100%;
+  margin-top: var(--space-3);
 }

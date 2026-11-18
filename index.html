@@ -106,37 +106,48 @@
         <section id="activity" class="page" data-title="Logs" hidden>
           <header class="page-header">
             <h1>Logs</h1>
-            <div class="header-actions">
-              <button id="copy-log" class="button">Copy</button
-              ><button id="export-log" class="button">Save</button>
-            </div>
+            <button id="clear-logs" class="button danger">Clear…</button>
           </header>
-          <p id="report-status" class="footnote" role="status"></p>
-          <h2 class="section-title">Last app session</h2>
-          <div id="last-session" class="group"></div>
-          <div id="earlier-sessions" class="earlier-sessions" hidden>
-            <h2 class="section-title">Earlier sessions</h2>
+          <fieldset class="segmented logs-view" id="logs-view">
+            <legend class="visually-hidden">Show</legend>
+            <span class="thumb" aria-hidden="true"></span>
+            <label
+              ><input type="radio" name="logs-view" value="sessions" checked />App sessions</label
+            >
+            <label><input type="radio" name="logs-view" value="library" />Library</label>
+          </fieldset>
+          <div id="sessions-view">
+            <div id="session-groups"></div>
+            <p class="group-footer">
+              The last five sessions of each app stay on this device. Open one to share its report.
+            </p>
           </div>
-          <div class="section-heading">
-            <h2 class="section-title">Library</h2>
-            <fieldset class="segmented compact" id="log-filter">
-              <legend class="visually-hidden">Show</legend>
-              <span class="thumb" aria-hidden="true"></span>
-              <label><input type="radio" name="log-filter" value="all" checked />All</label>
-              <label><input type="radio" name="log-filter" value="problems" />Problems</label>
-            </fieldset>
+          <div id="library-view" hidden>
+            <div class="section-heading">
+              <div class="header-actions">
+                <button id="copy-log" class="button">Copy</button
+                ><button id="export-log" class="button">Save</button>
+              </div>
+              <fieldset class="segmented compact" id="log-filter">
+                <legend class="visually-hidden">Show</legend>
+                <span class="thumb" aria-hidden="true"></span>
+                <label><input type="radio" name="log-filter" value="all" checked />All</label>
+                <label><input type="radio" name="log-filter" value="problems" />Problems</label>
+              </fieldset>
+            </div>
+            <p id="report-status" class="footnote" role="status"></p>
+            <ol id="log-entries" class="group log-list"></ol>
+            <details class="raw-log">
+              <summary>Full library log</summary>
+              <textarea
+                id="report"
+                class="group"
+                readonly
+                aria-label="Library log"
+                spellcheck="false"
+              ></textarea>
+            </details>
           </div>
-          <ol id="log-entries" class="group log-list"></ol>
-          <details class="raw-log">
-            <summary>Full log</summary>
-            <textarea
-              id="report"
-              class="group"
-              readonly
-              aria-label="Debug logs"
-              spellcheck="false"
-            ></textarea>
-          </details>
         </section>
         <section id="settings" class="page" data-title="Settings" hidden>
           <header class="page-header"><h1>Settings</h1></header>
@@ -258,6 +269,53 @@
       </div>
       <p class="footnote">Removing the IPA keeps this app's saves.</p>
       <p id="remove-status" class="footnote" role="status"></p>
+    </dialog>
+    <dialog id="session-details" class="sheet session-sheet" aria-labelledby="session-title">
+      <form method="dialog">
+        <button class="close icon-button" aria-label="Close session">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 7l10 10M17 7 7 17" />
+          </svg>
+        </button>
+      </form>
+      <h2 id="session-title"></h2>
+      <p id="session-meta" class="secondary"></p>
+      <div id="session-reason" class="session-reason" hidden>
+        <strong id="session-reason-title"></strong><span id="session-reason-text"></span>
+      </div>
+      <dl id="session-facts" class="session-facts"></dl>
+      <h3 class="section-title">Timeline</h3>
+      <ol id="session-timeline" class="group log-list session-timeline"></ol>
+      <div class="session-actions">
+        <button id="session-share" class="button filled">Share report</button
+        ><button id="session-copy" class="button">Copy</button
+        ><button id="session-delete" class="button danger">Delete</button>
+      </div>
+      <p id="session-status" class="footnote" role="status"></p>
+      <details class="raw-log">
+        <summary>Full technical report</summary>
+        <textarea
+          id="session-report"
+          class="group"
+          readonly
+          aria-label="Session report"
+          spellcheck="false"
+        ></textarea>
+      </details>
+    </dialog>
+    <dialog id="clear-sheet" class="sheet clear-sheet" aria-labelledby="clear-title">
+      <form method="dialog">
+        <h2 id="clear-title">Clear logs</h2>
+        <p class="secondary">Installed apps and saved games are not touched.</p>
+        <div class="clear-options">
+          <button class="button" value="sessions">
+            App sessions<span id="clear-sessions-count" class="count"></span></button
+          ><button class="button" value="library">
+            Library events<span id="clear-library-count" class="count"></span></button
+          ><button class="button danger" value="all">Clear everything</button>
+        </div>
+        <button class="button cancel" value="cancel">Cancel</button>
+      </form>
     </dialog>
     <script type="module" src="/src/library/ui/main.ts"></script>
   </body>

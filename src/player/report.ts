@@ -3,7 +3,7 @@ import { DiagnosticRecorder } from "../../web/diagnostics.mjs";
 import type { Diagnostic } from "../../web/ipa.mjs";
 import { isRecord } from "../domain/validation";
 import { saveLastReport } from "../diagnostics/activity";
-import { archiveLastReport } from "../diagnostics/report-archive";
+import { archiveLastReport } from "../diagnostics/session-store";
 import { element } from "../ui/dom";
 import { download } from "../ui/download";
 const REPORT_INTERVAL = 5000;
