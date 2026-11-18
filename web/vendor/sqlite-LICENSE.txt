@@ -1,0 +1,5 @@
+SQLite is in the public domain: https://sqlite.org/copyright.html
+
+sqlite3.mjs, sqlite3-node.mjs and sqlite3.wasm are the unmodified dist/index.mjs, dist/node.mjs
+and dist/sqlite3.wasm of @sqlite.org/sqlite-wasm 3.54.1-build1, whose package.json declares the
+Apache-2.0 license for the wrapper: https://github.com/sqlite/sqlite-wasm/blob/main/LICENSE

@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { Plugin } from "vite-plus";
 const VENDOR_ROOT = "web/vendor/";
-const FILES = ["unicorn-arm.mjs", "texture2ddecoder.mjs", "texture2ddecoder.wasm"] as const;
+const FILES = [
+  "unicorn-arm.mjs",
+  "texture2ddecoder.mjs",
+  "texture2ddecoder.wasm",
+  "sqlite3.mjs",
+  "sqlite3.wasm",
+] as const;
 const HASH_LENGTH = 16;
 export function runtimeVendors(): Plugin {
   const sources = Promise.all(

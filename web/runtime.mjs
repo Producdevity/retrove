@@ -25,6 +25,8 @@ import {audioFiles} from './audio-file.mjs';
 import {audioImports} from './audio.mjs';
 import {systemSounds} from './system-sound.mjs';
 import {cxxImports} from './cxx.mjs';
+import {guestSqlite} from './sqlite.mjs';
+import {guestFiles} from './guest-files.mjs';
 import {GuestLandingPad} from './sjlj.mjs';
 import {threadImports} from './threads.mjs';
 import {dispatchImports} from './dispatch.mjs';
@@ -180,7 +182,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         }
       }
     });
-    const cg=coreGraphics(cpu,heap,objc);
+    const cg=coreGraphics(cpu,heap,objc,{readFile:guestFiles(cpu,heap,sys).readFile});
     objc.attachCoreGraphics(cg);
     sounds = systemSounds(cpu, ipa, audioContext, objc.fileURLPath, nested);
     const fileAudio=audioFiles(cpu,heap,nested,{path:objc.fileURLPath,errno:()=>read32(cpu,sys.funcs.___error()),allocate:n=>heap.alloc(n),free:p=>heap.free(p),string:s=>heap.string(s),read:(p,n)=>cpu.read(p,n),word:p=>read32(cpu,p),invoke:async(name,args)=>sys.funcs[name](i=>args[i]??0)});
@@ -188,7 +190,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
+      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), guestSqlite(cpu,heap,sys,nested,diagnostic), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
