@@ -1,4 +1,5 @@
 import {bitVectorFunctions} from "../src/runtime/ios/foundation/bit-vectors.ts";
+import {cfEncodingFor,encodingForIanaName,ianaNameFor,leadingInteger,nsEncodingFor,replacePercentEscapes} from "../src/runtime/ios/foundation/string-encodings.ts";
 // CF collection callbacks are optional. Raw pointer collections must never send
 // Objective-C messages to their elements. The collection itself is toll-free bridged.
 const utf8 = new TextEncoder();
@@ -147,6 +148,22 @@ export function coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,m
       }
       return makeString(result);
     },
+    _CFURLCreateStringByReplacingPercentEscapesUsingEncoding:a=>{
+      if(a(0)||!a(1))return 0;
+      const value=replacePercentEscapes(text(a(1)),a(2)?text(a(2)):undefined,a(3));
+      return value===undefined?0:makeString(value);
+    },
+    _CFURLCreateStringByReplacingPercentEscapes:a=>{
+      if(a(0)||!a(1))return 0;
+      const value=replacePercentEscapes(text(a(1)),a(2)?text(a(2)):undefined);
+      return value===undefined?0:makeString(value);
+    },
+    _CFStringGetIntValue:a=>a(0)?leadingInteger(text(a(0))):0,
+    _CFStringConvertEncodingToNSStringEncoding:a=>nsEncodingFor(a(0)),
+    _CFStringConvertNSStringEncodingToEncoding:a=>cfEncodingFor(a(0)),
+    _CFStringConvertEncodingToIANACharSetName:a=>{const name=ianaNameFor(a(0));return name?makeString(name):0;},
+    _CFStringConvertIANACharSetNameToEncoding:a=>a(0)?encodingForIanaName(text(a(0))):0xffffffff,
+    _CFStringGetSystemEncoding:()=>0,
     _CFUUIDCreate:a=>{
       if(a(0))return 0;
       const p=alloc(names.get('CFUUID')), b=crypto.getRandomValues(new Uint8Array(16));

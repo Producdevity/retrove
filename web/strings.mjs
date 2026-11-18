@@ -257,6 +257,7 @@ export function stringImports(cpu, errno) {
     _strcoll: a => compare(a, 1, undefined, false),
     _strrchr: a => findChar(a(0), a(1) & 255, 1, true),
     _strcspn: a => scan(a(0), 1, members(a(1), 1)).n,
+    ___strcpy_chk: a => copy(a(0), a(1), 1, undefined, false, a(2)),
     ___strncpy_chk: a => copy(a(0), a(1), 1, a(2), false, a(3)),
     ___strcat_chk: a => copy(a(0), a(1), 1, undefined, true, a(2)),
     ___strncat_chk: a => copy(a(0), a(1), 1, a(2), true, a(3)),

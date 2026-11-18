@@ -65,3 +65,23 @@ test("containment, insets and scaled transforms follow CoreGraphics", () => {
   call(cg.funcs["_CGAffineTransformScale"], [0x4000, ...[1, 0, 0, 1, 5, 6, 2, 3].map(bits)]);
   expect(writes.get(0x4000)).toEqual([2, 0, 0, 3, 5, 6]);
 });
+
+test("affine transforms compose, invert and apply", () => {
+  const { cg, writes } = setup();
+  call(cg.funcs["_CGAffineTransformMakeTranslation"], [0x5000, ...[3, 4].map(bits)]);
+  expect(writes.get(0x5000)).toEqual([1, 0, 0, 1, 3, 4]);
+  call(cg.funcs["_CGAffineTransformInvert"], [0x5100, ...[2, 0, 0, 4, 6, 8].map(bits)]);
+  expect(writes.get(0x5100)).toEqual([0.5, -0, -0, 0.25, -3, -2]);
+  call(cg.funcs["_CGAffineTransformConcat"], [
+    0x5200,
+    ...[2, 0, 0, 2, 0, 0, 1, 0, 0, 1, 5, 6].map(bits),
+  ]);
+  expect(writes.get(0x5200)).toEqual([2, 0, 0, 2, 5, 6]);
+  call(cg.funcs["_CGPointApplyAffineTransform"], [0x5300, ...[1, 1, 2, 0, 0, 3, 1, 1].map(bits)]);
+  expect(writes.get(0x5300)).toEqual([3, 4]);
+  call(cg.funcs["_CGRectApplyAffineTransform"], [
+    0x5400,
+    ...[0, 0, 2, 1, -1, 0, 0, 1, 0, 0].map(bits),
+  ]);
+  expect(writes.get(0x5400)).toEqual([-2, 0, 2, 1]);
+});

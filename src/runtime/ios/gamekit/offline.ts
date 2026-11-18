@@ -18,9 +18,9 @@ const GKError = { Cancelled: 2, NotAuthenticated: 6 } as const;
  * every network request reports that no player is authenticated, on the next run loop turn.
  */
 export function installOfflineGameKit(host: GameKitHost): void {
-  const player = host.hostClass("GKLocalPlayer", "NSObject");
-  for (const name of ["GKScore", "GKAchievement", "GKLeaderboard", "GKAchievementDescription"])
-    host.hostClass(name, "NSObject");
+  host.hostClass("GKPlayer", "NSObject");
+  const player = host.hostClass("GKLocalPlayer", "GKPlayer");
+  installGameCenterScreens(host);
   let local = 0;
   const reply = async (block: number, code: number, leading: number[]): Promise<void> => {
     if (!block) return;
@@ -54,6 +54,9 @@ export function installOfflineGameKit(host: GameKitHost): void {
   );
   host.method("GKLocalPlayer", false, "loadFriendsWithCompletionHandler:", (_self, args) =>
     reply(args(Argument.First), GKError.NotAuthenticated, [0]),
+  );
+  host.method("GKPlayer", true, "loadPlayersForIdentifiers:withCompletionHandler:", (_self, args) =>
+    reply(args(Argument.Second), GKError.NotAuthenticated, [0]),
   );
   for (const [cls, initializers] of [
     ["GKScore", ["initWithCategory:", "initWithLeaderboardIdentifier:"]],
@@ -113,4 +116,27 @@ function installRequests(host: GameKitHost, reply: Reply): void {
   host.method("GKLeaderboard", true, "loadCategoriesWithCompletionHandler:", (_self, args) =>
     reply(args(Argument.First), GKError.NotAuthenticated, [0, 0]),
   );
+}
+
+/** Game Center screens exist so apps can create them; they are never shown while signed out. */
+function installGameCenterScreens(host: GameKitHost): void {
+  for (const name of [
+    "GKAchievementViewController",
+    "GKLeaderboardViewController",
+    "GKGameCenterViewController",
+  ]) {
+    host.hostClass(name, "UIViewController");
+    for (const setter of [
+      "setAchievementDelegate:",
+      "setLeaderboardDelegate:",
+      "setGameCenterDelegate:",
+      "setCategory:",
+      "setTimeScope:",
+      "setViewState:",
+      "setLeaderboardIdentifier:",
+    ])
+      host.method(name, false, setter, () => undefined);
+  }
+  for (const name of ["GKScore", "GKAchievement", "GKLeaderboard", "GKAchievementDescription"])
+    host.hostClass(name, "NSObject");
 }

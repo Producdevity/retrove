@@ -6,6 +6,7 @@ import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
 import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
 import {invocationForwarding} from "../src/runtime/ios/objc/invocation/forwarding.ts";
 import {installImplementationLookup} from "../src/runtime/ios/objc/implementations.ts";
+import {runtimeMethodImports} from "../src/runtime/ios/objc/runtime-methods.ts";
 import {securityImports} from "../src/runtime/ios/security/bindings.ts";
 import {SecuritySymbols,KEYCHAIN_FILE} from "../src/runtime/ios/security/constants.ts";
 import {encodeBinaryPlist} from "../src/runtime/ios/foundation/archives/plist-writer.ts";
@@ -50,6 +51,12 @@ import {installCFNetwork, CFNetworkStrings} from "../src/runtime/ios/cfnetwork/b
 import {installCookieStorage} from "../src/runtime/ios/foundation/http-cookies.ts";
 import {installBackgroundTasks} from "../src/runtime/ios/uikit/application/background-tasks.ts";
 import {installOfflineGameKit} from "../src/runtime/ios/gamekit/offline.ts";
+import {ExceptionSymbols,installExceptions} from "../src/runtime/ios/foundation/exceptions.ts";
+import {installStoreRequests} from "../src/runtime/ios/services/store-kit.ts";
+import {installMessageComposers} from "../src/runtime/ios/services/message-ui.ts";
+import {LocationAccuracy,LocationSymbols,installLocationManager} from "../src/runtime/ios/services/core-location.ts";
+import {UniformTypeSymbols,identifierForTag,preferredTag} from "../src/runtime/ios/services/uniform-types.ts";
+import {AdSymbols,installAdBanners} from "../src/runtime/ios/services/iad.ts";
 import {installNumberFormatter} from "../src/runtime/ios/foundation/number-formatter.ts";
 import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
@@ -276,7 +283,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     return (async()=>{for(const obj of linked?.values()??[])if(obj.policy)await releaseFromHost(obj.value);for(const imp of destructors)await callGuest(imp,[self,selector('.cxx_destruct')]);destroy(self);})();
   });
   method('NSObject', false, 'hash', self => self >>> 2);
-  installImplementationLookup({method,isa:read,selector:p=>readString(cpu,p),lookup,gate:(name,fn)=>{if(!hostGate)throw Error('Host IMP gates are unavailable');return hostGate({name:'IMP '+name,library:'Foundation'},fn);}});
+  const implementationAddresses=installImplementationLookup({method,isa:read,selector:p=>readString(cpu,p),lookup,gate:(name,fn)=>{if(!hostGate)throw Error('Host IMP gates are unavailable');return hostGate({name:'IMP '+name,library:'Foundation'},fn);}});
   installRootProxy({hostClass,copyMethod:(target,source,meta,name)=>{const sourceClass=names.get(source),targetClass=names.get(target);const implementation=classes.get(meta?read(sourceClass):sourceClass).methods.get(name);if(!implementation)throw Error('Missing root proxy method '+name);classes.get(meta?read(targetClass):targetClass).methods.set(name,implementation);}});
   method('NSAutoreleasePool', false, 'init', self => { owned.get(self).token = poolPush(); return self; });
   const drain = async self => { const obj = owned.get(self); if (obj.token) await poolPop(obj.token); destroy(self); };
@@ -644,6 +651,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   installOfflineGameKit({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
     callBlock:(block,args)=>callGuest(read(block+12),[block,...args]),copyBlock:block=>dispatchService.copy(block),releaseBlock:block=>dispatchService.release(block),
     later:scheduler.later,error:(code,domain)=>fileObjects.error(code,domain)});
+  const serviceHost={hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,later:scheduler.later,error:(code,domain)=>fileObjects.error(code,domain)};
+  for(const install of [installStoreRequests,installMessageComposers,installLocationManager,installAdBanners])install(serviceHost);
+  const exceptions=installExceptions({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
+    formatted:(format,argument)=>foundationObjects.formatted(format,argument),throwException:exception=>funcs._objc_exception_throw(i=>[exception][i]??0),emptyArray:()=>autorelease(input.array([]))});
   installNumberFormatter({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
     numberValue:p=>{if(!p)return undefined;const value=foundationObjects.unbox(p);return typeof value==='number'?value:typeof value==='boolean'?Number(value):undefined;},number:value=>foundationObjects.number(value)});
   // CoreTelephony: no call is ever in progress, so the event handler never fires.
@@ -808,6 +819,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   for(const [symbol,value]of Object.entries(LayerGravitySymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value]of Object.entries(AnimationSymbols))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
+  for(const [symbol,value] of Object.entries({...ExceptionSymbols,...AdSymbols,...LocationSymbols,...UniformTypeSymbols}))exportedStringNames.set(symbol,value);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value] of Object.entries(CFNetworkStrings))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
@@ -821,7 +833,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   for (const [name, value] of [['kEAGLColorFormatRGB565','RGB565'],['kEAGLColorFormatRGBA8','RGBA8'],['kEAGLDrawablePropertyColorFormat','EAGLDrawablePropertyColorFormat'],
     ['kEAGLDrawablePropertyRetainedBacking','EAGLDrawablePropertyRetainedBacking'],['AVAudioSessionInterruptionTypeKey','AVAudioSessionInterruptionTypeKey'],
     ['AVAudioSessionRouteChangeReasonKey','AVAudioSessionRouteChangeReasonKey']]) exportedStringNames.set('_'+name,value);
-  for(const name of ['GCControllerDidConnectNotification','GCControllerDidDisconnectNotification','GKPlayerAuthenticationDidChangeNotificationName'])
+  for(const name of ['GCControllerDidConnectNotification','GCControllerDidDisconnectNotification','GKPlayerAuthenticationDidChangeNotificationName','GKPlayerDidChangeNotificationName','GKErrorDomain'])
     exportedStringNames.set('_'+name,name);
   for(const name of ['NSFileModificationDate','NSFileCreationDate','NSFileSystemFreeSize','NSFileSystemSize','NSMetadataItemFSContentChangeDateKey',
     'NSMetadataItemFSNameKey','NSMetadataItemURLKey','NSMetadataQueryDidFinishGatheringNotification','NSMetadataQueryDidUpdateNotification',
@@ -849,6 +861,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
     if(name==='_kCFBooleanTrue'||name==='_kCFBooleanFalse'){if(!booleanConstants.has(name)){const slot=zero(4);write(slot,retain(foundationObjects.number(name==='_kCFBooleanTrue')));booleanConstants.set(name,slot);}return booleanConstants.get(name);}
     if(name.startsWith('_kCF')){const address=cf.resolveData(name);if(address!=null)return address;}
+    if(name in LocationAccuracy){if(!integerConstants.has(name)){const slot=zero(8);cpu.write(slot,new Uint8Array(new Float64Array([LocationAccuracy[name]]).buffer));integerConstants.set(name,slot);}return integerConstants.get(name);}
     if(INTEGER_CONSTANTS.has(name)){if(!integerConstants.has(name)){const slot=zero(4);write(slot,INTEGER_CONSTANTS.get(name));integerConstants.set(name,slot);}return integerConstants.get(name);}
     {const address=network.data(name);if(address!==undefined)return address;}
     if(blockClasses.has(name))return blockClasses.get(name);
@@ -909,7 +922,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
         if (uncaughtHandler) await callGuest(uncaughtHandler,[exception]);
       });
       if(uncaughtHandler)await callGuest(uncaughtHandler,[exception]);
-      throw Error('Uncaught guest Objective-C exception at 0x'+exception.toString(16));
+      throw Error('Uncaught guest Objective-C exception at 0x'+exception.toString(16)+(exceptions.describe(exception)?' ('+exceptions.describe(exception)+')':''));
     },
     _NSLog: a => { const message=foundationObjects.formatted(a(0), i=>a(i+1)); diagnostic('debug','guest-output',message.slice(0,512)); },
     _CFRetain: a => retain(a(0)), _CFRelease: a => release(a(0)),
@@ -926,6 +939,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       const paths = a(1) & 1 && directory ? [string((a(2) ? '/' : '~/') + directory)] : [];
       return autorelease(input.array(paths));
     },
+    _UTTypeCreatePreferredIdentifierForTag:a=>a(0)&&a(1)?retain(string(identifierForTag(text(a(0)),text(a(1))))):0,
+    _UTTypeCopyPreferredTagWithClass:a=>{const tag=a(0)&&a(1)?preferredTag(text(a(0)),text(a(1))):undefined;return tag===undefined?0:retain(string(tag));},
     _NSHomeDirectory: () => string('/'), _NSTemporaryDirectory: () => string('/tmp/'),
     _UIApplicationMain: applicationMain,
     _objc_msgSend: a => dispatch(a),
@@ -940,7 +955,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _objc_getClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _objc_lookUpClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _object_getClass: a => a(0) ? read(a(0)) : 0,
-    ...reflectionImports({read,cString:permanentString}),...protocols.funcs,...protocolMethodImports({read,write,cString:p=>readString(cpu,p),selector}),...security,
+    ...reflectionImports({read,cString:permanentString}),
+    ...runtimeMethodImports({read,write,allocate:n=>zero(n),cString:p=>readString(cpu,p),permanentString,selector,methods:p=>{const info=classes.get(p);return info?.supported?info.methods:undefined;},classList:()=>[...classes.values()].filter(info=>!info.isMeta&&info.supported).map(info=>info.pointer),address:(value,name)=>implementationAddresses.address(value,name),typeEncoding:value=>typeof value==='number'?methodTypes.get(value):undefined}),...protocols.funcs,...protocolMethodImports({read,write,cString:p=>readString(cpu,p),selector}),...security,
     _class_getSuperclass: a => a(0) ? read(a(0) + 4) : 0,
     _objc_retain: a => retain(a(0)), _objc_release: a => release(a(0)),
     _objc_autorelease: a => autorelease(a(0)),

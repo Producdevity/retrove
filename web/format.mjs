@@ -140,6 +140,10 @@ export function formatImports(cpu, heap, errno, files, log) {
     _vsnprintf:a=>buffer(a(0),a(1),a(2),i=>read32(cpu,a(3)+i*4)),
     _sprintf:a=>buffer(a(0),0xffffffff,a(1),i=>a(2+i)),
     ___sprintf_chk:a=>buffer(a(0),a(2),a(3),i=>a(4+i),true),
+    ___snprintf_chk:a=>buffer(a(0),Math.min(a(1),a(3)),a(4),i=>a(5+i),a(3)<a(1)),
+    ___vsnprintf_chk:a=>buffer(a(0),Math.min(a(1),a(3)),a(4),i=>read32(cpu,a(5)+i*4),a(3)<a(1)),
+    ___vsprintf_chk:a=>buffer(a(0),a(2),a(3),i=>read32(cpu,a(4)+i*4),true),
+    _vsprintf:a=>buffer(a(0),0xffffffff,a(1),i=>read32(cpu,a(2)+i*4)),
     _printf:a=>files.writeBytes(1,asciiBytes(format(a(0),i=>a(1+i)))),
     _wprintf:async a=>{
       const fmt=wide(cpu,a(0)),ptr=heap.alloc(fmt.length+1);

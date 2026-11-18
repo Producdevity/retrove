@@ -20,12 +20,19 @@ interface ImplementationHost extends Pick<FoundationHost, "method"> {
   lookup(classPointer: number, selector: string): number | Implementation | null;
   gate(name: string, callback: (args: GuestArguments) => Promise<HostResult>): number;
 }
-export function installImplementationLookup(host: ImplementationHost): void {
+export type MethodValue = number | Implementation;
+/** Installs the IMP getters and returns the guest address for any method value. */
+export function installImplementationLookup(host: ImplementationHost): {
+  address(implementation: MethodValue, name: string): number;
+} {
   const addresses = new WeakMap<Implementation, number>();
   const resolve = (klass: number, name: string): number => {
     const implementation = host.lookup(klass, name);
-    if (typeof implementation === "number") return implementation;
     if (!implementation) throw new Error(`Cannot obtain implementation of ${name}.`);
+    return address(implementation, name);
+  };
+  const address = (implementation: MethodValue, name: string): number => {
+    if (typeof implementation === "number") return implementation;
     const existing = addresses.get(implementation);
     if (existing) return existing;
     const pointer = host.gate(name, async (args) => {
@@ -52,4 +59,5 @@ export function installImplementationLookup(host: ImplementationHost): void {
     host.method("NSObject", meta, "methodForSelector:", (self, args) =>
       resolve(host.isa(self), host.selector(args(0))),
     );
+  return { address };
 }

@@ -405,11 +405,16 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     if(url)write(err+12,dictionary(names.get('NSDictionary'),[[string(ErrorInfo.FailingURL),url],[string(ErrorInfo.FailingURLString),string(urls.get(url)?.href??'')]]));return err;
   }
   const responses=new Map();
+  const HTTP_STATUS_TEXT={200:'no error',201:'created',204:'no content',301:'moved permanently',302:'found',304:'not modified',400:'bad request',401:'unauthorized',403:'forbidden',404:'not found',500:'internal server error',503:'service unavailable'};
   hostClass('NSURLResponse','NSObject');
   method('NSURLResponse',false,'copy',retain);
   installURLCache({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,send});
   method('NSURLResponse',false,'URL',s=>responses.get(s)?.url??0);
   method('NSURLResponse',false,'expectedContentLength',s=>BigInt(responses.get(s)?.length??-1));
+  hostClass('NSHTTPURLResponse','NSURLResponse');
+  method('NSHTTPURLResponse',false,'statusCode',s=>responses.get(s)?.status??200);
+  method('NSHTTPURLResponse',false,'allHeaderFields',()=>autorelease(dictionary(names.get('NSDictionary'),[])));
+  method('NSHTTPURLResponse',true,'localizedStringForStatusCode:',(_,a)=>string(HTTP_STATUS_TEXT[a(0)]??'unknown'));
   method('NSURLResponse',false,'dealloc',async s=>{const r=responses.get(s);responses.delete(s);if(r)await release(r.url);destroy(s);});
   async function loadRequest(req) {
     const url=requests.get(req),u=urls.get(url);

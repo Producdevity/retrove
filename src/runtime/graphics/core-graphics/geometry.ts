@@ -121,7 +121,7 @@ export function geometry(cpu: GeometryHost, heap: GeometryHeap) {
     constants.set(name, store(heap.zero(values.length * FLOAT_BYTES), values));
   const funcs: Record<string, GeometryImport> = {
     _CACurrentMediaTime: () => currentMediaTime(),
-    ...affineImports(),
+    ...affineImports(store),
     ...rectImports(store),
     _CGAffineTransformScale: (a) => {
       const [xx = 0, xy = 0, yx = 0, yy = 0, tx = 0, ty = 0] = floats(a, TRANSFORM_FLOATS, 1),

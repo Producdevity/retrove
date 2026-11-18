@@ -101,6 +101,8 @@ export function systemImports(cpu, heap, ipa, log, threadID = () => 1, diagnosti
     _memcpy: a => { move(cpu, a(0), a(1), a(2)); return a(0); },
     _memset: a => { fill(cpu, a(0), a(1), a(2)); return a(0); },
     _bzero: a => fill(cpu, a(0), 0, a(1)),
+    ___memcpy_chk: a => { if (a(2) > a(3)) throw Error('Guest __memcpy_chk overflows its destination'); move(cpu, a(0), a(1), a(2)); return a(0); },
+    ___memset_chk: a => { if (a(2) > a(3)) throw Error('Guest __memset_chk overflows its destination'); fill(cpu, a(0), a(1), a(2)); return a(0); },
     _memcmp: a => {
       let done = 0;
       while (done < a(2)) {
@@ -196,5 +198,6 @@ export function systemImports(cpu, heap, ipa, log, threadID = () => 1, diagnosti
     ...fileFuncs
   };
   funcs._memmove = funcs._memcpy;
+  funcs.___memmove_chk = funcs.___memcpy_chk;
   return {data, funcs, finalizers, setMetadata:fileFuncs.setMetadata,closeFiles:fileFuncs.closeFiles};
 }
