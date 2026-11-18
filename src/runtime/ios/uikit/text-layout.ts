@@ -50,6 +50,11 @@ function wrap(text: string, width: number, words: boolean, measure: MeasureText)
   let current = "";
   for (const character of Array.from(text)) {
     if (current && measure(current + character) > width) {
+      if (words && /\s/.test(character)) {
+        lines.push(current.trimEnd());
+        current = "";
+        continue;
+      }
       const breakAt = words ? current.search(/\s+\S*$/) : -1;
       if (breakAt > 0) {
         lines.push(current.slice(0, breakAt));
@@ -78,10 +83,15 @@ export function layoutText(
 ): string[] {
   if (!text || width <= 0) return [];
   const paragraphs = text.split(/\r\n|\r|\n/);
+  const wrapping = mode === LineBreak.Word || mode === LineBreak.Character;
+  if (!wrapping && maximumLines === 1) return [truncate(paragraphs[0] ?? "", width, mode, measure)];
+  // Multi-line labels wrap at words in every mode; truncating modes only shorten the last line.
   const lines = paragraphs.flatMap((paragraph) =>
-    mode === LineBreak.Word || mode === LineBreak.Character
-      ? wrap(paragraph, width, mode === LineBreak.Word, measure)
-      : [truncate(paragraph, width, mode, measure)],
+    wrap(paragraph, width, mode !== LineBreak.Character, measure),
   );
-  return maximumLines > 0 ? lines.slice(0, maximumLines) : lines;
+  if (maximumLines <= 0 || lines.length <= maximumLines) return lines;
+  const kept = lines.slice(0, maximumLines);
+  if (wrapping) return kept;
+  const last = lines.slice(maximumLines - 1).join(" ");
+  return [...kept.slice(0, -1), truncate(last, width, mode, measure)];
 }

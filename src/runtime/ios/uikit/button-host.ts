@@ -48,12 +48,22 @@ export function installButtons(host: ButtonHost, controls: Controls): void {
   });
   host.method(BUTTON_CLASS, false, "buttonType", async (self) => (await buttons.get(self)).kind);
   host.method(BUTTON_CLASS, false, "titleLabel", async (self) => (await buttons.get(self)).label);
+  host.method(BUTTON_CLASS, false, "setTitleShadowOffset:", async (self, args) => {
+    const { label } = await buttons.get(self);
+    await host.send(label, "setShadowOffset:", [args(Argument.First), args(Argument.Second)]);
+  });
   host.method(BUTTON_CLASS, false, "imageView", async (self) => (await buttons.get(self)).image);
   host.method(BUTTON_CLASS, false, "layoutSubviews", (self) => buttons.layout(self));
   host.method(BUTTON_CLASS, false, "dealloc", (self) => buttons.destroy(self));
   for (const [field, setter, getter, current] of [
     ["title", "setTitle:forState:", "titleForState:", "currentTitle"],
     ["color", "setTitleColor:forState:", "titleColorForState:", "currentTitleColor"],
+    [
+      "shadow",
+      "setTitleShadowColor:forState:",
+      "titleShadowColorForState:",
+      "currentTitleShadowColor",
+    ],
     ["image", "setImage:forState:", "imageForState:", "currentImage"],
     [
       "background",

@@ -21,6 +21,8 @@ const Key = {
 export function installControllerNibs(host: ControllerHost) {
   const entries = new Map<number, ControllerNib>();
   const titles = new Map<number, number>();
+  /** Controllers whose view came from their own archive and still owe viewDidLoad. */
+  const unloaded = new Set<number>();
   const decoded = async (coder: number, key: string) =>
     objectResult(await host.send(coder, "decodeObjectForKey:", [host.string(key)]));
   host.method(CONTROLLER_CLASS, false, "initWithCoder:", async (self, args) => {
@@ -28,7 +30,10 @@ export function installControllerNibs(host: ControllerHost) {
     const name = await decoded(coder, Key.NibName);
     if (name) entries.set(self, { name: host.text(name), bundle: 0 });
     const view = await decoded(coder, Key.View);
-    if (view) await host.send(self, "setView:", [view]);
+    if (view) {
+      await host.send(self, "setView:", [view]);
+      unloaded.add(self);
+    }
     const title = await decoded(coder, Key.Title);
     if (title) await host.send(self, "setTitle:", [title]);
     const fullScreen = await host.send(coder, "decodeBoolForKey:", [host.string(Key.FullScreen)]);
@@ -54,6 +59,10 @@ export function installControllerNibs(host: ControllerHost) {
   });
   host.method(CONTROLLER_CLASS, false, "nibBundle", (self) => entries.get(self)?.bundle ?? 0);
   return {
+    /** True once for a controller decoded with its view: UIKit sends viewDidLoad on first access. */
+    owesViewDidLoad(self: number): boolean {
+      return unloaded.delete(self);
+    },
     async load(self: number): Promise<boolean> {
       const entry = entries.get(self);
       if (!entry?.name) return false;
@@ -65,6 +74,7 @@ export function installControllerNibs(host: ControllerHost) {
         title = titles.get(self);
       entries.delete(self);
       titles.delete(self);
+      unloaded.delete(self);
       if (entry?.bundle) await host.release(entry.bundle);
       if (title) await host.release(title);
     },

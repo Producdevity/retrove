@@ -40,6 +40,7 @@ import {installStringSearch} from "../src/runtime/ios/foundation/string-search.t
 import {DataField,installDataFactories,installStringDataEncoding} from "../src/runtime/ios/foundation/data.ts";
 import {installLocks} from "../src/runtime/ios/foundation/locks.ts";
 import {installArchiver} from "../src/runtime/ios/foundation/archives/archiver.ts";
+import {installGeometryCoding} from "../src/runtime/ios/foundation/archives/geometry-coding.ts";
 import {encodeFoundation} from "../src/runtime/ios/foundation/archives/foundation-encoder.ts";
 import {installUnarchiver} from "../src/runtime/ios/foundation/archives/unarchiver.ts";
 import {archiveFoundation} from "../src/runtime/ios/foundation/archives/foundation.ts";
@@ -636,6 +637,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     scalar:p=>isKind(p,'NSString')&&!isKind(p,'NSMutableString')?text(p):foundationObjects.archiveNumber(p),
     builtin:encodeFoundation({text,data:p=>cpu.read(read(p+4),read(p+8)),date:foundationObjects.archiveDate,entries:foundationObjects.archiveEntries,items:input.items}),
     data:bytes=>autorelease(archivedData(bytes)),replaceData:(p,bytes)=>{resizeData(p,bytes.length);cpu.write(read(p+4),bytes);},writeFile:fileObjects.writeArchive});
+  installGeometryCoding({method,string,text,write,send,structure:(cls,sel,fn)=>method(cls,false,sel,fn)});
   installMusicPlayer({hostClass,method,alloc});
   const audioPlayers=installAudioPlayers({hostClass,method,destroy,retain,release:releaseFromHost,write,send,error:fileObjects.error,
     loadURL:async url=>url&&await send(url,'isFileURL')?fileObjects.contents(await send(url,'path')):undefined,
@@ -684,14 +686,14 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   let avSession;
   method('AVAudioSession', true, 'sharedInstance', () => avSession ??= alloc(names.get('AVAudioSession')));
   method('AVAudioSession', false, 'setActive:error:', (_, a) => Number(audio?.setSessionActive(!!a(0)) === 0));
-  // Games that run their own loop with CFRunLoopRunInMode still receive touches and UIKit
-  // drawing on the main thread, as UIKit's event source is in the default and common modes.
+  // Games that run their own loop with CFRunLoopRunInMode still get timers, delayed performs,
+  // touches and UIKit drawing on the main thread: all are sources in the default and common modes.
   let nestedUIAt=-Infinity,nestedUIBusy=false;
   async function pumpNestedUI() {
     const now=performance.now();
     if(nestedUIBusy||!lifecycle.active||now-nestedUIAt<refreshMs/2)return;
     nestedUIAt=now;nestedUIBusy=true;
-    try{await input.pumpAlerts();await input.pump();}finally{nestedUIBusy=false;}
+    try{await scheduler.pump();await input.pumpAlerts();await input.pump();}finally{nestedUIBusy=false;}
   }
   async function applicationMain(a) {
     const principalName=a(2)?text(a(2)):null,delegateName=a(3)?text(a(3)):null;

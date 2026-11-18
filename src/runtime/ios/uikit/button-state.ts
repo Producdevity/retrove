@@ -16,8 +16,17 @@ export interface Appearance {
   color: number;
   image: number;
   background: number;
+  shadow: number;
 }
 export type AppearanceField = keyof Appearance;
+const EMPTY_APPEARANCE: Appearance = { title: 0, color: 0, image: 0, background: 0, shadow: 0 };
+const APPEARANCE_FIELDS: readonly AppearanceField[] = [
+  "title",
+  "color",
+  "image",
+  "background",
+  "shadow",
+];
 /** UIEdgeInsets: top, left, bottom, right. */
 export type Insets = [number, number, number, number];
 export type InsetField = "content" | "title" | "image";
@@ -76,10 +85,7 @@ export class Buttons {
       adjustsDisabled: true,
       insets: { content: [0, 0, 0, 0], title: [0, 0, 0, 0], image: [0, 0, 0, 0] },
       styles: new Map([
-        [
-          ControlState.Normal,
-          { title: 0, color: this.host.retain(white), image: 0, background: 0 },
-        ],
+        [ControlState.Normal, { ...EMPTY_APPEARANCE, color: this.host.retain(white) }],
       ]),
     };
   }
@@ -100,7 +106,7 @@ export class Buttons {
     flags: number,
   ): Promise<void> {
     const state = await this.get(self);
-    const style = state.styles.get(flags) ?? { title: 0, color: 0, image: 0, background: 0 };
+    const style = state.styles.get(flags) ?? { ...EMPTY_APPEARANCE };
     const replacement =
       field === "title" && pointer
         ? objectResult(await this.host.send(pointer, "copy"))
@@ -117,6 +123,7 @@ export class Buttons {
     for (const [pointer, field, getter, setter] of [
       [state.label, "title", "text", "setText:"],
       [state.label, "color", "textColor", "setTextColor:"],
+      [state.label, "shadow", "shadowColor", "setShadowColor:"],
       [state.image, "image", "image", "setImage:"],
       [state.background, "background", "image", "setImage:"],
     ] as const) {
@@ -175,8 +182,7 @@ export class Buttons {
     this.controls.remove(self);
     if (state) {
       for (const style of state.styles.values())
-        for (const pointer of [style.title, style.color, style.image, style.background])
-          await this.host.release(pointer);
+        for (const field of APPEARANCE_FIELDS) await this.host.release(style[field]);
       for (const pointer of [state.label, state.image, state.background])
         await this.host.release(pointer);
     }

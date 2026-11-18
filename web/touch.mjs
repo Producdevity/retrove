@@ -57,9 +57,15 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     animation={duration:Math.max(0,seconds),delay:Math.max(0,delay),curve:['ease-in-out','ease-in','ease-out','linear'][(options>>>16)&3],start};
     try {return await changes();} finally {animation=previous;}
   }
+  // UIImageView and its subclasses start with userInteractionEnabled NO, so touches pass through.
+  function inheritsImageView(ptr) {
+    const imageView=names.get('UIImageView');
+    for(let cls=imageView&&read(ptr),depth=0;cls&&depth<64;cls=read(cls+4),depth++)if(cls===imageView)return true;
+    return false;
+  }
   function data(ptr) {
     if (!views.has(ptr)) views.set(ptr, {frame:[0,0,0,0],bounds:[0,0,0,0],children:[],parent:0,hidden:false,
-      interactive:true,multi:false,exclusive:false,alpha:1,layer:0,controller:0,transform:[1,0,0,1,0,0]});
+      interactive:!inheritsImageView(ptr),multi:false,exclusive:false,alpha:1,layer:0,controller:0,transform:[1,0,0,1,0,0]});
     return views.get(ptr);
   }
   const readRect = a => [0,1,2,3].map(i => float(a(i)));
@@ -268,7 +274,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     if (!controllerViews.get(self)) {
       await send(self,'loadView');
       await send(self,'viewDidLoad',[],true);
-    }
+    } else if (controllerNibs.owesViewDidLoad(self)) await send(self,'viewDidLoad',[],true);
     return controllerViews.get(self) ?? 0;
   });
   method('UIWindow',false,'setRootViewController:',async (self,a)=>{

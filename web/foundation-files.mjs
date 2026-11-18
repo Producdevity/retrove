@@ -181,5 +181,10 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     remove:path=>pathCall(path,p=>invoke('_unlink',p)),
     async write(fd,bytes){const p=heap.alloc(bytes.length);try{cpu.write(p,bytes);return await invoke('_write',fd,p,bytes.length);}finally{heap.free(p);}}
   };
+  // NSData writes go through a temporary file and rename, which also satisfies non-atomic writes.
+  const writeData=async(self,path)=>!!path&&await writeArchiveFile(archiveWriter,text(path),cpu.read(read(self+4),read(self+8)));
+  method('NSData',false,'writeToFile:atomically:',async(s,a)=>Number(await writeData(s,a(0))));
+  method('NSData',false,'writeToFile:options:error:',async(s,a)=>await writeData(s,a(0))?1:failure(a(2)));
+  method('NSData',false,'writeToURL:atomically:',async(s,a)=>Number(!!a(0)&&!!await send(a(0),'isFileURL')&&await writeData(s,await send(a(0),'path'))));
   return {contents,error:makeError,writeArchive:(path,bytes)=>writeArchiveFile(archiveWriter,text(path),bytes)};
 }

@@ -2,6 +2,7 @@ import {ImageViewAnimations} from "../src/runtime/ios/uikit/image/animation.ts";
 import {drawLayerBackground,drawLayerBorder} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
+import {capSlices,stretchableCaps} from "../src/runtime/ios/uikit/image/caps.ts";
 import {decodeCgBI} from './cgbi.mjs';
 
 const transforms = [
@@ -83,6 +84,12 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
   }
   function draw(image,ctx,x,y,width,height) {
     if(!image||!ctx||!width||!height)return;
+    if(image.caps&&!image.orientation) {
+      const pixels=source(image),kx=(pixels.naturalWidth??pixels.width)/image.width,ky=(pixels.naturalHeight??pixels.height)/image.height;
+      for(const [sx,sy,sw,sh,dx,dy,dw,dh] of capSlices(image.width,image.height,image.caps,[x,y,width,height]))
+        ctx.drawImage(pixels,sx*kx,sy*ky,sw*kx,sh*ky,dx,dy,dw,dh);
+      return;
+    }
     ctx.save(); ctx.translate(x,y); ctx.scale(width,height);
     ctx.transform(...transforms[image.orientation]);
     try {ctx.drawImage(source(image),0,0,1,1);}
@@ -118,7 +125,16 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
   });
   const size=(s,_,dest)=>{write(dest,bits(images.get(s)?.width??0));write(dest+4,bits(images.get(s)?.height??0));};
   size.stret=true;method('UIImage',false,'size',size);
-  method('UIImage',false,'stretchableImageWithLeftCapWidth:topCapHeight:',s=>autorelease(retain(s)));
+  method('UIImage',false,'stretchableImageWithLeftCapWidth:topCapHeight:',(s,a)=>{
+    const image=images.get(s);
+    if(!image)return 0;
+    const p=alloc(read(s));
+    images.set(p,{...image,caps:stretchableCaps(image.width,image.height,a(0)|0,a(1)|0)});
+    if(image.pointer)cg()?.retain(image.pointer);
+    return autorelease(p);
+  });
+  method('UIImage',false,'leftCapWidth',s=>images.get(s)?.caps?.left??0);
+  method('UIImage',false,'topCapHeight',s=>images.get(s)?.caps?.top??0);
   async function setImage(s,p,key='image') {
     const view=data(s),old=view[key];view[key]=retain(p);view.needsDisplay=true;
     if(old)await releaseFromHost(old);

@@ -25,3 +25,7 @@ test("head, middle and tail truncation fit within the label", () => {
   expect(layoutText("abcdef", 5, LineBreak.Clip, 1, measure)).toEqual(["abcdef"]);
   expect(layoutText("", 5, LineBreak.Tail, 1, measure)).toEqual([]);
 });
+test("multi-line labels wrap in truncating modes and shorten only the last line", () => {
+  expect(layoutText("aa bb cc", 5, LineBreak.Tail, 0, measure)).toEqual(["aa bb", "cc"]);
+  expect(layoutText("aa bb cc dd ee", 5, LineBreak.Tail, 2, measure)).toEqual(["aa bb", "cc d…"]);
+});

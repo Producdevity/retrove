@@ -67,7 +67,58 @@ async function decodeFont(host: NibControlHost, self: number, coder: Coder): Pro
   return font ? host.retain(font) : 0;
 }
 
-/** Keyed-archive decoding for UILabel, UIFont, UIImage and UIImageView. */
+/** UIButtonContent keys and the UIButton setters for one control state. */
+const BUTTON_CONTENT = [
+  ["UITitle", "setTitle:forState:"],
+  ["UITitleColor", "setTitleColor:forState:"],
+  ["UIImage", "setImage:forState:"],
+  ["UIBackgroundImage", "setBackgroundImage:forState:"],
+] as const;
+const BUTTON_CONTENT_CLASS = "UIButtonContent";
+
+/** UIButton nibs keep per-state titles and images as UIButtonContent keyed by control state. */
+function installNibButtons(host: NibControlHost, decodeView: DecodeView): void {
+  host.hostClass(BUTTON_CONTENT_CLASS, "NSObject");
+  const contents = new Map<number, Map<string, number>>();
+  host.method(BUTTON_CONTENT_CLASS, false, "initWithCoder:", async (self, args) => {
+    const coder = new Coder(host, args(0)),
+      fields = new Map<string, number>();
+    for (const [key] of BUTTON_CONTENT) {
+      const value = await coder.object(key);
+      if (value) fields.set(key, host.retain(value));
+    }
+    contents.set(self, fields);
+    return self;
+  });
+  host.method(BUTTON_CONTENT_CLASS, false, "dealloc", async (self) => {
+    for (const value of contents.get(self)?.values() ?? []) await host.release(value);
+    contents.delete(self);
+    host.destroy(self);
+  });
+  host.method("UIButton", false, "initWithCoder:", async (self, args) => {
+    const coder = new Coder(host, args(0));
+    await decodeView(self, args(0));
+    const font = await coder.object("UIFont");
+    if (font)
+      await host.send(objectResult(await host.send(self, "titleLabel")), "setFont:", [font]);
+    const states = await coder.object("UIButtonStatefulContent");
+    if (!states) return self;
+    const keys = objectResult(await host.send(states, "allKeys"));
+    const count = objectResult(await host.send(keys, "count"));
+    for (let index = 0; index < count; index++) {
+      const key = objectResult(await host.send(keys, "objectAtIndex:", [index]));
+      const state = objectResult(await host.send(key, "unsignedIntValue"));
+      const content = contents.get(objectResult(await host.send(states, "objectForKey:", [key])));
+      for (const [field, setter] of BUTTON_CONTENT) {
+        const value = content?.get(field);
+        if (value) await host.send(self, setter, [value, state]);
+      }
+    }
+    return self;
+  });
+}
+
+/** Keyed-archive decoding for UILabel, UIFont, UIImage, UIImageView and UIButton. */
 export function installNibControls(host: NibControlHost, decodeView: DecodeView): void {
   host.method("UILabel", false, "initWithCoder:", async (self, args) => {
     const coder = new Coder(host, args(0));
@@ -95,6 +146,7 @@ export function installNibControls(host: NibControlHost, decodeView: DecodeView)
     host.destroy(self);
     return image ? host.retain(image) : 0;
   });
+  installNibButtons(host, decodeView);
   host.method("UIImageView", false, "initWithCoder:", async (self, args) => {
     const coder = new Coder(host, args(0));
     await decodeView(self, args(0));
