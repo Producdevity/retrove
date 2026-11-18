@@ -16,6 +16,7 @@ const FIXED_CAPABILITIES: ReadonlySet<number> = new Set([
   GL.Normalize,
   GL.RescaleNormal,
   GL.ColorMaterial,
+  GL.PointSprite,
 ]);
 const GL_ARGUMENTS = { Comparison: 0, Reference: 1 } as const;
 const OES_ALIASES = [
@@ -97,7 +98,12 @@ export function installFixedFunction(host: FixedHost): () => void {
       const state = current();
       if (!prepareArrays(bridge, state)) return undefined;
       programs ??= new FixedPrograms(host.gl());
-      programs.apply(state.drawState(formats, GL.AlphaTest));
+      programs.apply(
+        state.drawState(formats, GL.AlphaTest, {
+          drawing: args(0) === GL.Points,
+          sprite: GL.PointSprite,
+        }),
+      );
       return bridge.call(
         name,
         Array.from({ length: DrawArguments[name] }, (_, index) => args(index)),

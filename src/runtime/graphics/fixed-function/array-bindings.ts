@@ -17,8 +17,41 @@ export function arrayAttribute(state: FixedState, name: number): number | undefi
       return Attribute.TextureStart + state.textures.length;
     case GL.TextureArray:
       return Attribute.TextureStart + state.clientTexture;
+    case GL.PointSizeArray:
+      return Attribute.PointSize;
   }
   return undefined;
+}
+/** The attributes a draw feeds: position, colour, texture units and OES point sizes. */
+function drawAttributes(state: FixedState): number[] {
+  return [
+    ...Array.from({ length: Attribute.TextureStart + state.textures.length }, (_, index) => index),
+    Attribute.PointSize,
+  ];
+}
+/** glPointSizePointerOES(type, stride, pointer): one float size per vertex. */
+const PointSizeArgument = { Type: 0, Stride: 1, Pointer: 2 } as const;
+function installPointSizes(bridge: GraphicsBridge, current: () => FixedState): void {
+  bridge.register("PointSizePointerOES", (args) => {
+    const type = args(PointSizeArgument.Type),
+      stride = args(PointSizeArgument.Stride) | 0;
+    if (stride < 0) {
+      bridge.host.error(GL.InvalidValue);
+      return;
+    }
+    if (type === GL.Fixed) throw new Error("ES 1 fixed-point client arrays are not implemented.");
+    if (type !== GL.Float) {
+      bridge.host.error(GL.InvalidEnum);
+      return;
+    }
+    current().arrays.set(Attribute.PointSize, {
+      size: 1,
+      type,
+      stride,
+      pointer: args(PointSizeArgument.Pointer),
+      buffer: bridge.host.boundArray(),
+    });
+  });
 }
 export function installArrays(bridge: GraphicsBridge, current: () => FixedState): void {
   for (const [name, enabled] of [
@@ -67,6 +100,7 @@ export function installArrays(bridge: GraphicsBridge, current: () => FixedState)
         : (attribute ?? Attribute.TextureStart + state.clientTexture);
       state.arrays.set(index, { size, type, stride, pointer, buffer: bridge.host.boundArray() });
     });
+  installPointSizes(bridge, current);
   for (const [name, decode] of [
     ["Color4f", floatFromBits],
     ["Color4x", (word: number) => (word | 0) / FIXED_SCALE],
@@ -102,7 +136,7 @@ export function prepareArrays(bridge: GraphicsBridge, state: FixedState): boolea
   if (!state.enabledArrays.has(Attribute.Position)) return false;
   const saved = bridge.host.boundArray();
   try {
-    for (let index = 0; index < Attribute.TextureStart + state.textures.length; index++) {
+    for (const index of drawAttributes(state)) {
       if (!state.enabledArrays.has(index)) {
         bridge.call("DisableVertexAttribArray", [index]);
         continue;

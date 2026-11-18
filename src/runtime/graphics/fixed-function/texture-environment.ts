@@ -1,3 +1,5 @@
+import { COMBINE_MODE, combineExpression, type Combine } from "./texture-combine";
+
 export const TextureFormat = {
   Alpha: 0x1906,
   RGB: 0x1907,
@@ -26,11 +28,16 @@ export interface TextureStage {
   readonly enabled: boolean;
   readonly format: number;
   readonly mode: number;
+  readonly combine: Combine;
+  /** GL_COORD_REPLACE_OES for this unit. */
+  readonly coordReplace: boolean;
   readonly color: readonly [number, number, number, number];
   readonly matrix: Float32Array;
 }
-export function textureExpression(stage: TextureStage, unit: number): string {
-  const sample = `texture2DProj(uTexture${unit}, vTexture${unit})`;
+export function textureExpression(stage: TextureStage, unit: number, pointCoord = false): string {
+  const sample = pointCoord
+    ? `texture2D(uTexture${unit}, gl_PointCoord)`
+    : `texture2DProj(uTexture${unit}, vTexture${unit})`;
   const hasColor = stage.format !== TextureFormat.Alpha;
   const hasAlpha =
     stage.format === TextureFormat.Alpha ||
@@ -38,6 +45,8 @@ export function textureExpression(stage: TextureStage, unit: number): string {
     stage.format === TextureFormat.LuminanceAlpha;
   if (!Object.values(TextureFormat).some((format) => format === stage.format))
     throw new Error("Unsupported ES 1 texture base format.");
+  if (stage.mode === COMBINE_MODE)
+    return `{ vec4 texel = ${sample}; ${combineExpression(stage.combine, unit)} }`;
   let color: string,
     alpha = hasAlpha ? "color.a * texel.a" : "color.a";
   switch (stage.mode) {

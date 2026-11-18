@@ -89,3 +89,16 @@ test("invalid ES1 projections preserve the matrix and ES2 calls retain their exi
   ]);
   x.close();
 });
+test("texture environment accepts GL_COMBINE and reports invalid values as GL errors", () => {
+  const x = fixture();
+  const env = 0x2300,
+    mode = 0x2200;
+  x.call("TexEnvi", env, mode, 0x8570);
+  x.call("TexEnvi", env, 0x8571, 0x8575);
+  x.call("TexEnvf", env, 0x8573, floatBits(2));
+  expect(x.errors).toEqual([]);
+  x.call("TexEnvi", env, mode, 0x0be1);
+  x.call("TexEnvf", env, 0x8573, floatBits(3));
+  x.call("TexEnvi", env, 0x8588, 0x0300);
+  expect(x.errors).toEqual([GL.InvalidEnum, GL.InvalidValue, GL.InvalidEnum]);
+});

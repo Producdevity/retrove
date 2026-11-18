@@ -26,6 +26,7 @@ function link(gl: Context, state: FixedDrawState) {
     gl.attachShader(program, fragment);
     gl.bindAttribLocation(program, Attribute.Position, "aPosition");
     gl.bindAttribLocation(program, Attribute.Color, "aColor");
+    if (state.pointSizeArray) gl.bindAttribLocation(program, Attribute.PointSize, "aPointSize");
     state.textures.forEach((_stage, unit) =>
       gl.bindAttribLocation(program, Attribute.TextureStart + unit, `aTexture${unit}`),
     );

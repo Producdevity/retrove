@@ -1,7 +1,8 @@
 import { MatrixState, FIXED_TEXTURE_UNITS } from "./matrix-stack";
 import { AlphaFunction, TextureFormat, TextureMode } from "./texture-environment";
+import { defaultCombine } from "./texture-combine";
 import type { Vector4 } from "./matrix";
-import type { FixedDrawState } from "./shader";
+import { Attribute, type FixedDrawState } from "./shader";
 export interface ArrayPointer {
   size: number;
   type: number;
@@ -19,6 +20,8 @@ export class FixedState {
     enabled: false,
     handle: 0,
     mode: Number(TextureMode.Modulate),
+    combine: defaultCombine(),
+    coordReplace: false,
     color: initialEnvironment,
   }));
   color: Vector4 = [1, 1, 1, 1];
@@ -32,7 +35,11 @@ export class FixedState {
     if (!value) throw new Error("Invalid ES 1 texture unit.");
     return value;
   }
-  drawState(formats: ReadonlyMap<number, number>, alphaTest: number): FixedDrawState {
+  drawState(
+    formats: ReadonlyMap<number, number>,
+    alphaTest: number,
+    points: { readonly drawing: boolean; readonly sprite: number },
+  ): FixedDrawState {
     const stage = (unit: number) => {
       const texture = this.texture(unit);
       return {
@@ -48,6 +55,8 @@ export class FixedState {
       alphaFunction: this.capabilities.has(alphaTest) ? this.alphaFunction : AlphaFunction.Always,
       alphaReference: this.alphaReference,
       pointSize: this.pointSize,
+      pointSizeArray: this.enabledArrays.has(Attribute.PointSize),
+      pointSprite: points.drawing && this.capabilities.has(points.sprite),
     };
   }
 }

@@ -2,9 +2,12 @@ import { floatFromBits, WORD_BYTES } from "../../ios/abi/scalars";
 import { FIXED_TEXTURE_UNITS } from "./matrix-stack";
 import { Component, GL, type GraphicsBridge } from "./host";
 import { TextureFormat, TextureMode } from "./texture-environment";
+import { COMBINE_MODE, isCombineParameter, isScaleParameter, setCombine } from "./texture-combine";
 import type { FixedState } from "./state";
-const HEX_RADIX = 16;
 const COLOR_COMPONENTS = 4;
+/** GLfixed is 16.16. */
+const FIXED_ONE = 0x10000;
+const INT_COLOR_MAX = 0x7fffffff;
 const TEXTURE_UPLOAD_ARGUMENTS = 9;
 const COMPRESSED_UPLOAD_ARGUMENTS = 8;
 const UploadArgument = { Format: 2, Level: 1 } as const;
@@ -58,53 +61,75 @@ export function installTextures(
     });
   installEnvironment(bridge, current);
 }
+/** How a glTexEnv variant passes values: enums as integers, scales and colours as numbers. */
+interface ValueDecoding {
+  readonly enumeration: (bits: number) => number;
+  readonly number: (bits: number) => number;
+}
+const DECODINGS: Readonly<Record<"i" | "x" | "f", ValueDecoding>> = {
+  i: { enumeration: (bits) => bits, number: (bits) => bits | 0 },
+  x: { enumeration: (bits) => bits, number: (bits) => (bits | 0) / FIXED_ONE },
+  f: { enumeration: (bits) => Math.trunc(floatFromBits(bits)), number: floatFromBits },
+};
+const MODES = new Set<number>([...Object.values(TextureMode), COMBINE_MODE]);
+
+/** Applies one scalar glTexEnv parameter, reporting GL errors as the iOS driver does. */
+function setEnvironment(
+  bridge: GraphicsBridge,
+  state: FixedState,
+  name: number,
+  bits: number,
+  decoding: ValueDecoding,
+): void {
+  const stage = state.texture();
+  if (name === GL.EnvironmentMode) {
+    const mode = decoding.enumeration(bits);
+    if (MODES.has(mode)) stage.mode = mode;
+    else bridge.host.error(GL.InvalidEnum);
+    return;
+  }
+  if (!isCombineParameter(name)) {
+    bridge.host.error(GL.InvalidEnum);
+    return;
+  }
+  const scale = isScaleParameter(name);
+  const value = scale ? decoding.number(bits) : decoding.enumeration(bits);
+  if (!setCombine(stage.combine, name, value))
+    bridge.host.error(scale ? GL.InvalidValue : GL.InvalidEnum);
+}
+
 function installEnvironment(bridge: GraphicsBridge, current: () => FixedState): void {
-  for (const [suffix, decode] of [
-    ["i", (value: number) => value],
-    ["x", (value: number) => value],
-    ["f", floatFromBits],
-  ] as const)
-    bridge.register("TexEnv" + suffix, (args) => {
-      if (args(0) !== GL.TextureEnvironment || args(1) !== GL.EnvironmentMode) {
-        bridge.host.error(GL.InvalidEnum);
+  for (const [suffix, decoding] of Object.entries(DECODINGS)) {
+    const scalar = (target: number, name: number, bits: number) => {
+      const state = current();
+      if (target === GL.TextureEnvironment) setEnvironment(bridge, state, name, bits, decoding);
+      else if (target === GL.PointSprite && name === GL.CoordReplace)
+        state.texture().coordReplace = decoding.number(bits) !== 0;
+      else bridge.host.error(GL.InvalidEnum);
+    };
+    bridge.register("TexEnv" + suffix, (args) => scalar(args(0), args(1), args(Component.Z)));
+    bridge.register(`TexEnv${suffix}v`, (args) => {
+      const color = args(0) === GL.TextureEnvironment && args(1) === GL.EnvironmentColor;
+      const bytes = bridge.host.read(
+        args(Component.Z),
+        WORD_BYTES * (color ? COLOR_COMPONENTS : 1),
+      );
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const word = (index: number) => view.getUint32(index * WORD_BYTES, true);
+      if (!color) {
+        scalar(args(0), args(1), word(0));
         return;
       }
-      const mode = decode(args(Component.Z));
-      if (!Object.values(TextureMode).some((value) => value === mode))
-        throw new Error(`Unsupported ES 1 texture environment mode 0x${mode.toString(HEX_RADIX)}.`);
-      current().texture().mode = mode;
+      // Integer colours map the full signed range to [-1, 1] before clamping.
+      const channel = (index: number) =>
+        suffix === "i" ? (word(index) | 0) / INT_COLOR_MAX : decoding.number(word(index));
+      const read = (index: number) => Math.max(0, Math.min(1, channel(index)));
+      current().texture().color = [
+        read(Component.X),
+        read(Component.Y),
+        read(Component.Z),
+        read(Component.W),
+      ];
     });
-  bridge.register("TexEnvfv", (args) => {
-    if (args(0) !== GL.TextureEnvironment) {
-      bridge.host.error(GL.InvalidEnum);
-      return;
-    }
-    if (args(1) !== GL.EnvironmentColor && args(1) !== GL.EnvironmentMode) {
-      bridge.host.error(GL.InvalidEnum);
-      return;
-    }
-    const bytes = bridge.host.read(
-      args(Component.Z),
-      WORD_BYTES * (args(1) === GL.EnvironmentColor ? COLOR_COMPONENTS : 1),
-    );
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    if (args(1) === GL.EnvironmentMode) {
-      bridge.host.api._glTexEnvf?.((index) =>
-        index === Component.Z ? view.getUint32(0, true) : args(index),
-      );
-      return;
-    }
-    if (args(1) !== GL.EnvironmentColor) {
-      bridge.host.error(GL.InvalidEnum);
-      return;
-    }
-    const read = (index: number) =>
-      Math.max(0, Math.min(1, view.getFloat32(index * WORD_BYTES, true)));
-    current().texture().color = [
-      read(Component.X),
-      read(Component.Y),
-      read(Component.Z),
-      read(Component.W),
-    ];
-  });
+  }
 }
