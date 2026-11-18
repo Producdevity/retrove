@@ -10,7 +10,10 @@ import {
   type GroupedEntry,
   type SessionSummary,
 } from "./log-view";
-export const LAST_REPORT_KEY = "retrove.last-report";
+import { LAST_REPORT_KEY, readEarlierReports } from "./report-archive";
+const UNCLEAN_HINT =
+  "Retrove restarted while it was running; iOS likely closed it for using too much memory.";
+export { LAST_REPORT_KEY } from "./report-archive";
 const FILTER_PROBLEMS = "problems";
 export function readLastReport(): string | null {
   try {
@@ -52,6 +55,31 @@ function renderEntry(entry: GroupedEntry): HTMLLIElement {
   return item;
 }
 
+function earlierReports(): string[] {
+  try {
+    return readEarlierReports(localStorage);
+  } catch {
+    return [];
+  }
+}
+function renderEarlier(container: HTMLElement, reports: readonly string[]): void {
+  container.hidden = !reports.length;
+  const heading = container.querySelector("h2");
+  container.replaceChildren(
+    ...(heading ? [heading] : []),
+    ...reports.map((text) => {
+      const group = node("div", "group");
+      const summary = parseSession(text.replace(/^Ended unexpectedly:[^\n]*\n\n/u, ""));
+      renderSession(
+        group,
+        summary?.state === "running"
+          ? { ...summary, state: "unclean", firstError: summary.firstError ?? UNCLEAN_HINT }
+          : summary,
+      );
+      return group;
+    }),
+  );
+}
 /** The Logs page: a summary of the last app session and the library's own events. */
 export function connectActivity(): () => void {
   const report = element("report", HTMLTextAreaElement);
@@ -59,18 +87,22 @@ export function connectActivity(): () => void {
   const session = element("last-session", HTMLDivElement);
   const entries = element("log-entries", HTMLOListElement);
   const filter = element("log-filter", HTMLFieldSetElement);
+  const earlier = element("earlier-sessions", HTMLDivElement);
   const refresh = (): void => {
     const lastReport = readLastReport();
+    const previous = earlierReports();
     const journal = libraryJournal.text();
     report.value = [
       "Retrove debug logs",
       `Build: ${import.meta.env.VITE_RETROVE_REVISION}`,
       journal,
       lastReport,
+      ...previous.map((text, index) => `Earlier session ${index + 1}\n${text}`),
     ]
       .filter(Boolean)
       .join("\n\n");
     renderSession(session, parseSession(lastReport));
+    renderEarlier(earlier, previous);
     const problems = filter.querySelector<HTMLInputElement>(
       `input[value="${FILTER_PROBLEMS}"]`,
     )?.checked;

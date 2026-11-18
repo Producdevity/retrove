@@ -3,6 +3,7 @@ import { DiagnosticRecorder } from "../../web/diagnostics.mjs";
 import type { Diagnostic } from "../../web/ipa.mjs";
 import { isRecord } from "../domain/validation";
 import { saveLastReport } from "../diagnostics/activity";
+import { archiveLastReport } from "../diagnostics/report-archive";
 import { element } from "../ui/dom";
 import { download } from "../ui/download";
 const REPORT_INTERVAL = 5000;
@@ -47,6 +48,11 @@ export class SessionReport {
     });
   }
   start(name: string): void {
+    try {
+      archiveLastReport(localStorage);
+    } catch {
+      /* Without storage there is no earlier report to keep. */
+    }
     this.recorder.start(name, {
       build: `retrove-${import.meta.env.VITE_RETROVE_REVISION}`,
       browser: navigator.userAgent,

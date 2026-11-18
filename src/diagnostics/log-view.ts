@@ -18,6 +18,7 @@ export const SESSION_STATES: Readonly<Record<string, string>> = {
   failed: "Failed",
   running: "Interrupted",
   interrupted: "Interrupted",
+  unclean: "Ended unexpectedly",
 };
 export interface SessionSummary {
   readonly app: string;
