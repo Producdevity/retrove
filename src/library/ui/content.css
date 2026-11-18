@@ -132,9 +132,48 @@ button.row:active:not(:disabled) {
   font: 600 12px / 1.2 var(--font);
   text-transform: capitalize;
 }
-#update-notice {
-  background: var(--tint);
-  color: var(--on-tint);
+#update-action {
+  flex: none;
+}
+.update-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + var(--space-2));
+  left: 50%;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: min(380px, calc(100% - 2 * var(--gutter)));
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  translate: -50% 0;
+  animation: banner-in var(--duration-long) var(--ease-spring);
+}
+.update-banner[hidden] {
+  display: none;
+}
+.update-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.update-text strong {
+  font: var(--text-headline);
+  font-size: 15px;
+}
+.update-text span {
+  font: var(--text-footnote);
+  color: var(--ink-2);
+}
+.update-banner .button {
+  min-height: 38px;
+  border-radius: var(--radius-pill);
+}
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    translate: -50% -24px;
+  }
 }
 .notice {
   margin: 0 0 var(--space-2);

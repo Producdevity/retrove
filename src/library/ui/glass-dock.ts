@@ -2,7 +2,7 @@ import { BackdropPainter } from "../../ui/glass/backdrop";
 import { GlassLayer } from "../../ui/glass/layer";
 
 const COMPACT = "(max-width: 699px)";
-const BAR = { shape: "pill", tint: 0.56, frost: 0.1 } as const;
+const BAR = { shape: "pill", tint: 0.62, frost: 0.32 } as const;
 const BUTTON = { shape: "circle", tint: 0.12, frost: 0 } as const;
 const CAPSULE = { shape: "pill", tint: 0.55, frost: 0.18 } as const;
 const MATERIAL = { refraction: 34, dispersion: 1.2, edgeReach: 0.1, reflection: 0.16, echo: 0.12 };
@@ -37,10 +37,12 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
     lost,
     sidebar,
   );
+  // The lens magnifies the bar and its labels, not the page the bar floats over.
   const lens = new GlassLayer(
     new BackdropPainter(
       document.body,
       (element) => chrome(element) || element.classList.contains("selection"),
+      (element) => element === nav,
     ),
     LENS_MATERIAL,
     true,

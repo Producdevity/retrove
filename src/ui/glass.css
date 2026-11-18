@@ -10,7 +10,7 @@
   background: var(--glass-base);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--glass-shadow), var(--glass-specular);
   border-radius: var(--radius-pill);
   transition:
     transform var(--duration-long) var(--ease-spring),
@@ -21,7 +21,7 @@
   background: var(--glass-thick);
   -webkit-backdrop-filter: var(--glass-filter-thick);
   backdrop-filter: var(--glass-filter-thick);
-  box-shadow: var(--glass-shadow-deep);
+  box-shadow: var(--glass-shadow-deep), var(--glass-specular);
 }
 /* The rim catches light from a direction that follows the pointer. */
 .glass::after {
@@ -76,6 +76,7 @@
 }
 /* The WebGL layer draws the material behind these controls. */
 .glass[data-glass="webgl"] {
+  box-shadow: var(--glass-shadow);
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

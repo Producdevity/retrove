@@ -6,12 +6,13 @@ const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 const POSITION = { stiffness: 340, damping: 26 };
 const BLOOM = { stiffness: 560, damping: 30 };
 const DRAG_THRESHOLD = 6;
-const GROW_X = 0.24;
-const GROW_Y = 0.58;
-const STRETCH_PER_SPEED = 0.035;
-const MAX_STRETCH = 0.45;
+const GROW_X = 0.1;
+const GROW_Y = 0.2;
+const STRETCH_PER_SPEED = 0.02;
+const MAX_STRETCH = 0.2;
 const SETTLE_DISTANCE = 0.3;
-const HIDDEN_AMOUNT = 0.02;
+const HIDDEN_AMOUNT = 0.004;
+const PRECISION = 3;
 const CLICK_SUPPRESSION_MS = 500;
 const LENS_AXES = { x: 0.35, y: 0.9 };
 const HALF = 0.5;
@@ -52,8 +53,13 @@ export class TabBar {
     nav.addEventListener("pointerup", this.up);
     nav.addEventListener("pointercancel", this.up);
     nav.addEventListener("click", this.click, true);
+    // The bar's layout settles after styles, fonts and the standalone viewport do.
+    const resized = new ResizeObserver(() => {
+      if (!this.press && !this.frame) this.rest();
+    });
+    resized.observe(nav);
+    for (const button of this.buttons) resized.observe(button);
     this.compact.addEventListener("change", () => this.rest());
-    addEventListener("resize", () => this.rest());
     this.rest();
   }
   /** Move the selection to a page chosen without touch, such as from the keyboard. */
@@ -162,6 +168,8 @@ export class TabBar {
       transform: `translate(${left}px, ${top}px)`,
     });
     const lifted = amount > HIDDEN_AMOUNT || Boolean(this.press);
+    // The resting pill and the lens cross-fade, so the glass never pops out.
+    this.selection.style.setProperty("--lift", Math.min(1, amount).toFixed(PRECISION));
     this.selection.classList.toggle("lifted", lifted);
     const lens = this.lens();
     if (!lens) return;
@@ -172,6 +180,7 @@ export class TabBar {
           shape: "pill",
           tint: 0,
           frost: 0,
+          opacity: Math.min(1, amount),
           pressure: amount,
           pressureAxes: [LENS_AXES.x, LENS_AXES.y],
         },

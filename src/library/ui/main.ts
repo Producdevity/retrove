@@ -2,7 +2,6 @@ import { BUILD_ID } from "../../pwa/update-protocol";
 import "../../ui/appearance.css";
 import "./library.css";
 import { initializeAppearance } from "../../ui/appearance";
-import { registerOfflineShell } from "../../pwa/register";
 import type { InstalledApplication } from "../../domain/application";
 import { errorMessage } from "../../domain/validation";
 import { connectActivity } from "../../diagnostics/activity";
@@ -18,6 +17,7 @@ import { connectInstall } from "./install";
 import { connectNavigation, Page } from "./navigation";
 import { connectSettings } from "./settings";
 import { TabBar } from "./tab-bar";
+import { connectUpdates } from "./updates";
 
 initializeAppearance();
 element("build-id", HTMLSpanElement).textContent = `Build ${BUILD_ID}`;
@@ -78,9 +78,4 @@ connectInstall(() => {
 connectImport(library, refresh, failure, (milliseconds) => dock.wake(milliseconds));
 void refresh().catch(failure);
 
-const updateNotice = element("update-notice", HTMLSpanElement);
-void observed(DiagnosticOperation.Offline, () =>
-  registerOfflineShell(() => {
-    updateNotice.hidden = false;
-  }),
-).catch(failure);
+connectUpdates((cause) => libraryJournal.record(DiagnosticOperation.Offline, {}, cause));

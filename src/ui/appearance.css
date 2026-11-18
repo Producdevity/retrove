@@ -28,7 +28,11 @@
   --glass-shadow-deep:
     0 24px 64px light-dark(rgb(16 20 32 / 22%), rgb(0 0 0 / 62%)),
     0 2px 8px light-dark(rgb(16 20 32 / 10%), rgb(0 0 0 / 44%));
-  --glass-filter: blur(14px) saturate(1.9) brightness(1.05);
+  --glass-specular:
+    inset 0 1px 0.5px light-dark(rgb(255 255 255 / 70%), rgb(255 255 255 / 22%)),
+    inset 0 -1px 1px light-dark(rgb(255 255 255 / 30%), rgb(255 255 255 / 8%)),
+    inset 0 0 12px light-dark(rgb(255 255 255 / 18%), rgb(255 255 255 / 5%));
+  --glass-filter: blur(9px) saturate(2) brightness(1.06);
   --glass-filter-thick: blur(28px) saturate(1.8);
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;

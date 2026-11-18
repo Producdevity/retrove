@@ -139,16 +139,11 @@ main {
   .tab-bar.glass::before {
     display: block;
   }
-  /* Without the Add button beside it, the bar is centred as on iOS. */
-  .shell:has(#library[hidden]) .tab-bar.glass {
-    width: min(320px, 100%);
-    margin-inline: auto;
-  }
-  /* Labels keep a base under them; the WebGL material refracts on top of it. */
+  /* A CSS blur over the WebGL layer would hide its refraction. */
   .tab-bar.glass[data-glass="webgl"] {
-    background: color-mix(in srgb, var(--glass-thick) 72%, transparent);
-    -webkit-backdrop-filter: blur(18px) saturate(1.6);
-    backdrop-filter: blur(18px) saturate(1.6);
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   .tab-bar .selection {
     display: block;
@@ -157,10 +152,15 @@ main {
     top: 0;
     z-index: 0;
     border-radius: var(--radius-pill);
+  }
+  /* The resting pill fades out as the lens lifts, and back in as it settles. */
+  .tab-bar .selection::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
     background: var(--fill-strong);
-    transition:
-      background-color var(--duration-short) var(--ease-out),
-      box-shadow var(--duration-short) var(--ease-out);
+    opacity: calc(1 - var(--lift, 0));
   }
   .tab-bar .selection.lifted {
     background: color-mix(in srgb, var(--glass-base) 40%, transparent);

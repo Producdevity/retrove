@@ -227,12 +227,11 @@
             <div class="row">
               <span>Version</span><span class="value">0.1.0 · <span id="build-id"></span></span>
             </div>
-            <a class="row link" href="/update.html"
-              ><span>Check for updates</span
-              ><span id="update-notice" class="badge" hidden>Update</span
-              ><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m9 6 6 6-6 6" /></svg
-            ></a>
+            <div class="row">
+              <span>Software update</span
+              ><span id="update-status" class="value" role="status">Checking…</span
+              ><button id="update-action" class="button" hidden></button>
+            </div>
             <a
               class="row link"
               href="https://github.com/Producdevity/retrove"
@@ -250,6 +249,11 @@
           </div>
         </section>
       </main>
+    </div>
+    <div id="update-banner" class="update-banner glass thick" role="status" hidden>
+      <span class="update-text"
+        ><strong>Update ready</strong><span>Restart to use the new version.</span></span
+      ><button id="update-restart" class="button filled">Restart</button>
     </div>
     <dialog id="app-details" class="sheet">
       <form method="dialog">

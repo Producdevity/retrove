@@ -32,6 +32,8 @@ export interface Region {
 const HALF = 0.5;
 const LUMA = { red: 0.2126, green: 0.7152, blue: 0.0722 };
 const CHANNEL = 255;
+/** Glass reads lighter than the ground it hides. */
+const COVER_SHEEN = { dark: "rgb(255 255 255 / 12%)", light: "rgb(255 255 255 / 60%)" };
 const TRANSPARENT = /^(transparent|rgba\(0, 0, 0, 0\))$|\/ 0\)$/u;
 const SKIPPED = new Set(["SCRIPT", "STYLE", "TEMPLATE", "INPUT", "SELECT", "TEXTAREA", "CANVAS"]);
 
@@ -65,11 +67,14 @@ export class BackdropPainter {
   dark = false;
   private paints: Paint[] = [];
   private stale = true;
+  private covers: { element: Element; pinned: boolean }[] = [];
   private ground = "";
   private readonly measure = document.createElement("canvas").getContext("2d");
   constructor(
     private readonly root: HTMLElement,
     private readonly excluded: (element: Element) => boolean,
+    /** Controls that hide what lies under them, as their glass does on screen. */
+    private readonly opaque: (element: Element) => boolean = () => false,
   ) {}
   invalidate(): void {
     this.stale = true;
@@ -96,15 +101,22 @@ export class BackdropPainter {
       this.ground = getComputedStyle(document.documentElement).backgroundColor;
     this.dark = luminance(this.ground) < HALF;
     this.paints = [];
+    this.covers = [];
     this.walk(this.root, false);
+    // Covering controls paint last, over whatever page content shares their box.
+    for (const { element, pinned } of this.covers.splice(0)) this.walk(element, pinned, true);
   }
   private box(rect: DOMRect, pinned: boolean): Box {
     const x = pinned ? 0 : scrollX,
       y = pinned ? 0 : scrollY;
     return { x: rect.left + x, y: rect.top + y, width: rect.width, height: rect.height, pinned };
   }
-  private walk(element: Element, insideFixed: boolean): void {
+  private walk(element: Element, insideFixed: boolean, covering = false): void {
     if (SKIPPED.has(element.tagName) || this.excluded(element)) return;
+    if (!covering && this.opaque(element)) {
+      this.covers.push({ element, pinned: insideFixed });
+      return;
+    }
     if (element instanceof HTMLElement && element.hidden) return;
     const style = getComputedStyle(element);
     if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return;
@@ -113,6 +125,11 @@ export class BackdropPainter {
     if (rect.width === 0 && rect.height === 0 && style.display !== "contents") return;
     const box = this.box(rect, pinned);
     const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+    if (covering && this.opaque(element)) {
+      this.paints.push({ kind: "fill", box, radius, color: this.ground });
+      const color = this.dark ? COVER_SHEEN.dark : COVER_SHEEN.light;
+      this.paints.push({ kind: "fill", box, radius, color });
+    }
     if (visible(style.backgroundColor))
       this.paints.push({ kind: "fill", box, radius, color: style.backgroundColor });
     const border = Number.parseFloat(style.borderTopWidth);
