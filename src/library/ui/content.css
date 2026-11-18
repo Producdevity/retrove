@@ -251,12 +251,6 @@ button.row:active:not(:disabled) {
 }
 @media (max-width: 699px) {
   .importer {
-    position: fixed;
-    right: var(--gutter);
-    bottom: calc(max(env(safe-area-inset-bottom), var(--space-3)) + var(--dock) + var(--space-3));
-    z-index: 20;
-    width: min(330px, calc(100% - 2 * var(--gutter)));
-    margin: 0;
     border-radius: var(--radius-pill);
   }
 }

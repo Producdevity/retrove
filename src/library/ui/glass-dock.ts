@@ -3,8 +3,6 @@ import { GlassLayer } from "../../ui/glass/layer";
 
 const COMPACT = "(max-width: 699px)";
 const BAR = { shape: "pill", tint: 0.62, frost: 0.32 } as const;
-const BUTTON = { shape: "circle", tint: 0.12, frost: 0 } as const;
-const CAPSULE = { shape: "pill", tint: 0.55, frost: 0.18 } as const;
 const MATERIAL = { refraction: 34, dispersion: 1.2, edgeReach: 0.1, reflection: 0.16, echo: 0.12 };
 const LENS_MATERIAL = { refraction: 92, dispersion: 2.2, highlight: 0.42 };
 const WATCHED = ["hidden", "class", "aria-current", "open"];
@@ -12,8 +10,6 @@ const WATCHED = ["hidden", "class", "aria-current", "open"];
 export interface DockControls {
   readonly sidebar: HTMLElement;
   readonly nav: HTMLElement;
-  readonly add: HTMLElement;
-  readonly importer: HTMLElement;
 }
 export interface DockLayers {
   readonly dock: GlassLayer;
@@ -23,13 +19,11 @@ export interface DockLayers {
 
 /** Creates the two glass layers of the phone dock; loaded only where refraction runs. */
 export function mountGlass(controls: DockControls, lost: () => void): DockLayers {
-  const { sidebar, nav, add, importer } = controls;
+  const { sidebar, nav } = controls;
   const chrome = (element: Element): boolean =>
     element instanceof HTMLCanvasElement ||
     element instanceof HTMLDialogElement ||
-    element.classList.contains("top-edge") ||
-    element === add ||
-    element === importer;
+    element.classList.contains("top-edge");
   const dock = new GlassLayer(
     new BackdropPainter(document.body, (element) => chrome(element) || element === sidebar),
     MATERIAL,
@@ -54,11 +48,6 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
     const shown = compact.matches;
     if (shown) dock.set("bar", { element: nav, look: BAR });
     else dock.remove("bar");
-    if (shown && !add.classList.contains("morphed"))
-      dock.set("add", { element: add, look: BUTTON });
-    else dock.remove("add");
-    if (shown && !importer.hidden) dock.set("importer", { element: importer, look: CAPSULE });
-    else dock.remove("importer");
   };
   const listeners = new AbortController();
   const signal = listeners.signal;

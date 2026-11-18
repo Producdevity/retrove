@@ -56,16 +56,13 @@ const drawer = new Drawer(appDetails(library, management, launch, refresh, failu
 const sidebar = document.querySelector(".sidebar");
 const nav = document.querySelector(".tab-bar");
 const selection = document.querySelector(".tab-bar .selection");
-const add = element("import", HTMLInputElement).closest("label");
 if (
   !(sidebar instanceof HTMLElement) ||
   !(nav instanceof HTMLElement) ||
-  !(selection instanceof HTMLElement) ||
-  !add
+  !(selection instanceof HTMLElement)
 )
   throw new Error("Missing navigation interface.");
-const importer = element("import-status", HTMLDivElement);
-const dock = new Dock({ sidebar, nav, add, importer });
+const dock = new Dock({ sidebar, nav });
 const navigate = connectNavigation(new TabBar(nav, selection, () => dock.lens), {
   [Page.Activity]: connectActivity(),
   [Page.Settings]: showStorage,
