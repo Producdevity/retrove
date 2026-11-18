@@ -12,6 +12,7 @@ import { onUserActivation } from "./activation";
 import { BootSequence } from "./boot/sequence";
 import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
+import { connectOrientation } from "./orientation";
 import { PlayerSession } from "./session";
 
 initializeAppearance();
@@ -97,6 +98,7 @@ async function prepare(): Promise<void> {
   status.textContent = `Opening ${app.name}`;
   document.title = `${app.name} — Retrove`;
   report.start(app.name);
+  connectOrientation(id);
   const archive = await openIPA(await library.open(app), report.diagnostic);
   display.configure(archive.info);
   session = new PlayerSession(library, app, archive, display, report, {

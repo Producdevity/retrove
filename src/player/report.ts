@@ -5,13 +5,16 @@ import { isRecord } from "../domain/validation";
 import { saveLastReport } from "../diagnostics/activity";
 import { archiveLastReport } from "../diagnostics/session-store";
 import { element } from "../ui/dom";
-import { download } from "../ui/download";
+import { phaseLabel } from "../diagnostics/session-detail";
+import { shareReport } from "../diagnostics/session-sheet";
+import { formatDuration } from "../diagnostics/sessions-view";
 const REPORT_INTERVAL = 5000;
 const MILLISECONDS_PER_SECOND = 1000;
 interface Progress {
   readonly phase: string;
   readonly frames: number;
   readonly elapsed: number;
+  readonly fps: number | undefined;
   readonly fault: string | null;
 }
 function progress(value: unknown): Progress | undefined {
@@ -23,7 +26,11 @@ function progress(value: unknown): Progress | undefined {
       : 0;
   const fault =
     isRecord(value.fault) && typeof value.fault.message === "string" ? value.fault.message : null;
-  return { phase: value.phase, elapsed: value.elapsedMs, frames, fault };
+  const fps =
+    isRecord(value.frameTimings) && typeof value.frameTimings.fps === "number"
+      ? value.frameTimings.fps
+      : undefined;
+  return { phase: value.phase, elapsed: value.elapsedMs, frames, fps, fault };
 }
 export class SessionReport {
   private readonly recorder = new DiagnosticRecorder();
@@ -31,6 +38,7 @@ export class SessionReport {
   private readonly dialog = element("report-dialog", HTMLDialogElement);
   private readonly summary = element("summary", HTMLParagraphElement);
   private lastWrite = 0;
+  private app = "App";
   constructor(
     private readonly onProgress: (value: Progress) => void,
     private readonly onMessage: Diagnostic,
@@ -42,12 +50,14 @@ export class SessionReport {
       () => this.store(),
     );
     element("diagnostics", HTMLButtonElement).addEventListener("click", () => this.show());
-    element("save-log", HTMLButtonElement).addEventListener("click", () => {
+    element("share-log", HTMLButtonElement).addEventListener("click", () => {
       this.store();
-      download(new Blob([this.log.value], { type: "text/plain" }), "retrove-report.txt");
+      void shareReport(this.app, this.log.value);
     });
   }
   start(name: string): void {
+    this.app = name;
+    element("report-title", HTMLHeadingElement).textContent = name;
     try {
       archiveLastReport(localStorage);
     } catch {
@@ -68,7 +78,7 @@ export class SessionReport {
     this.recorder.snapshot(value);
     const state = progress(value);
     if (state) {
-      this.summary.textContent = `${state.phase} · ${state.frames} presented frames · ${Math.round(state.elapsed / MILLISECONDS_PER_SECOND)} seconds`;
+      this.showProgress(state);
       this.onProgress(state);
     }
     if (performance.now() - this.lastWrite > REPORT_INTERVAL || state?.fault) {
@@ -84,6 +94,20 @@ export class SessionReport {
       this.summary.textContent +=
         " · Report could not be saved on this device. Export it before leaving.";
     }
+  }
+  private showProgress(state: Progress): void {
+    element("report-phase", HTMLElement).textContent = state.fault
+      ? "Stopped"
+      : phaseLabel(state.phase);
+    element("report-fps", HTMLElement).textContent =
+      state.fps === undefined ? "–" : `${state.fps.toFixed(1)} FPS`;
+    element("report-time", HTMLElement).textContent = formatDuration(
+      state.elapsed / MILLISECONDS_PER_SECOND,
+    );
+    this.summary.classList.toggle("problem", Boolean(state.fault));
+    this.summary.textContent = state.fault
+      ? state.fault
+      : "No problems so far. If something looks wrong, share this report.";
   }
   finish(state: "completed" | "stopped" | "failed", message: string): void {
     this.recorder.finish(state, message);

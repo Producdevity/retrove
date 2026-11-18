@@ -32,6 +32,10 @@ const MILESTONES: readonly { area: string; message: string; label: string }[] = 
   { area: "movie", message: "Opened movie from bundle", label: "Played a video" },
 ];
 
+/** Player-facing words for a runtime phase. */
+export function phaseLabel(phase: string): string {
+  return PHASES[phase] ?? phase;
+}
 function last(pattern: RegExp, text: string): string | undefined {
   let value: string | undefined;
   for (const match of text.matchAll(pattern)) value = match[1];

@@ -273,14 +273,71 @@ dialog p {
   color: #8fb0ff;
   font: 600 15px / 1 var(--font);
 }
+#report-dialog {
+  width: min(440px, calc(100% - 2 * var(--space-4)));
+}
+.report-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+}
+.report-facts div {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-m);
+  background: rgb(120 124 140 / 16%);
+}
+.report-facts dt {
+  color: #a3a9b7;
+  font: var(--text-caption);
+}
+.report-facts dd {
+  margin: 2px 0 0;
+  font: 600 15px / 1.3 var(--font);
+}
+dialog p.report-note {
+  margin: var(--space-3) var(--space-1);
+  color: #c8ccd6;
+  font: var(--text-callout);
+  overflow-wrap: anywhere;
+}
+dialog p.report-note.problem {
+  color: #ff8a8c;
+}
+.report-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.report-actions .button {
+  min-height: 46px;
+  border-radius: var(--radius-pill);
+}
+.report-actions .button.filled {
+  background: #5a8bff;
+  color: #ffffff;
+}
+#copy-status {
+  margin: var(--space-2) 0 0;
+  text-align: center;
+  color: #3ccf7a;
+}
 #copy-status:empty {
   display: none;
+}
+.report-raw {
+  margin-top: var(--space-3);
+}
+.report-raw summary {
+  color: #8fb0ff;
+  font: var(--text-callout);
+  cursor: pointer;
 }
 #log {
   display: block;
   width: 100%;
-  height: 52dvh;
-  margin: var(--space-3) 0;
+  height: 40dvh;
+  margin: var(--space-3) 0 0;
   padding: var(--space-3);
   resize: vertical;
   border: 0;
@@ -301,4 +358,109 @@ dialog p {
   .control:active {
     transform: none;
   }
+}
+
+/* Orientation: a menu under the toolbar, and a quarter turn of the whole page. */
+.orientation-menu {
+  inset: auto;
+  top: calc(var(--toolbar) + env(safe-area-inset-top) + var(--space-1));
+  right: max(var(--space-3), env(safe-area-inset-right));
+  width: 280px;
+  margin: 0;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-l);
+  color: #f4f5f8;
+  background: rgb(30 31 37 / 96%);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 60%);
+}
+.orientation-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: rgb(120 124 140 / 24%);
+}
+.orientation-options legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  color: #a3a9b7;
+  font: 600 13px / 1.3 var(--font);
+}
+.orientation-options label {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: var(--space-2) 0;
+  border-radius: calc(var(--radius-m) - 3px);
+  color: #a3a9b7;
+  font: 500 12px / 1.2 var(--font);
+  cursor: pointer;
+}
+.orientation-options label:has(input:checked) {
+  background: #3a3c45;
+  color: #f4f5f8;
+  font-weight: 600;
+}
+.orientation-options label:has(input:focus-visible) {
+  outline: 3px solid rgb(90 139 255 / 60%);
+}
+.orientation-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.orientation-menu p {
+  margin: var(--space-2) var(--space-1) 0;
+  color: #a3a9b7;
+  font: var(--text-footnote);
+}
+body[data-turn] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100dvh;
+  height: 100dvw;
+  translate: -50% -50%;
+  rotate: 90deg;
+}
+body[data-turn="-90"] {
+  rotate: -90deg;
+}
+body[data-turn] #stage {
+  height: calc(100dvw - var(--toolbar));
+}
+body[data-turn] #display {
+  width: min(100%, calc((100dvw - var(--toolbar)) * var(--aspect, 1.775)));
+}
+body[data-turn].immersive #stage {
+  height: 100dvw;
+}
+body[data-turn].immersive #display {
+  width: min(100%, calc(100dvw * var(--aspect, 1.775)));
+}
+body[data-turn] #toolbar {
+  height: var(--toolbar);
+  padding-top: 0;
+}
+/* Dialogs and popovers live in the top layer, outside the turned page, so they turn themselves. */
+body[data-turn] dialog[open],
+body[data-turn] .orientation-menu:popover-open {
+  inset: 0;
+  width: min(440px, calc(100dvh - 2 * var(--space-4)));
+  height: fit-content;
+  max-height: calc(100dvw - 2 * var(--space-4));
+  margin: auto;
+  rotate: 90deg;
+}
+body[data-turn="-90"] dialog[open],
+body[data-turn="-90"] .orientation-menu:popover-open {
+  rotate: -90deg;
+}
+body[data-turn] .orientation-menu:popover-open {
+  width: 280px;
 }

@@ -112,7 +112,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const fieldLayout=self=>{
     if(!window)return;
     let alpha=1;for(let p=self;p;p=data(p).parent){const value=data(p);if(value.hidden)return;alpha*=value.alpha;if(p===window)break;if(!value.parent)return;}
-    const value=data(self),[bx,by,w,h]=value.bounds,screen=displayBounds(window),bounds=mediaHost?.getBoundingClientRect();
+    const value=data(self),[bx,by,w,h]=value.bounds,screen=displayBounds(window),bounds=mediaHost?{width:mediaHost.offsetWidth,height:mediaHost.offsetHeight}:undefined;
     if(!bounds||!w||!h||!screen[2]||!screen[3])return;
     const p=displayPoint([bx,by],self,window),qx=displayPoint([bx+1,by],self,window),qy=displayPoint([bx,by+1],self,window),sx=bounds.width/screen[2],sy=bounds.height/screen[3];
     return {clipPath:clip(self),left:(p[0]-screen[0])*sx+'px',top:(p[1]-screen[1])*sy+'px',width:w+'px',height:h+'px',opacity:String(alpha),transform:'matrix('+[(qx[0]-p[0])*sx,(qx[1]-p[1])*sy,(qy[0]-p[0])*sx,(qy[1]-p[1])*sy,0,0].join(',')+')'};
@@ -469,6 +469,10 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
       const rect=canvas.getBoundingClientRect(), b=data(window).bounds;
       if(!rect.width || !rect.height)return;
       let x=(e.clientX-rect.left)/rect.width, y=(e.clientY-rect.top)/rect.height;
+      // The player can turn the whole stage a quarter turn; undo it to get display coordinates.
+      const turn=canvas.ownerDocument?.body?.dataset?.turn;
+      if(turn==='90')[x,y]=[y,1-x];
+      else if(turn==='-90')[x,y]=[1-y,x];
       const orientation=getOrientation();
       if (b[2]<b[3] && orientation>2) {
         if(orientation===3) [x,y]=[1-y,x];

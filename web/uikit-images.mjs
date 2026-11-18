@@ -145,7 +145,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const shown=new Set(), root=window&&data(window);
     const screen=window&&(displayBounds?.(window)??root?.bounds), w=screen?.[2], h=screen?.[3];
     const toDisplay=displayPoint??convertPoint;
-    const hostBounds=mediaHost.getBoundingClientRect();
+    const hostBounds={width:mediaHost.offsetWidth,height:mediaHost.offsetHeight};
     const aspect=hostBounds.width&&hostBounds.height && w&&h ? (hostBounds.height/h)/(hostBounds.width/w) : 1;
     const now=performance.now();
     let order=1,glOrder=0;
