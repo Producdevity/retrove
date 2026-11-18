@@ -66,7 +66,7 @@ import {installStatusBar} from "../src/runtime/ios/uikit/application/status-bar.
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts,RunLoopMode} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
-import {initialOrientation} from '../src/runtime/ios/uikit/screen.ts';
+import {appProfile} from '../src/runtime/ios/profiles/app-manifest.ts';
 import {coreFoundation} from './corefoundation.mjs';
 import {bundleStrings} from '../src/runtime/ios/foundation/localized-strings.ts';
 import {foundationRunLoop} from './runloop.mjs';
@@ -596,8 +596,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'isNetworkActivityIndicatorVisible', () => Number(networkActivity));
   method('UIApplication', false, 'setNetworkActivityIndicatorVisible:', (_, a) => { networkActivity = Boolean(a(0)); });
   installURLOpening({method, text, send, open: openInBrowser});
-  const statusBar={hidden:!!ipa.info.UIStatusBarHidden,orientation:initialOrientation(ipa.info),style:0};
-  const input = touchUIKit({movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusBar.orientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const profile=appProfile(ipa.info);
+  if(profile.entry)diagnostic('info','profile','Applied app manifest entry',{bundleId:profile.bundleId,...profile.entry});
+  const statusBar={hidden:!!ipa.info.UIStatusBarHidden,orientation:profile.orientation,style:0};
+  const input = touchUIKit({screen:profile.screen,movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusBar.orientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
@@ -675,7 +677,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('CTCallCenter',false,'setCallEventHandler:',()=>undefined);
   installRemoteNotifications({method,send,responds:(p,name)=>!!p&&!!lookup(read(p),name),delegate:()=>delegate,error:fileObjects.error,later:scheduler.later});
   let shakeToEdit=true, badge=0;
-  installStatusBar({method,write},statusBar);
+  installStatusBar({method,write},statusBar,profile);
   method('UIApplication',false,'setApplicationSupportsShakeToEdit:',(_,a)=>{shakeToEdit=!!a(0);});
   method('UIApplication',false,'applicationSupportsShakeToEdit',()=>Number(shakeToEdit));
   method('UIApplication',false,'setApplicationIconBadgeNumber:',(_,a)=>{badge=a(0)|0;});

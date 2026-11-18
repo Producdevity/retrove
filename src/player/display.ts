@@ -1,12 +1,13 @@
 import type { Diagnostic } from "../../web/ipa.mjs";
 import { graphicsContextInfo } from "../runtime/graphics/context-info";
-import { initialOrientation, phoneScreen } from "../runtime/ios/uikit/screen";
+import { isLandscape, TALL_SCREEN, type ScreenSize } from "../runtime/ios/uikit/screen";
+import { appProfile } from "../runtime/ios/profiles/app-manifest";
 import { element } from "../ui/dom";
-const LAST_PORTRAIT_ORIENTATION = 2;
 export class PlayerDisplay {
   readonly host = element("display", HTMLDivElement);
   private context: WebGLRenderingContext | WebGL2RenderingContext | null = null;
   private landscape = false;
+  private screen: ScreenSize = TALL_SCREEN;
   private readonly observer: MutationObserver;
   constructor(
     private readonly fault: (error: Error) => void,
@@ -19,21 +20,24 @@ export class PlayerDisplay {
     this.observer.observe(this.host, { childList: true });
   }
   configure(info: Record<string, unknown>): void {
-    this.landscape = initialOrientation(info) > LAST_PORTRAIT_ORIENTATION;
+    const profile = appProfile(info);
+    this.screen = profile.screen;
+    this.landscape = isLandscape(profile.orientation);
     this.host.style.setProperty(
       "--aspect",
       String(
         this.landscape
-          ? phoneScreen.height / phoneScreen.width
-          : phoneScreen.width / phoneScreen.height,
+          ? this.screen.height / this.screen.width
+          : this.screen.width / this.screen.height,
       ),
     );
   }
   graphics = (): WebGLRenderingContext | WebGL2RenderingContext => {
     if (this.context) return this.context;
     const canvas = document.createElement("canvas");
-    canvas.width = (this.landscape ? phoneScreen.height : phoneScreen.width) * phoneScreen.scale;
-    canvas.height = (this.landscape ? phoneScreen.width : phoneScreen.height) * phoneScreen.scale;
+    const { width, height, scale } = this.screen;
+    canvas.width = (this.landscape ? height : width) * scale;
+    canvas.height = (this.landscape ? width : height) * scale;
     const attributes = { alpha: false, antialias: false, preserveDrawingBuffer: true };
     const context =
       canvas.getContext("webgl2", attributes) ?? canvas.getContext("webgl", attributes);

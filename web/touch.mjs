@@ -32,7 +32,7 @@ import {installToolbars} from '../src/runtime/ios/uikit/toolbar/bindings.ts';
 import {installNavigation} from '../src/runtime/ios/uikit/navigation/controller.ts';
 import {installTables} from '../src/runtime/ios/uikit/table/bindings.ts';
 import {installIndexPaths} from '../src/runtime/ios/foundation/index-paths.ts';
-import {phoneScreen} from '../src/runtime/ios/uikit/screen.ts';
+import {TALL_SCREEN} from '../src/runtime/ios/uikit/screen.ts';
 import {uiImages} from './uikit-images.mjs';
 
 const floatBits = new DataView(new ArrayBuffer(8));
@@ -42,7 +42,7 @@ const double = n => { floatBits.setFloat64(0, n, true); return floatBits.getBigU
 const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:'], [PointerPhase.Move]: [TouchPhase.Moved, 'touchesMoved:withEvent:'],
   [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
-export function touchUIKit({hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
+export function touchUIKit({screen:phoneScreen=TALL_SCREEN,hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
   selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread, movieVideo}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
