@@ -4,8 +4,7 @@ import type { ArchiveRepository } from "../library/contracts";
 import type { LibraryDatabase } from "./library-database";
 
 import type { ArchiveInventory } from "./archive-maintenance";
-const OWNED_ARCHIVE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ARCHIVE_DIRECTORY = "retrove-archives";
+import { ARCHIVE_DIRECTORY, OWNED_ARCHIVE, assetDirectoryName } from "./inflated-assets";
 export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
   constructor(
     private readonly db: LibraryDatabase,
@@ -104,10 +103,14 @@ export class BrowserArchives implements ArchiveRepository, ArchiveInventory {
     if (reference.kind === ArchiveKind.Database) return this.db.removeArchive(reference.key);
     const directory = await this.directory();
     if (!directory) throw new Error("File storage is unavailable in this browser.");
-    try {
-      await directory.removeEntry(reference.key);
-    } catch (error) {
-      if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
-    }
+    for (const [name, options] of [
+      [reference.key, {}],
+      [assetDirectoryName(reference.key), { recursive: true }],
+    ] as const)
+      try {
+        await directory.removeEntry(name, options);
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
+      }
   }
 }

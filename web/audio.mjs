@@ -1,5 +1,6 @@
 import { read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 import {AudioMetrics} from '../src/runtime/diagnostics/audio-metrics.ts';
+import {OutputLead, StreamResampler} from '../src/runtime/audio/stream-output.ts';
 
 const fourcc = s => [...s].reduce((n,ch) => n*256 + ch.charCodeAt(0),0);
 const RIOC = fourcc('rioc'), LPCM = fourcc('lpcm');
@@ -150,7 +151,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       if (a(0)!==RIOC || !a(1)) return invalid;
       const raw=defaultStream(), id=next++;
       units.set(id,{raw,format:parseStream(raw),maximum:4096,callback:0,ref:0,work:0,
-        frames:0,samples:0,peak:0,underruns:0,started:false,time:0,sources:new Set()});
+        frames:0,samples:0,peak:0,underruns:0,started:false,time:0,frame:0,lead:new OutputLead(),resampler:null,settled:0,sources:new Set()});
       write32(cpu,a(1),id); return 0;
     },
     _AudioUnitSetProperty: a => property(a,true),
@@ -181,7 +182,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     },
     _AudioOutputUnitStart: a => withUnit(a,u => {
       if (!u.work) return -10867;
-      if (!u.started) u.time=0;
+      if (!u.started) {u.time=0;u.frame=0;}
       u.started=true;
       return 0;
     }),
@@ -208,7 +209,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       if (rendering) return -10863;
       session.active=enabled;
       if (!session.active) for (const unit of units.values()) {
-        const started=unit.started; stopSources(unit); unit.started=started; unit.time=0;
+        const started=unit.started; stopSources(unit); unit.started=started; unit.time=0; unit.frame=0;
       }
       return 0;
   }
@@ -217,8 +218,6 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     const {work,frames,format}=unit, {rate,channels,frameBytes,width}=format;
     const length=frames*frameBytes, timestamp=work+8, list=work+72, pcm=work+88;
     const stamp=new Uint8Array(64), v=view(stamp);
-    const now=context.currentTime;
-    if(unit.samples && unit.time<now)unit.underruns++;
     v.setFloat64(0,unit.samples,true); v.setBigUint64(8,BigInt(Math.floor(performance.now()*1e6)),true);
     v.setUint32(56,3,true); cpu.write(timestamp,stamp);
     write32(cpu,work,0); write32(cpu,list,1); write32(cpu,list+4,channels);
@@ -232,23 +231,36 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     cpu.write(pcm,silence);
     const status=await callGuest(unit.callback,[unit.ref,work,timestamp,0,frames,list]);
     if (status) throw Error('RemoteIO render callback returned OSStatus '+(status|0));
-    const buffer=context.createBuffer(channels,frames,rate);
+    const planar=Array.from({length:channels},()=>new Float32Array(frames));
     if (!(read32(cpu,work)&16)) {
       if (read32(cpu,list)!==1 || read32(cpu,list+4)!==channels || read32(cpu,list+8)<length || !read32(cpu,list+12)) {
         throw Error('RemoteIO callback returned an invalid interleaved AudioBufferList');
       }
       const input=view(cpu.read(read32(cpu,list+12),length));
       for (let c=0;c<channels;c++) {
-        const out=buffer.getChannelData(c);
+        const out=planar[c];
         for(let i=0;i<frames;i++) {out[i]=format.sample(input,i*frameBytes+c*width);unit.peak=Math.max(unit.peak,Math.abs(out[i]));}
       }
     }
+    unit.samples+=frames;
+    // One continuous resampler and a sample-exact schedule keep buffer joins click-free.
+    const outputRate=context.sampleRate;
+    if(!unit.resampler || unit.resampler.outputRate!==outputRate || unit.resampler.channels!==channels || unit.resampler.rate!==rate)
+      unit.resampler=Object.assign(new StreamResampler(rate,outputRate,channels),{channels,rate});
+    const resampled=unit.resampler.process(planar), count=resampled[0]?.length??0;
+    if(!count)return;
+    const buffer=context.createBuffer(channels,count,outputRate);
+    resampled.forEach((data,c)=>buffer.copyToChannel(data,c));
+    const earliest=Math.ceil((context.currentTime+0.005)*outputRate);
+    if(unit.frame<earliest){
+      if(unit.frame){unit.underruns++;unit.lead.underrun();}
+      unit.frame=earliest;
+    }
     const source=context.createBufferSource(); source.buffer=buffer; source.connect(context.destination);
-    const when=Math.max(unit.time,now+0.005,context.currentTime+0.002);
     unit.sources.add(source);
     source.onended=() => {source.disconnect(); unit.sources.delete(source);};
-    source.start(when);
-    unit.time=when+frames/rate; unit.samples+=frames;
+    source.start(unit.frame/outputRate);
+    unit.frame+=count; unit.time=unit.frame/outputRate;
   }
   async function pump() {
     if (rendering || !context || context.state!=='running' || !session.active) return;
@@ -256,7 +268,9 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     try {
       for (const unit of units.values()) {
         // Cap callback count if guest rendering takes longer than real time.
-        for (let i=0; i<4 && unit.started && unit.time<context.currentTime+0.055; i++) await render(unit);
+        const now=context.currentTime;
+        unit.lead.settle(unit.settled?now-unit.settled:0); unit.settled=now;
+        for (let i=0; i<12 && unit.started && unit.time<now+unit.lead.target; i++) await render(unit);
       }
     } finally { rendering=false; }
   }

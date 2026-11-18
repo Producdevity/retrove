@@ -1,3 +1,4 @@
+import {InflatedAssets} from "../src/storage/inflated-assets.ts";
 import { crc32 } from '../src/runtime/formats/crc32.ts';
 import { parsePlist } from "../src/runtime/formats/plist/index.ts";
 export { parsePlist } from "../src/runtime/formats/plist/index.ts";
@@ -183,8 +184,24 @@ export async function openZip(blob, diagnostic) {
       reader.releaseLock();
     }
   }
+  const inflated = InflatedAssets.for(blob);
+  // Large deflated members are inflated once to disk; holding them in memory exhausts iOS Safari.
+  async function storedAsset(path, entry) {
+    if (entry.method !== 8 || !inflated) return undefined;
+    try {
+      const stored = await inflated.blob({path, size: entry.size, crc: entry.crc}, () => stream(path),
+        () => diagnostic?.('info', 'ipa', 'Storing inflated asset on disk', {path, bytes: entry.size}));
+      if (stored) diagnostic?.('info', 'ipa', 'Opened stored asset for random access', {path, bytes: stored.size});
+      return stored;
+    } catch (error) {
+      diagnostic?.('warn', 'ipa', 'Could not store inflated asset; keeping it in memory', {path, error: String(error)});
+      return undefined;
+    }
+  }
   async function assetBlob(path) {
     const entry = entryFor(path);
+    const stored = await storedAsset(path, entry);
+    if (stored) return stored;
     diagnostic?.('info', 'ipa', 'Opening large asset for random access', {path, bytes: entry.size, method: entry.method});
     const source = await stream(path);
     let result;

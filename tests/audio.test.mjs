@@ -8,10 +8,10 @@ function audioFixture() {
   const cpu={read:(p,n)=>mem.slice(p,p+n),write:(p,b)=>mem.set(b,p)};
   const heap={alloc:()=>4096,free:()=>{}};
   const captured=[], callbackArgs=[];
-  const ac={state:'running',currentTime:1,destination:{},
+  const ac={state:'running',currentTime:1,sampleRate:44100,destination:{},
     createBuffer:(channels,frames,rate)=>{
       const out=Array.from({length:channels},()=>new Float32Array(frames));
-      return {getChannelData:c=>out[c],sampleRate:rate,out};
+      return {getChannelData:c=>out[c],copyToChannel:(data,c)=>out[c].set(data),sampleRate:rate,out};
     },
     createBufferSource:()=>({connect(){},disconnect(){},stop(){this.stopped=true},start(t){this.t=t;captured.push(this)}})
   };
@@ -49,7 +49,7 @@ test('RemoteIO renders guest interleaved callback into correctly timed stereo We
     const node=captured[i];
     assert.equal(node.buffer.sampleRate,44100);
     assert.equal(node.buffer.out[0][0],-0.5); assert.equal(node.buffer.out[1][1023],0.75);
-    assert.ok(Math.abs(node.t-(1.005+1024*i/44100))<1e-9);
+    assert.ok(Math.abs(node.t-(Math.ceil(1.005*44100)+1024*i)/44100)<1e-9);
   }
   await audio.pump(); assert.equal(captured.length,3);
   ac.currentTime+=0.025; await audio.pump(); assert.equal(captured.length,4);
