@@ -438,7 +438,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
 
   hostClass('CALayer', 'NSObject');
   hostClass('CAEAGLLayer', 'CALayer');
-  const drawable = eaglDrawable(graphics);
+  const drawable = eaglDrawable(graphics, layer => input.drawableGeometry(layer), diagnostic);
   const currentContexts = new Map();
   const threadId = () => threads?.funcs._pthread_self() ?? 1;
   const currentContext = () => currentContexts.get(threadId()) ?? 0;

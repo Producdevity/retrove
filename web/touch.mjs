@@ -342,6 +342,14 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     if(w<h && getOrientation()===4)return [h-y,x];
     return [x,y];
   }
+  // Renderbuffer size comes from the layer alone; its display placement needs the window.
+  function drawableGeometry(layer) {
+    const owner=data(layer).backingView??layer, state=data(owner), [bx,by,width,height]=state.bounds;
+    const scale=state.contentScaleFactor??data(layer).contentsScale, size={width,height,scale:scale===undefined?1:float(scale),screenScale:phoneScreen.scale};
+    if(!window)return size;
+    const [,,dw,dh]=displayBounds(window);
+    return {...size,display:{width:dw,height:dh},toDisplay:([x,y])=>displayPoint([bx+x,by+y],owner,window)};
+  }
   const transform=(s,_,dest)=>data(s).transform.forEach((v,i)=>write(dest+i*4,bits(v)));
   transform.stret=true; method('UIView',false,'transform',transform);
   method('UIView',false,'setTransform:',(s,a)=>{data(s).transform=Array.from({length:6},(_,i)=>float(a(i)));data(s).layoutAnimation=animation??animationGroups.context();});
@@ -562,5 +570,5 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     }
     return nodes;
   }
-  return {webViews,snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();scrollers.close();textFields.close();webViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
+  return {webViews,drawableGeometry,snapshot:()=>({...inputMetrics.snapshot(),queued:queue.length,coalesced:queue.coalesced,scene:scene(className)}),scene,connect,disconnect,withAnimation,close:()=>{disconnect();imageViews.close();textViews.close();pickerViews.close();scrollers.close();textFields.close();webViews.close();alerts.close();},pumpAlerts:()=>alerts.pump(),hasAlerts:()=>alerts.pending(),pump,cancelTouches,hasWindow:()=>!!window,items,array:(items,mutable)=>collection(mutable?'NSMutableArray':'NSArray',items)};
 }
