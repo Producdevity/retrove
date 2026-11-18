@@ -1,3 +1,4 @@
+import {ImageViewAnimations} from "../src/runtime/ios/uikit/image/animation.ts";
 import {drawLayerBackground,drawLayerBorder} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
@@ -9,9 +10,13 @@ const transforms = [
 ];
 
 export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,
-  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,uiPattern,glLayer,movieVideo}) {
+  text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,hasHostDrawing,drawHost,clip,uiColor,uiPattern,glLayer,movieVideo,elements}) {
   hostClass('UIImage','NSObject');
+  // Compiled nibs archive image references as this UIImage subclass; its UIImage initWithCoder: resolves them.
+  hostClass('UIImageNibPlaceholder','UIImage');
   hostClass('UIImageView','UIView');
+  const imageAnimations=new ImageViewAnimations({method,retain,release:releaseFromHost,elements,now:()=>performance.now(),changed:p=>{data(p).needsDisplay=true;}});
+  imageAnimations.install();
   const images=new Map(), nodes=new Map();
   const document=mediaHost?.ownerDocument;
   const cg=()=>getCoreGraphics?.();
@@ -106,6 +111,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
   method('UIImage',false,'scale',s=>bits(images.get(s)?.scale??1));
   method('UIImage',false,'imageOrientation',s=>images.get(s)?.orientation??0);
   method('UIImage',false,'drawInRect:',(s,a)=>{cg()?.drawCurrent(c=>draw(images.get(s),c,...[0,1,2,3].map(i=>float(a(i)))));});
+  method('UIImage',false,'drawAsPatternInRect:',(s,a)=>{const img=images.get(s);if(img)cg()?.drawCurrent(c=>tile(img,c,[0,1,2,3].map(i=>float(a(i)))));});
   method('UIImage',false,'drawAtPoint:',(s,a)=>{
     const img=images.get(s);
     if(img)cg()?.drawCurrent(c=>draw(img,c,float(a(0)),float(a(1)),img.width,img.height));
@@ -157,7 +163,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       opacityTiming=active(state.opacityAnimation)??opacityTiming;
       layoutTiming=active(state.layoutAnimation)??layoutTiming;
       if(state.hidden||(alpha<=0&&!opacityTiming))return;
-      const image=images.get((state.highlighted&&state.highlightedImage)||state.image), layerContent=state.contents&&cg()?.pixels(state.contents), custom=typeof lookup(read(view),'drawRect:')==='number';
+      const image=images.get(imageAnimations.frame(view)||(state.highlighted&&state.highlightedImage)||state.image), layerContent=state.contents&&cg()?.pixels(state.contents), custom=typeof lookup(read(view),'drawRect:')==='number';
       const hostDrawing=hasHostDrawing?.(view),background=state.backgroundColor?uiColor?.(state.backgroundColor):undefined;
       const pattern=state.backgroundColor?images.get(uiPattern?.(state.backgroundColor)):undefined;
       const colored=background||pattern||state.layerBackgroundColor||state.borderColor;

@@ -2,11 +2,14 @@ import { defaultFont, type Fonts } from "./fonts";
 import { LineBreak, TextAlignment } from "./text-layout";
 import { objectResult, type UIKitHost } from "./host";
 
+const DEFAULT_SHADOW_Y = -1;
 export interface LabelState {
   text: number;
   font: number;
   color: number;
   shadowColor: number;
+  /** UIKit's default is one point up. */
+  shadowOffset: [number, number];
   highlightedColor: number;
   highlighted: boolean;
   enabled: boolean;
@@ -34,6 +37,7 @@ export class Labels {
         font: this.host.retain(this.fonts.create(defaultFont)),
         color: 0,
         shadowColor: 0,
+        shadowOffset: [0, DEFAULT_SHADOW_Y],
         highlightedColor: 0,
         highlighted: false,
         enabled: true,

@@ -18,11 +18,25 @@ export interface Appearance {
   background: number;
 }
 export type AppearanceField = keyof Appearance;
+/** UIEdgeInsets: top, left, bottom, right. */
+export type Insets = [number, number, number, number];
+export type InsetField = "content" | "title" | "image";
+const Edge = { Top: 0, Left: 1, Bottom: 2, Right: 3 } as const;
+type Frame = [number, number, number, number];
+export function inset([x, y, width, height]: readonly number[], edges: Insets): Frame {
+  return [
+    (x ?? 0) + edges[Edge.Left],
+    (y ?? 0) + edges[Edge.Top],
+    (width ?? 0) - edges[Edge.Left] - edges[Edge.Right],
+    (height ?? 0) - edges[Edge.Top] - edges[Edge.Bottom],
+  ];
+}
 export interface ButtonState {
   readonly label: number;
   readonly image: number;
   readonly background: number;
   readonly styles: Map<number, Appearance>;
+  readonly insets: Record<InsetField, Insets>;
   kind: number;
   adjustsHighlighted: boolean;
   adjustsDisabled: boolean;
@@ -60,6 +74,7 @@ export class Buttons {
       kind: 0,
       adjustsHighlighted: true,
       adjustsDisabled: true,
+      insets: { content: [0, 0, 0, 0], title: [0, 0, 0, 0], image: [0, 0, 0, 0] },
       styles: new Map([
         [
           ControlState.Normal,
@@ -132,9 +147,11 @@ export class Buttons {
   }
   async layout(self: number): Promise<void> {
     const state = await this.refresh(self);
-    const bounds = this.host.view(self).bounds;
-    for (const pointer of [state.background, state.image, state.label])
-      this.host.setFrame(pointer, [...bounds]);
+    const bounds = this.host.view(self).bounds,
+      content = inset(bounds, state.insets.content);
+    this.host.setFrame(state.background, [...bounds]);
+    this.host.setFrame(state.image, inset(content, state.insets.image));
+    this.host.setFrame(state.label, inset(content, state.insets.title));
   }
   async size(self: number): Promise<[number, number]> {
     const state = await this.refresh(self),

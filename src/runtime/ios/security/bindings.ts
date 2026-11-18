@@ -1,6 +1,14 @@
 import type { GuestArguments, HostResult } from "../objc/host";
 import { Keychain, KeychainError, type KeychainAttributes, type KeychainValue } from "./keychain";
-import { AttributeKeys, SecurityKey, SecurityStatus, SecurityValue } from "./constants";
+import {
+  AttributeKeys,
+  BinaryKeys,
+  NumericKeys,
+  PasswordClasses,
+  SecurityKey,
+  SecurityStatus,
+  SecurityValue,
+} from "./constants";
 interface SecurityHost {
   entries(pointer: number): ReadonlyArray<readonly [number, number]>;
   isKind(pointer: number, name: string): boolean;
@@ -39,15 +47,22 @@ async function query(host: SecurityHost, pointer: number, partial = false): Prom
       all = limit === SecurityValue.All;
     } else {
       if (!AttributeKeys.has(key)) throw new KeychainError(SecurityStatus.Unimplemented);
-      const binary = key === SecurityKey.Data || key === SecurityKey.Generic;
-      if (!host.isKind(value, binary ? "NSData" : "NSString"))
-        throw new KeychainError(SecurityStatus.Parameter);
-      attributes[key] = binary ? host.bytes(value) : host.text(value);
+      attributes[key] = await attribute(host, key, value);
     }
   }
-  if (!partial && attributes[SecurityKey.Class] !== SecurityValue.GenericPassword)
+  const itemClass = attributes[SecurityKey.Class];
+  if (!partial && (typeof itemClass !== "string" || !PasswordClasses.has(itemClass)))
     throw new KeychainError(SecurityStatus.Unimplemented);
   return { attributes, data, attributesResult, all };
+}
+async function attribute(host: SecurityHost, key: string, value: number): Promise<KeychainValue> {
+  const kind = BinaryKeys.has(key) ? "NSData" : NumericKeys.has(key) ? "NSNumber" : "NSString";
+  if (!host.isKind(value, kind)) throw new KeychainError(SecurityStatus.Parameter);
+  if (kind === "NSData") return host.bytes(value);
+  if (kind === "NSString") return host.text(value);
+  const number = await host.send(value, "intValue");
+  if (typeof number !== "number") throw new KeychainError(SecurityStatus.Parameter);
+  return number | 0;
 }
 function result(
   host: SecurityHost,

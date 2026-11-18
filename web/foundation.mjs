@@ -20,7 +20,8 @@ import {installCollectionInitializers} from "../src/runtime/ios/foundation/colle
 import {installURLCache} from "../src/runtime/ios/foundation/url-cache/bindings.ts";
 import {installDictionaryArrays} from "../src/runtime/ios/foundation/dictionaries.ts";
 import {installArrayMethods} from "../src/runtime/ios/foundation/arrays.ts";
-import {installDates} from "../src/runtime/ios/foundation/dates.ts";
+import {installDates,REFERENCE_DATE_UNIX_SECONDS} from "../src/runtime/ios/foundation/dates.ts";
+const MILLISECONDS_PER_SECOND = 1000;
 import {installNumbers} from "../src/runtime/ios/foundation/numbers.ts";
 import {installDeviceIdentity} from "../src/runtime/ios/uikit/device-identity.ts";
 import {FastEnumeration} from "../src/runtime/ios/foundation/fast-enumeration.ts";
@@ -32,7 +33,7 @@ import {formatDarwin} from './format.mjs';
 import {readString} from '../src/runtime/memory/guest-memory.ts';
 
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
-  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries,webViews}) {
+  read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries,webViews,diagnostic=()=>{}}) {
   const dicts = new Map(), numbers = new Map();
   const enumeration=new FastEnumeration({read,write,allocate:bytes=>heap.zero(bytes),free:pointer=>heap.free(pointer)});
   const bits = new DataView(new ArrayBuffer(8));
@@ -184,6 +185,13 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     if (isKind(ptr,'NSDictionary')) return Object.fromEntries(Array.from(dicts.get(ptr)?.values()??[],([k,v])=>[text(k),unbox(v)]));
     throw Error('Expected a Foundation property-list value');
   }
+  function plist(ptr) {
+    if (ptr && isKind(ptr,'NSData')) return cpu.read(read(ptr+4),read(ptr+8));
+    if (ptr && isKind(ptr,'NSDate')) return new Date((dates.referenceTime(ptr)+REFERENCE_DATE_UNIX_SECONDS)*MILLISECONDS_PER_SECOND);
+    if (ptr && isKind(ptr,'NSArray')) return (items(ptr)??[]).map(plist);
+    if (ptr && isKind(ptr,'NSDictionary')) return Object.fromEntries(Array.from(dicts.get(ptr)?.values()??[],([k,v])=>[text(k),plist(v)]));
+    return unbox(ptr);
+  }
   function description(s) {
     if(numbers.has(s))return numberText(s);
     if(isKind(s,'NSString'))return text(s);
@@ -257,7 +265,8 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
     read:key=>globalThis.localStorage?.getItem(key)??null,save:(key,value)=>{if(value===null)globalThis.localStorage?.removeItem(key);else globalThis.localStorage?.setItem(key,value);}});
   const preferenceIdentifier=ipa.info.CFBundleIdentifier??ipa.bundlePath;
   const preferenceDomain=GuestStorageKey.Preferences+preferenceIdentifier;
-  installUserDefaults({hostClass,method,text,string,singleton,property,unbox,identifier:preferenceIdentifier,
+  installUserDefaults({hostClass,method,text,string,singleton,property,plist,identifier:preferenceIdentifier,
+    className:p=>{const cls=p&&read(p);return [...names].find(([,value])=>value===cls)?.[0]??'nil';},warn:(message,details)=>diagnostic('warn','foundation',message,details),
     globals:{AppleLanguages:languages(),AppleLocale:languages()[0].replaceAll('-','_')},
     storage:{
       read:()=>{try{return JSON.parse(globalThis.localStorage?.getItem(preferenceDomain)??'{}');}catch{return {}; }},

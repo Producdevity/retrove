@@ -1,6 +1,7 @@
 import {ColorSymbols} from "../src/runtime/graphics/core-graphics/colors/bindings.ts";
 import {LayerGravitySymbols} from "../src/runtime/ios/uikit/image/content-gravity.ts";
 import {AnimationSymbols} from "../src/runtime/ios/uikit/animation/basic.ts";
+import {TransitionSymbols} from "../src/runtime/ios/uikit/animation/transitions.ts";
 import {installMutableStringEdits} from "../src/runtime/ios/foundation/text/mutable-string.ts";
 import {reflectionImports} from "../src/runtime/ios/objc/reflection.ts";
 import {installInvocations} from "../src/runtime/ios/objc/invocation/bindings.ts";
@@ -18,6 +19,7 @@ import {protocolImports} from "../src/runtime/ios/objc/protocols.ts";
 import {installStringBytes} from "../src/runtime/ios/foundation/text/byte-constructors.ts";
 import {FoundationErrorSymbol} from "../src/runtime/ios/foundation/errors.ts";
 import {installAudioPlayers} from "../src/runtime/ios/media/audio-player.ts";
+import {installMusicPlayer,MusicPlayerSymbols} from "../src/runtime/ios/media/music-player.ts";
 import {decodePlayerAudio} from "../src/runtime/audio/player/decoder.ts";
 import {WebPlayerOutput} from "../src/runtime/audio/player/output.ts";
 import {inspectAudioFile} from "./audio-file.mjs";
@@ -61,7 +63,7 @@ import {installNumberFormatter} from "../src/runtime/ios/foundation/number-forma
 import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
 import {installStatusBar} from "../src/runtime/ios/uikit/application/status-bar.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
-import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
+import {installPorts,RunLoopMode} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {initialOrientation} from '../src/runtime/ios/uikit/screen.ts';
 import {coreFoundation} from './corefoundation.mjs';
@@ -187,10 +189,10 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (stret) { await implementation(self, index => arg(index + 3), arg(0)); return arg(0); }
     return implementation(self, index => arg(index + 2));
   }
-  function alloc(cls) {
+  function alloc(cls, extraBytes = 0) {
     const info = classes.get(cls);
     if (!info || info.isMeta || !info.supported || info.size < 4) throw Error('Unsupported class allocation');
-    const self = zero(info.size);
+    const self = zero(info.size + extraBytes);
     write(self, cls);
     owned.set(self, { count: 1, buffers: [] });
     return self;
@@ -249,8 +251,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   hostClass('EAGLContext', 'NSObject'); hostClass('EAGLSharegroup', 'NSObject');
   hostClass('NSBlock','NSObject');
   const blockClasses=new Map(['Stack','Global','Malloc'].map(kind=>['__NSConcrete'+kind+'Block',hostClass('NS'+kind+'Block','NSBlock')]));
-  async function allocateObject(cls) {
-    const ptr = alloc(cls);
+  async function allocateObject(cls, extraBytes = 0) {
+    const ptr = alloc(cls, extraBytes);
     const lineage=[];
     for(let cur=cls;cur;cur=read(cur+4))lineage.push(cur);
     for(const cur of lineage.reverse()){
@@ -273,8 +275,11 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     method('NSObject', meta, 'autorelease', autorelease);
     method('NSObject', meta, 'retainCount', self => owned.get(self)?.count ?? 0xffffffff);
   }
+  method('NSObject', true, 'isSubclassOfClass:', (self, a) => Number(subclass(self, a(0))));
   method('NSObject', false, 'init', self => self);
-  method('NSObject', false, 'dealloc', self => {
+  method('NSObject', false, 'awakeFromNib', () => {});
+  method('NSObject', false, 'dealloc', self => dispose(self));
+  function dispose(self) {
     const linked=associations.get(self);associations.delete(self);
     const destructors=[];
     for(let cur=read(self);cur;cur=read(cur+4)){
@@ -282,7 +287,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
     if(!linked?.size&&!destructors.length)return destroy(self);
     return (async()=>{for(const obj of linked?.values()??[])if(obj.policy)await releaseFromHost(obj.value);for(const imp of destructors)await callGuest(imp,[self,selector('.cxx_destruct')]);destroy(self);})();
-  });
+  }
   method('NSObject', false, 'hash', self => self >>> 2);
   const implementationAddresses=installImplementationLookup({method,isa:read,selector:p=>readString(cpu,p),lookup,gate:(name,fn)=>{if(!hostGate)throw Error('Host IMP gates are unavailable');return hostGate({name:'IMP '+name,library:'Foundation'},fn);}});
   installRootProxy({hostClass,copyMethod:(target,source,meta,name)=>{const sourceClass=names.get(source),targetClass=names.get(target);const implementation=classes.get(meta?read(sourceClass):sourceClass).methods.get(name);if(!implementation)throw Error('Missing root proxy method '+name);classes.get(meta?read(targetClass):targetClass).methods.set(name,implementation);}});
@@ -503,6 +508,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   // The emulated iOS 7 device has a 60 Hz screen. Modern browsers can
   // deliver RAF at 120 Hz or skip an update when a guest frame runs long.
   const refreshMs = DISPLAY_INTERVAL_MS;
+  const MAIN_THREAD = 1, UI_MODES = new Set([RunLoopMode.Default, RunLoopMode.Common]);
   const displayTime = new DataView(new ArrayBuffer(8));
   const timeBits = seconds => {
     displayTime.setFloat64(0, seconds, true);
@@ -601,7 +607,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const ports=installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(loop,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode)||!!runLoopSources?.signaled(loop,mode),hasRunLoopSource:(loop,mode)=>!!runLoopSources?.has(loop,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);const connected=await foundationObjects.pollConnections(loop,mode);return (await runLoopSources?.perform(loop,mode))||connected||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let dispatchService,cf;
   const foundationObjects = foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release:releaseFromHost,
-    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,webViews:input.webViews,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
+    read, write, string, text, utf8, send, lookup, selector, array:input.array, items:input.items, threads, sys, ipa, isKind,getDispatch:()=>dispatchService,callBlock:callGuest,dataFrom:createData,getRunLoop,makeString,hostGate,webViews:input.webViews,diagnostic,getCFEntries:p=>cf?.dictionaryEntries(p),returnType:(self,name)=>{const method=lookup(read(self),name);const types=methodTypes.get(method);if(!types)throw Error('Missing invocation method signature for '+name);return types.replace(/^[rnNoORV]+/,'')[0];}});
   const equalObjects=async(a,b)=>a===b?1:Number(quartz?.equal?.(a,b)??await send(a,'isEqual:',[b]));
   const hashObject=a=>quartz?.hash?.(a)??send(a,'hash');
   cf=coreFoundation({cpu,heap,read,write,zero,names,alloc,hostClass,method,destroy,send,callGuest,hostGate,
@@ -623,13 +629,14 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},hasClass:name=>names.has(name),send,
     scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
     initializeBuiltin:async(p,name,fields,graph)=>await nibs.initialize(p,name,fields,graph)??initializeFoundationArchive(p,name,fields,graph)});
-  nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,items:input.items,ipa,parse:parsePlist,openArchive:source=>unarchiver.open(source),
+  nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,selector,items:input.items,ipa,parse:parsePlist,openArchive:source=>unarchiver.open(source),
     setOutlet:(self,key,value)=>connectOutlet({read,write,cString:p=>readString(cpu,p),responds:(p,name)=>!!lookup(read(p),name),send,retain,release:releaseFromHost},self,key,value)});
   installArchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,
     classes:p=>{const result=[],seen=new Set();for(let cls=read(p);cls&&!seen.has(cls);cls=read(cls+4)){seen.add(cls);const info=classes.get(cls);if(!info)throw Error('Invalid archived class');result.push(info.name);}return result;},
     scalar:p=>isKind(p,'NSString')&&!isKind(p,'NSMutableString')?text(p):foundationObjects.archiveNumber(p),
     builtin:encodeFoundation({text,data:p=>cpu.read(read(p+4),read(p+8)),date:foundationObjects.archiveDate,entries:foundationObjects.archiveEntries,items:input.items}),
     data:bytes=>autorelease(archivedData(bytes)),replaceData:(p,bytes)=>{resizeData(p,bytes.length);cpu.write(read(p+4),bytes);},writeFile:fileObjects.writeArchive});
+  installMusicPlayer({hostClass,method,alloc});
   const audioPlayers=installAudioPlayers({hostClass,method,destroy,retain,release:releaseFromHost,write,send,error:fileObjects.error,
     loadURL:async url=>url&&await send(url,'isFileURL')?fileObjects.contents(await send(url,'path')):undefined,
     readData:p=>cpu.read(read(p+DataField.Bytes),read(p+DataField.Length)),
@@ -638,7 +645,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const accelerometer=installAccelerometer({hostClass,method,alloc,destroy,release:releaseFromHost,send});
   const scheduler=foundationRunLoop({cpu,hostClass,method,names,alloc,autorelease,retain,release:releaseFromHost,send,threads,destroy,read,callGuest,withAnimation:input.withAnimation,threadIdentity:foundationObjects.threadIdentity,getDispatch:()=>dispatchService});
   runLoopSources=new RunLoopSources({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,callGuest,currentLoop:()=>getRunLoop(),
-    poll:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);return await foundationObjects.pollConnections(loop,mode)||delivered;},
+    poll:async(loop,mode)=>{const thread=threads?.funcs._pthread_self()??1,delivered=await scheduler.pollThread(thread,mode);if(thread===MAIN_THREAD&&UI_MODES.has(mode))await pumpNestedUI();return await foundationObjects.pollConnections(loop,mode)||delivered;},
     pending:(_,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode),hasPort:(loop,mode)=>ports.hasPort(loop,mode),
     addTimer:async(loop,timer,mode)=>{await send(loop,'addTimer:forMode:',[timer,mode]);},removeTimer:timer=>scheduler.unscheduleTimer(timer)});
   Object.assign(cf.funcs,runLoopSourceFunctions(runLoopSources,()=>threads?.funcs._pthread_self()??1),{_CFRunLoopGetMain:()=>getRunLoop(1)});
@@ -677,6 +684,15 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   let avSession;
   method('AVAudioSession', true, 'sharedInstance', () => avSession ??= alloc(names.get('AVAudioSession')));
   method('AVAudioSession', false, 'setActive:error:', (_, a) => Number(audio?.setSessionActive(!!a(0)) === 0));
+  // Games that run their own loop with CFRunLoopRunInMode still receive touches and UIKit
+  // drawing on the main thread, as UIKit's event source is in the default and common modes.
+  let nestedUIAt=-Infinity,nestedUIBusy=false;
+  async function pumpNestedUI() {
+    const now=performance.now();
+    if(nestedUIBusy||!lifecycle.active||now-nestedUIAt<refreshMs/2)return;
+    nestedUIAt=now;nestedUIBusy=true;
+    try{await input.pumpAlerts();await input.pump();}finally{nestedUIBusy=false;}
+  }
   async function applicationMain(a) {
     const principalName=a(2)?text(a(2)):null,delegateName=a(3)?text(a(3)):null;
     try {
@@ -814,7 +830,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   ]);
   for(const [symbol,value]of Object.entries(ColorSymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value]of Object.entries(LayerGravitySymbols))exportedStringNames.set(symbol,value);
-  for(const [symbol,value]of Object.entries(AnimationSymbols))exportedStringNames.set(symbol,value);
+  for(const [symbol,value]of Object.entries({...AnimationSymbols,...TransitionSymbols,...MusicPlayerSymbols}))exportedStringNames.set(symbol,value);
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries({...ExceptionSymbols,...AdSymbols,...LocationSymbols,...UniformTypeSymbols}))exportedStringNames.set(symbol,value);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
@@ -952,6 +968,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _objc_getClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _objc_lookUpClass: a => names.get(readString(cpu, a(0))) ?? 0,
     _object_getClass: a => a(0) ? read(a(0)) : 0,
+    _class_createInstance: a => a(0) ? allocateObject(a(0), a(1)) : 0,
+    _object_dispose: a => { if (a(0)) return dispose(a(0)); },
     ...reflectionImports({read,cString:permanentString}),
     ...runtimeMethodImports({read,write,allocate:n=>zero(n),cString:p=>readString(cpu,p),permanentString,selector,methods:p=>{const info=classes.get(p);return info?.supported?info.methods:undefined;},classList:()=>[...classes.values()].filter(info=>!info.isMeta&&info.supported).map(info=>info.pointer),address:(value,name)=>implementationAddresses.address(value,name),typeEncoding:value=>typeof value==='number'?methodTypes.get(value):undefined}),...protocols.funcs,...protocolMethodImports({read,write,cString:p=>readString(cpu,p),selector}),...security,
     _class_getSuperclass: a => a(0) ? read(a(0) + 4) : 0,

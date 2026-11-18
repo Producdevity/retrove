@@ -134,6 +134,10 @@ export function installAnimationGroups(host: AnimationHost) {
     host.method(VIEW_CLASS, true, name, (_, args) => {
       requireGroup()[key] = args(0) ? host.selectorName(args(0)) : "";
     });
+  // Animations render as CSS transitions, which already start from the in-flight value YES asks for.
+  host.method(VIEW_CLASS, true, "setAnimationBeginsFromCurrentState:", () => {
+    requireGroup();
+  });
   host.method(VIEW_CLASS, true, "setAnimationsEnabled:", (_, args) => {
     groups.enabled = Boolean(args(0));
   });

@@ -4,10 +4,13 @@ import { CONTROL_CLASS, type Controls } from "./control-host";
 import { structureMethod, objectResult } from "./host";
 import { Buttons, type ButtonHost } from "./button-state";
 const BUTTON_CLASS = "UIButton";
+/** The fourth UIEdgeInsets float; the struct is passed by value as four words. */
+const INSET_RIGHT = 3;
 export function installButtons(host: ButtonHost, controls: Controls): void {
   host.hostClass(BUTTON_CLASS, CONTROL_CLASS);
   const buttons = new Buttons(host, controls);
   installImageAdjustments(host, buttons, controls);
+  installInsets(host, buttons, controls);
   host.method(BUTTON_CLASS, true, "buttonWithType:", async (klass, args) => {
     const pointer = objectResult(await host.send(host.alloc(klass), "init"));
     if (!pointer) return 0;
@@ -67,6 +70,35 @@ export function installButtons(host: ButtonHost, controls: Controls): void {
     );
     host.method(BUTTON_CLASS, false, current, async (self) =>
       buttons.appearance(await buttons.get(self), field, controls.flags(self), true),
+    );
+  }
+}
+
+function installInsets(host: ButtonHost, buttons: Buttons, controls: Controls): void {
+  for (const [field, name] of [
+    ["content", "contentEdgeInsets"],
+    ["title", "titleEdgeInsets"],
+    ["image", "imageEdgeInsets"],
+  ] as const) {
+    const setter = `set${name.charAt(0).toUpperCase()}${name.slice(1)}:`;
+    host.method(BUTTON_CLASS, false, setter, async (self, args) => {
+      (await buttons.get(self)).insets[field] = [
+        floatFromBits(args(Argument.First)),
+        floatFromBits(args(Argument.Second)),
+        floatFromBits(args(Argument.Third)),
+        floatFromBits(args(INSET_RIGHT)),
+      ];
+      controls.changed(self);
+    });
+    host.structure(
+      BUTTON_CLASS,
+      false,
+      name,
+      structureMethod(async (self, _args, destination) => {
+        (await buttons.get(self)).insets[field].forEach((value, index) =>
+          host.write(destination + index * WORD_BYTES, floatBits(value)),
+        );
+      }),
     );
   }
 }

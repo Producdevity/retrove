@@ -107,3 +107,21 @@ export function direntBytes(entry: DirectoryEntry, position: number): Uint8Array
   bytes.set(name, Dirent.Name);
   return bytes;
 }
+
+/** Reads the fields of a guest `struct stat` that Foundation reports as file attributes. */
+export function parseStat(bytes: Uint8Array): Required<FileStat> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const milliseconds = (offset: number) =>
+    view.getInt32(offset, true) * MILLISECONDS_PER_SECOND +
+    Math.floor(view.getUint32(offset + TIMESPEC_NANOSECONDS, true) / NANOSECONDS_PER_MILLISECOND);
+  return {
+    device: view.getInt32(Stat.Device, true),
+    inode: view.getBigUint64(Stat.Inode, true),
+    mode: view.getUint16(Stat.Mode, true),
+    links: view.getUint16(Stat.Links, true),
+    size: Number(view.getBigInt64(Stat.Size, true)),
+    modified: milliseconds(Stat.Modified),
+    created: milliseconds(Stat.Created),
+  };
+}
+export const STAT_BYTES = Stat.Bytes;

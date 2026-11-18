@@ -148,3 +148,22 @@ test("Apple static PCM uploads resolve to real buffer conversion and retain stan
   expect(x.call("_alGetError")).toBe(ALError.InvalidOperation);
   x.close();
 });
+test("the listener keeps gain, position and orientation and rejects bad values", () => {
+  const x = fixture();
+  const floats = (pointer: number, values: number[]) =>
+    values.forEach((value, index) => x.view.setFloat32(pointer + index * 4, value, true));
+  floats(600, [1, 2, 3]);
+  x.call("_alListenerfv", AL.Position, 600);
+  x.call("_alListenerf", AL.Gain, floatBits(0.25));
+  floats(700, [0, 0, 1, 0, 1, 0]);
+  x.call("_alListenerfv", AL.Orientation, 700);
+  x.call("_alGetListenerfv", AL.Orientation, 800);
+  x.call("_alGetListener3f", AL.Position, 900, 904, 908);
+  x.call("_alGetListenerf", AL.Gain, 912);
+  const read = (pointer: number) => x.view.getFloat32(pointer, true);
+  expect([800, 804, 808, 812, 816, 820].map(read)).toEqual([0, 0, 1, 0, 1, 0]);
+  expect([900, 904, 908, 912].map(read)).toEqual([1, 2, 3, 0.25]);
+  expect(x.call("_alGetError")).toBe(0);
+  x.call("_alListenerf", AL.Gain, floatBits(-1));
+  expect(x.call("_alGetError")).toBe(ALError.InvalidValue);
+});

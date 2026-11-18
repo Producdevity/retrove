@@ -1,5 +1,6 @@
 import type { PCM } from "./pcm";
 import type { Vector3 } from "./constants";
+import type { ListenerState } from "./listener";
 const Z_AXIS = 2;
 export interface VoiceProperties {
   readonly gain: number;
@@ -28,10 +29,35 @@ export interface AudioOutput {
     properties: VoiceProperties,
     loop?: boolean,
   ): Voice;
+  listener?(state: ListenerState): void;
 }
 export class WebAudioOutput implements AudioOutput {
   private readonly buffers = new WeakMap<PCM, AudioBuffer>();
+  private master: GainNode | undefined;
   constructor(private readonly context: BaseAudioContext) {}
+  /** All voices pass through one gain node carrying the listener's AL_GAIN. */
+  private get destination(): GainNode {
+    if (!this.master) {
+      this.master = this.context.createGain();
+      this.master.connect(this.context.destination);
+    }
+    return this.master;
+  }
+  listener(state: ListenerState): void {
+    this.destination.gain.value = state.gain;
+    const listener = this.context.listener,
+      [x, y, z] = state.position,
+      [ax, ay, az, ux, uy, uz] = state.orientation;
+    listener.positionX.value = x;
+    listener.positionY.value = y;
+    listener.positionZ.value = z;
+    listener.forwardX.value = ax;
+    listener.forwardY.value = ay;
+    listener.forwardZ.value = az;
+    listener.upX.value = ux;
+    listener.upY.value = uy;
+    listener.upZ.value = uz;
+  }
   get time(): number {
     return this.context.currentTime;
   }
@@ -77,7 +103,7 @@ export class WebAudioOutput implements AudioOutput {
       node.connect(panner);
       panner.connect(gain);
     } else node.connect(gain);
-    gain.connect(this.context.destination);
+    gain.connect(this.destination);
     let stopped = false;
     const disconnect = (): void => {
       node.onended = null;

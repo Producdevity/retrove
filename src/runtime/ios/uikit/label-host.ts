@@ -42,6 +42,23 @@ function installProperties(host: UIKitHost, labels: Labels): void {
       labels.changed(self);
     });
   }
+  host.method(UIKitClass.Label, false, "setShadowOffset:", (self, args) => {
+    labels.get(self).shadowOffset = [
+      floatFromBits(args(Argument.First)),
+      floatFromBits(args(Argument.Second)),
+    ];
+    labels.changed(self);
+  });
+  host.structure(
+    UIKitClass.Label,
+    false,
+    "shadowOffset",
+    structureMethod((self, _args, destination) => {
+      const [width, height] = labels.get(self).shadowOffset;
+      host.write(destination, floatBits(width));
+      host.write(destination + WORD_BYTES, floatBits(height));
+    }),
+  );
   host.method(UIKitClass.Label, false, "lineBreakMode", (self) => labels.get(self).mode);
   host.method(UIKitClass.Label, false, "setLineBreakMode:", (self, args) => {
     labels.get(self).mode = lineBreak(args(Argument.First));

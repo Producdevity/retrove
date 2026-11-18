@@ -2,6 +2,7 @@ import { AL, ALError, OpenALError } from "./constants";
 import { bufferImports } from "./buffers";
 import { deviceImports } from "./devices";
 import { sourceImports } from "./sources";
+import { listenerImports } from "./listener";
 import { OpenALRuntime, type ALFunction, type OpenALHost } from "./runtime";
 export function openAL(host: OpenALHost) {
   const runtime = new OpenALRuntime(host);
@@ -16,7 +17,11 @@ export function openAL(host: OpenALHost) {
         return 0;
       }
     };
-  for (const [name, fn] of Object.entries({ ...bufferImports(runtime), ...sourceImports(runtime) }))
+  for (const [name, fn] of Object.entries({
+    ...bufferImports(runtime),
+    ...sourceImports(runtime),
+    ...listenerImports(runtime),
+  }))
     funcs[name] = runtime.bind(fn);
   funcs._alGetError = () => {
     const context = runtime.contexts.get(runtime.current),

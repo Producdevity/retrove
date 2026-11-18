@@ -82,3 +82,25 @@ test("corrupt keychain storage fails explicitly and is never silently cleared", 
   await expect(x.store.query(query)).rejects.toMatchObject({ status: SecurityStatus.Decode });
   expect(x.write).not.toHaveBeenCalled();
 });
+test("internet passwords are keyed by server, domain and port, with numeric attributes", async () => {
+  const x = fixture();
+  const login = {
+    [Key.Class]: SecurityValue.InternetPassword,
+    [Key.Server]: "api.openfeint.com",
+    [Key.SecurityDomain]: "openfeint.com",
+    [Key.AuthenticationType]: SecurityValue.AuthenticationDefault,
+    [Key.Account]: "Gyrotate.oauth_token_access",
+    [Key.Port]: 443,
+  };
+  await x.store.add({ ...login, [Key.Data]: Uint8Array.of(9) });
+  await expect(x.store.add({ ...login, [Key.Data]: Uint8Array.of(8) })).rejects.toMatchObject({
+    status: SecurityStatus.Duplicate,
+  });
+  await x.store.add({ ...login, [Key.Port]: 80 });
+  expect(await x.reopen().query({ ...login, [Key.Port]: 443 })).toEqual([
+    { ...login, [Key.Data]: Uint8Array.of(9) },
+  ]);
+  await expect(x.store.add({ ...login, [Key.Port]: "443" })).rejects.toMatchObject({
+    status: SecurityStatus.Decode,
+  });
+});

@@ -1,3 +1,4 @@
+import { defaultListener } from "./listener";
 import { ALC, ALCError, MAX_SOURCES } from "./constants";
 import type { ALFunction, OpenALRuntime } from "./runtime";
 import { WORD_BYTES } from "../../ios/abi/scalars";
@@ -32,7 +33,13 @@ export function deviceImports(runtime: OpenALRuntime): Record<string, ALFunction
         return 0;
       }
       const pointer = runtime.opaque();
-      runtime.contexts.set(pointer, { device, sources: new Map(), suspended: false, error: 0 });
+      runtime.contexts.set(pointer, {
+        device,
+        sources: new Map(),
+        suspended: false,
+        error: 0,
+        listener: defaultListener(),
+      });
       return pointer;
     },
     _alcDestroyContext: (args) => runtime.destroyContext(args(0)),

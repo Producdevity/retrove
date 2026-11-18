@@ -1,6 +1,14 @@
 import { isRecord } from "../../../domain/validation";
-import { AttributeKeys, SecurityKey, SecurityStatus, SecurityValue } from "./constants";
-export type KeychainValue = string | Uint8Array;
+import {
+  AttributeKeys,
+  BinaryKeys,
+  NumericKeys,
+  PasswordClasses,
+  PrimaryKeys,
+  SecurityKey,
+  SecurityStatus,
+} from "./constants";
+export type KeychainValue = string | number | Uint8Array;
 export type KeychainAttributes = Readonly<Record<string, KeychainValue>>;
 interface KeychainStorage {
   read(): Promise<unknown>;
@@ -17,36 +25,38 @@ function attributes(value: unknown): KeychainAttributes {
   if (!isRecord(value)) throw new KeychainError(SecurityStatus.Decode);
   const result: Record<string, KeychainValue> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (!AttributeKeys.has(key) || (typeof item !== "string" && !(item instanceof Uint8Array)))
+    if (!AttributeKeys.has(key)) throw new KeychainError(SecurityStatus.Decode);
+    if (BinaryKeys.has(key) ? !(item instanceof Uint8Array) : typeof item !== attributeType(key))
       throw new KeychainError(SecurityStatus.Decode);
-    if (
-      key === SecurityKey.Data || key === SecurityKey.Generic
-        ? !(item instanceof Uint8Array)
-        : typeof item !== "string"
-    )
+    if (typeof item === "number") {
+      if (!Number.isInteger(item)) throw new KeychainError(SecurityStatus.Decode);
+      result[key] = item;
+      continue;
+    }
+    if (typeof item !== "string" && !(item instanceof Uint8Array))
       throw new KeychainError(SecurityStatus.Decode);
     if (item.length > MAX_ITEM_BYTES) throw new KeychainError(SecurityStatus.Parameter);
     result[key] = item;
   }
-  if (result[SecurityKey.Class] !== SecurityValue.GenericPassword)
+  const itemClass = result[SecurityKey.Class];
+  if (typeof itemClass !== "string" || !PasswordClasses.has(itemClass))
     throw new KeychainError(SecurityStatus.Unimplemented);
   return result;
 }
+function attributeType(key: string): "number" | "string" {
+  return NumericKeys.has(key) ? "number" : "string";
+}
 function same(left: KeychainValue | undefined, right: KeychainValue): boolean {
-  if (typeof left === "string" || typeof right === "string") return left === right;
-  return (
-    left !== undefined &&
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
+  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array)) return left === right;
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 function matches(item: KeychainAttributes, query: KeychainAttributes): boolean {
   return Object.entries(query).every(([key, value]) => same(item[key], value));
 }
 function duplicate(left: KeychainAttributes, right: KeychainAttributes): boolean {
-  return [SecurityKey.Class, SecurityKey.Account, SecurityKey.Service, SecurityKey.Group].every(
-    (key) => (left[key] ?? "") === (right[key] ?? ""),
-  );
+  const itemClass = left[SecurityKey.Class];
+  const keys = typeof itemClass === "string" ? PrimaryKeys[itemClass] : undefined;
+  return (keys ?? []).every((key) => (left[key] ?? "") === (right[key] ?? ""));
 }
 export class Keychain {
   private pending: Promise<void> = Promise.resolve();

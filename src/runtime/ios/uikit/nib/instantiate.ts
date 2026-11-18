@@ -5,7 +5,10 @@ import { keyedNib, NibKey } from "./keyed-archive";
 import type { NibHost } from "./host";
 const PROXY_CLASS = "UIProxyObject";
 const OUTLET_CLASS = "UIRuntimeOutletConnection";
+/** A target-action connection from a control to its target, for UIEventMask events. */
+const EVENT_CLASS = "UIRuntimeEventConnection";
 const MAIN_NIB_KEY = "NSMainNibFile";
+const EVENT_KEY = "RetroveNibEventConnection";
 const BINARY_PLIST = new TextEncoder().encode("bplist00");
 function binaryPlist(bytes: Uint8Array): boolean {
   return BINARY_PLIST.every((byte, index) => bytes[index] === byte);
@@ -16,11 +19,13 @@ export class NibLoader {
   private readonly roots = new Set<number>();
   constructor(private readonly host: NibHost) {
     host.hostClass(PROXY_CLASS, "NSObject");
-    host.hostClass(OUTLET_CLASS, "NSObject");
-    host.method(OUTLET_CLASS, false, "dealloc", (self) => {
-      this.connections.delete(self);
-      host.destroy(self);
-    });
+    for (const name of [OUTLET_CLASS, EVENT_CLASS]) {
+      host.hostClass(name, "NSObject");
+      host.method(name, false, "dealloc", (self) => {
+        this.connections.delete(self);
+        host.destroy(self);
+      });
+    }
   }
   async initialize(
     self: number,
@@ -38,8 +43,8 @@ export class NibLoader {
       this.host.destroy(self);
       return identifier === "IBFilesOwner" && owner ? this.host.retain(owner) : 0;
     }
-    if (name === OUTLET_CLASS) {
-      this.connections.set(self, fields);
+    if (name === OUTLET_CLASS || name === EVENT_CLASS) {
+      this.connections.set(self, name === EVENT_CLASS ? { ...fields, [EVENT_KEY]: true } : fields);
       return self;
     }
     return undefined;
@@ -50,7 +55,14 @@ export class NibLoader {
     const source = await graph.decode(fields.UISource),
       destination = await graph.decode(fields.UIDestination);
     const key = this.host.text(await graph.decode(fields.UILabel));
-    if (source) await this.host.setOutlet(source, key, destination);
+    if (!source) return;
+    if (!fields[EVENT_KEY]) return this.host.setOutlet(source, key, destination);
+    const mask = fields.UIEventMask;
+    await this.host.send(source, "addTarget:action:forControlEvents:", [
+      destination,
+      this.host.selector(key),
+      typeof mask === "number" ? mask : 0,
+    ]);
   }
   async load(bytes: Uint8Array, owner: number): Promise<number> {
     const archive = this.host.openArchive(

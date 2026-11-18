@@ -2,6 +2,7 @@ import {installLayerColors} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {installLayerProperties} from "../src/runtime/ios/uikit/layer-properties.ts";
 import {installAnimationGroups} from "../src/runtime/ios/uikit/animation/groups.ts";
 import {installBasicAnimations} from "../src/runtime/ios/uikit/animation/basic.ts";
+import {installTransitions} from "../src/runtime/ios/uikit/animation/transitions.ts";
 import {installTransactions} from "../src/runtime/ios/uikit/animation/transactions.ts";
 import {drawScrollIndicators} from "../src/runtime/ios/uikit/scroll/indicators.ts";
 import {installScrollViews} from "../src/runtime/ios/uikit/scroll/bindings.ts";
@@ -28,6 +29,7 @@ import {installSegmentedControls} from '../src/runtime/ios/uikit/segmented-contr
 import {installSwitches} from '../src/runtime/ios/uikit/switch.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
 import {installToolbars} from '../src/runtime/ios/uikit/toolbar/bindings.ts';
+import {installNavigation} from '../src/runtime/ios/uikit/navigation/controller.ts';
 import {installTables} from '../src/runtime/ios/uikit/table/bindings.ts';
 import {installIndexPaths} from '../src/runtime/ios/foundation/index-paths.ts';
 import {phoneScreen} from '../src/runtime/ios/uikit/screen.ts';
@@ -80,7 +82,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   };
   let textViews,pickerViews,pageControls,segmentedControls,switches,toolbars,scrollers,tables,uiColors;
   const clip=self=>viewClip({view:data,convert:convertPoint},self,window);
-  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,movieVideo,uiColor:p=>uiColors?.rgba(p),uiPattern:p=>uiColors?.patterns.get(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||segmentedControls?.has(p)||switches?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:textViews?.has(p)?textViews.draw(p,ctx):scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):segmentedControls?.has(p)?segmentedControls.draw(p,ctx):switches?.has(p)?switches.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
+  const imageViews=uiImages({hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,text,write,ipa,readFile,mediaHost,data,setFrame,bits,float,lookup,read,send,getCoreGraphics,diagnostic,convertPoint,displayPoint,displayBounds,clip,movieVideo,uiColor:p=>uiColors?.rgba(p),uiPattern:p=>uiColors?.patterns.get(p),glLayer:p=>!!lookup(read(p),'setDrawableProperties:'),elements:p=>items(p),hasHostDrawing:p=>tables?.has(p)||textViews?.has(p)||pickerViews?.has(p)||pageControls?.has(p)||segmentedControls?.has(p)||switches?.has(p)||toolbars?.has(p)||scrollers?.views.states.has(p),drawHost:(p,ctx)=>tables?.has(p)&&(tables.draw(p,ctx),!scrollers?.views.states.has(p))?undefined:textViews?.has(p)?textViews.draw(p,ctx):scrollers?.views.states.has(p)?drawScrollIndicators(scrollers.views,p,ctx):pickerViews?.has(p)?pickerViews.draw(p,ctx):pageControls?.has(p)?pageControls.draw(p,ctx):segmentedControls?.has(p)?segmentedControls.draw(p,ctx):switches?.has(p)?switches.draw(p,ctx):toolbars?.has(p)?toolbars.draw(p,ctx):textViews?.draw(p,ctx)});
   function detach(self) {
     const v = data(self);
     if (v.parent) { const next = data(v.parent).children,index=next.indexOf(self);if(index>=0)next.splice(index,1); }
@@ -122,6 +124,9 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const controls=installControls(controlHost);installButtons({...controlHost,adjustImage:(pointer,brightness,opacity)=>{data(pointer).imageAdjustment={brightness,opacity};},imageSize:imageViews.size,labelSize:textViews.size},controls);
   toolbars=installToolbars({...controlHost,elements:p=>items(p),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
+  installNavigation({...controlHost,selector,elements:p=>items(p),bars:toolbars,keyWindow:()=>window,
+    array:values=>autorelease(collection('NSArray',values)),
+    deallocController:self=>lookup(names.get('UIViewController'),'dealloc')(self)});
   pageControls=installPageControls({...controlHost,touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
   installActivityIndicators(uiHost);
   segmentedControls=installSegmentedControls({...controlHost,elements:p=>items(p),isString:p=>!!lookup(read(p),'UTF8String'),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
@@ -139,6 +144,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   const layerGeometry=self=>data(data(self).backingView||self);
   installLayerProperties({...uiHost,geometry:layerGeometry,changed:(self,opacity)=>{layerGeometry(self)[opacity?"opacityAnimation":"layoutAnimation"]=transactions.context();},pixels:p=>getCoreGraphics?.()?.pixels(p),retainImage:p=>getCoreGraphics().retain(p),releaseImage:async p=>{await getCoreGraphics().release(p);}});
   const basicAnimations=installBasicAnimations({...uiHost,responds:(p,name)=>!!p&&!!lookup(read(p),name),layer:layerGeometry,now:()=>performance.now()});
+  installTransitions(uiHost);
   installLayerColors({...uiHost,rgba:p=>getCoreGraphics?.()?.colors.rgba(p),retainColor:p=>getCoreGraphics().retain(p),releaseColor:async p=>{await getCoreGraphics().release(p);}});
   installLayerFactory({...uiHost,view:layerGeometry,setFrame:(self,rect)=>{setFrame(data(self).backingView||self,rect);layerGeometry(self).layoutAnimation=transactions.context();return self;}});
   installLayerTree({...uiHost,children:p=>data(p).children,parent:p=>data(p).parent,attach,detach,array:values=>autorelease(collection('NSArray',values))});
@@ -254,7 +260,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
     if(view)data(view).controller=self;
     if(old){data(old).controller=0;await releaseFromHost(old);}
   });
-  const controllerNibs=installControllerNibs({method,text,string,retain,release:releaseFromHost,load:(name,owner,bundle)=>loadNib(name,owner,bundle)});
+  const controllerNibs=installControllerNibs({method,text,string,retain,send,release:releaseFromHost,load:(name,owner,bundle)=>loadNib(name,owner,bundle)});
   method('UIViewController',false,'loadView',async self=>{if(!await controllerNibs.load(self))await send(self,'setView:',[autorelease(setFrame(alloc(names.get('UIView')),bounds()))]);});
   method('UIViewController',false,'viewDidLoad',()=>{});
   method('UIViewController',false,'dealloc',async self=>{const view=controllerViews.get(self);controllerViews.delete(self);if(view){data(view).controller=0;await releaseFromHost(view);}await controllerNibs.dispose(self);return deallocObject(self);});

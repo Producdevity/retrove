@@ -107,8 +107,14 @@ class UIKitColors {
 }
 export function installColors(host: ColorHost) {
   const colors = new UIKitColors(host);
+  // UIKit returns one shared instance per named color, and games keep them without retaining.
+  const named = new Map<string, number>();
   for (const [name, channels] of Object.entries(PALETTE))
-    host.method(COLOR_CLASS, true, name, () => colors.create(channels));
+    host.method(COLOR_CLASS, true, name, () => {
+      let color = named.get(name);
+      if (color === undefined) named.set(name, (color = host.retain(colors.create(channels))));
+      return color;
+    });
   const rgba = (args: (index: number) => number): RGBA => [
     floatFromBits(args(Component.Red)),
     floatFromBits(args(Component.Green)),

@@ -3,11 +3,16 @@ import {colorImports} from "../src/runtime/graphics/core-graphics/colors/binding
 import {colorSpaceImports} from "../src/runtime/graphics/core-graphics/color-space.ts";
 import {pathImports} from "../src/runtime/graphics/core-graphics/path-imports.ts";
 import {drawingStateImports} from "../src/runtime/graphics/core-graphics/drawing-state.ts";
-import {contextDrawingImports} from "../src/runtime/graphics/core-graphics/context-drawing.ts";
+import {contextDrawingImports,componentColor} from "../src/runtime/graphics/core-graphics/context-drawing.ts";
+import {cgPathImports} from "../src/runtime/graphics/core-graphics/paths.ts";
+import {gradientImports} from "../src/runtime/graphics/core-graphics/gradients.ts";
+import {contextEffectImports} from "../src/runtime/graphics/core-graphics/context-effects.ts";
+import {textImports} from "../src/runtime/graphics/core-graphics/text.ts";
+import {readString,write32} from "../src/runtime/memory/guest-memory.ts";
 import {bitmapImports,bitmapImageMetadata} from "../src/runtime/graphics/core-graphics/bitmap-imports.ts";
 import {imageMetadataImports,rgbaImageMetadata,ImageComponents} from "../src/runtime/graphics/core-graphics/image-metadata.ts";
 // Quartz objects live independently of Objective-C objects and retain their backing storage.
-export function coreGraphics(cpu, heap, objc) {
+export function coreGraphics(cpu, heap, objc, {readFile = async () => undefined} = {}) {
   const objects = new Map(), stacks = new Map(), scratch = new DataView(new ArrayBuffer(4));
   const thread = () => objc.currentThreadId?.() ?? 0;
   const number = word => { scratch.setUint32(0, word, true); return scratch.getFloat32(0, true); };
@@ -17,18 +22,24 @@ export function coreGraphics(cpu, heap, objc) {
     if (p) objects.set(p, { kind, refs: 1, ...fields });
     return p;
   }
+  // Paths and gradients keep their own handle tables; set up below once their modules exist.
+  const tables = [];
+  const table = p => tables.find(t => t.has(p));
   function retain(p) {
     if(colors.has(p))return colors.retain(p);
+    if(table(p))return table(p).retain(p);
     const object = objects.get(p);
     if (object) object.refs++;
     return object ? p : 0;
   }
   async function release(p) {
     if(colors.has(p))return colors.release(p);
+    if(table(p))return table(p).release(p);
     const object = objects.get(p);
     if (!object || --object.refs) return;
     objects.delete(p);
     heap.free(p);
+    if (object.kind === 'context') text.forget(p);
     if (object.kind === 'context' && object.bitmap) {object.bitmap.close();await release(object.bitmap.space);}
     if (object.kind === 'provider') await objc.releaseObject(object.data);
     if (object.kind === 'image') {
@@ -159,7 +170,29 @@ export function coreGraphics(cpu, heap, objc) {
     } finally {c.restore();}
   }
   const colors=new Colors({allocate:n=>heap.zero(n),free:p=>heap.free(p),read:(p,n)=>cpu.read(p,n),write:(p,b)=>cpu.write(p,b),spaceComponents:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined,createSpace:components=>create('space',{components}),retainSpace:retain,releaseSpace:release});
+  const floats=(p,n)=>{const v=new DataView(cpu.read(p,n*4).slice().buffer);return Array.from({length:n},(_,i)=>v.getFloat32(i*4,true));};
+  const spaceComponents=p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined;
+  const memory={allocate:n=>heap.zero(n),free:p=>heap.free(p)};
+  const contextBounds=(p,x,y,w,h)=>{const object=objects.get(p);if(object?.kind==='context')addBounds(object,deviceBounds(object.canvas,x,y,w,h));};
+  const setAntialias=(p,enabled)=>{const o=objects.get(p);if(o?.kind==='context'){o.antialias=enabled;o.canvas.imageSmoothingEnabled=enabled;}};
+  const cgPaths=cgPathImports({...memory,floats,context,bounds:contextBounds});
+  const paint=(p,draw)=>{
+    const o=objects.get(p);if(o?.kind!=='context')return false;
+    o.bitmap?.refresh();try{draw(o.canvas);}finally{o.bitmap?.commit();}
+    return true;
+  };
+  const gradients=gradientImports({...memory,floats,spaceComponents,paint});
+  const text=textImports({...memory,paint,readFile,readBytes:(p,n)=>cpu.read(p,n),cString:p=>readString(cpu,p),
+    writeWord:(p,v)=>write32(cpu,p,v),
+    providerBytes:p=>{const provider=objects.get(p);if(provider?.kind!=='provider')return undefined;
+      return cpu.read(objc.funcs._CFDataGetBytePtr(()=>provider.data),objc.funcs._CFDataGetLength(()=>provider.data)).slice();},
+    loadFont:async(family,bytes)=>{const face=new FontFace(family,bytes);await face.load();(globalThis.document?.fonts??globalThis.fonts)?.add(face);}});
+  tables.push(cgPaths.paths,gradients.gradients,...text.tables);
   const funcs = {
+    ...cgPaths.imports,
+    ...text.imports,
+    ...gradients.imports,
+    ...contextEffectImports({context,setAntialias,color:p=>{const value=colors.rgba(p);return value?componentColor(value):undefined;}}),
     ...colorImports({colors,text:p=>objc.stringText(p)}),
     ...drawingStateImports({context,rgba:p=>colors.rgba(p)}),
     ...colorSpaceImports({components:p=>objects.get(p)?.kind==='space'?objects.get(p).components:undefined}),
@@ -213,9 +246,7 @@ export function coreGraphics(cpu, heap, objc) {
       if(o?.saves){o.canvas.restore();o.saves--;}
     },
     _CGContextScaleCTM: a => context(a(0))?.scale(...numbers(a,1,2)),
-    _CGContextSetAllowsAntialiasing: a => {
-      const o=objects.get(a(0));if(o?.kind==='context'){o.antialias=!!a(1);o.canvas.imageSmoothingEnabled=o.antialias;}
-    },
+    _CGContextSetAllowsAntialiasing: a => setAntialias(a(0),!!a(1)),
     _CGContextMoveToPoint: a => {
       const o=objects.get(a(0));if(o?.kind!=='context')return;
       const [x,y]=numbers(a,1,2);o.canvas.moveTo(x,y);addBounds(o,deviceBounds(o.canvas,x,y,0,0));
@@ -250,5 +281,5 @@ export function coreGraphics(cpu, heap, objc) {
       c.beginPath();o.bounds=null;o.bitmap?.commit();
     },
   };
-  return { funcs, data:new Map(), colors, owns:p=>colors.has(p)||objects.has(p), retainCount:p=>colors.get(p)?.refs??objects.get(p)?.refs, equal:(a,b)=>colors.has(a)||colors.has(b)?colors.equal(a,b):objects.has(a)||objects.has(b)?a===b:undefined, hash:p=>colors.has(p)?colors.hash(p):objects.has(p)?p:undefined, createImage, pixels, retain, release, setColor, withContext, drawCurrent, currentCanvas:()=>context(current()) };
+  return { funcs, data:new Map(), colors, owns:p=>colors.has(p)||objects.has(p)||!!table(p), retainCount:p=>colors.get(p)?.refs??table(p)?.refs(p)??objects.get(p)?.refs, equal:(a,b)=>colors.has(a)||colors.has(b)?colors.equal(a,b):objects.has(a)||objects.has(b)||table(a)||table(b)?a===b:undefined, hash:p=>colors.has(p)?colors.hash(p):objects.has(p)||table(p)?p:undefined, createImage, pixels, retain, release, setColor, withContext, drawCurrent, currentCanvas:()=>context(current()) };
 }

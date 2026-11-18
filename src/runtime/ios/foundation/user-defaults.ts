@@ -1,21 +1,18 @@
 import { floatBits, floatFromBits, WORD_BYTES } from "../abi/scalars";
 import { Argument, type FoundationHost } from "../objc/host";
+import {
+  restoredPreference,
+  storedPreference,
+  type PreferenceDictionary,
+  type PreferenceValue,
+} from "./preference-codec";
 
 const DEFAULTS_CLASS = "NSUserDefaults";
 const GLOBAL_DOMAIN = "NSGlobalDomain";
 const DOUBLE_BYTES = Float64Array.BYTES_PER_ELEMENT;
-type PreferenceValue =
-  | string
-  | number
-  | boolean
-  | readonly PreferenceValue[]
-  | PreferenceDictionary;
-interface PreferenceDictionary {
-  readonly [key: string]: PreferenceValue;
-}
 interface DefaultsStorage {
   read(): unknown;
-  write(values: PreferenceDictionary): boolean;
+  write(values: unknown): boolean;
 }
 interface DefaultsHost extends Pick<FoundationHost, "hostClass" | "method" | "text" | "string"> {
   readonly identifier: string;
@@ -23,11 +20,16 @@ interface DefaultsHost extends Pick<FoundationHost, "hostClass" | "method" | "te
   readonly storage: DefaultsStorage;
   singleton(name: string): () => number;
   property(value: unknown): number;
-  unbox(pointer: number): unknown;
+  /** The guest property list as JS values, with NSData as bytes and NSDate as Date. */
+  plist(pointer: number): unknown;
+  className(pointer: number): string;
+  warn(message: string, details: Record<string, unknown>): void;
 }
 function preference(value: unknown): PreferenceValue {
   if (typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value instanceof Uint8Array) return value.slice();
+  if (value instanceof Date && Number.isFinite(value.getTime())) return new Date(value);
   if (Array.isArray(value)) {
     const items: readonly unknown[] = value;
     return items.map(preference);
@@ -46,7 +48,7 @@ export class UserDefaults {
   constructor(saved: unknown = {}, globals: unknown = {}) {
     this.#global = dictionary(globals);
     try {
-      for (const [key, value] of Object.entries(dictionary(saved)))
+      for (const [key, value] of Object.entries(dictionary(restoredPreference(saved))))
         this.#application.set(key, value);
     } catch {
       this.#application.clear();
@@ -70,6 +72,10 @@ export class UserDefaults {
   persistent(): PreferenceDictionary {
     return Object.fromEntries(this.#application);
   }
+  /** The persistent domain as JSON-safe values for storage. */
+  stored(): unknown {
+    return storedPreference(this.persistent());
+  }
   global(): PreferenceDictionary {
     return this.#global;
   }
@@ -82,14 +88,14 @@ export function installUserDefaults(host: DefaultsHost): void {
   const defaults = new UserDefaults(host.storage.read(), host.globals);
   const bits = new DataView(new ArrayBuffer(DOUBLE_BYTES));
   const value = (key: number) => defaults.get(host.text(key));
-  const sync = () => Number(host.storage.write(defaults.persistent()));
+  const sync = () => Number(host.storage.write(defaults.stored()));
   const set = (key: number, item: unknown) => {
     defaults.set(host.text(key), item);
     sync();
   };
   host.method(DEFAULTS_CLASS, true, "standardUserDefaults", host.singleton(DEFAULTS_CLASS));
   host.method(DEFAULTS_CLASS, false, "registerDefaults:", (_, args) =>
-    defaults.register(host.unbox(args(Argument.First))),
+    defaults.register(host.plist(args(Argument.First))),
   );
   host.method(DEFAULTS_CLASS, false, "objectForKey:", (_, args) =>
     host.property(value(args(Argument.First))),
@@ -126,9 +132,7 @@ export function installUserDefaults(host: DefaultsHost): void {
   host.method(DEFAULTS_CLASS, false, "setFloat:forKey:", (_, args) =>
     set(args(Argument.Second), floatFromBits(args(Argument.First))),
   );
-  host.method(DEFAULTS_CLASS, false, "setObject:forKey:", (_, args) =>
-    set(args(Argument.Second), host.unbox(args(Argument.First))),
-  );
+  installObjectSetter(host, set);
   host.method(DEFAULTS_CLASS, false, "setDouble:forKey:", (_, args) => {
     bits.setUint32(0, args(Argument.First), true);
     bits.setUint32(WORD_BYTES, args(Argument.Second), true);
@@ -151,6 +155,21 @@ export function installUserDefaults(host: DefaultsHost): void {
   host.method(DEFAULTS_CLASS, false, "synchronize", sync);
 }
 
+function installObjectSetter(host: DefaultsHost, set: (key: number, item: unknown) => void) {
+  host.method(DEFAULTS_CLASS, false, "setObject:forKey:", (_, args) => {
+    const object = args(Argument.First);
+    try {
+      set(args(Argument.Second), host.plist(object));
+    } catch {
+      // iOS 4-6 log and skip non-property-list values instead of raising.
+      host.warn("Attempt to insert non-property value", {
+        key: host.text(args(Argument.Second)),
+        class: host.className(object),
+      });
+    }
+  });
+}
+
 function installCollectionDefaults(
   host: DefaultsHost,
   value: (key: number) => PreferenceValue | undefined,
@@ -160,8 +179,12 @@ function installCollectionDefaults(
     [
       "dictionaryForKey:",
       (item: PreferenceValue | undefined) =>
-        typeof item === "object" && item !== null && !Array.isArray(item),
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        !(item instanceof Uint8Array) &&
+        !(item instanceof Date),
     ],
+    ["dataForKey:", (item: PreferenceValue | undefined) => item instanceof Uint8Array],
     [
       "stringArrayForKey:",
       (item: PreferenceValue | undefined) =>

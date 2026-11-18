@@ -4,6 +4,7 @@ import type { GuestArguments } from "../../ios/objc/host";
 import type { AudioOutput } from "./output";
 import type { PCM } from "./pcm";
 import type { Source } from "./source";
+import type { ListenerState } from "./listener";
 export type ALFunction = (args: GuestArguments) => number | void;
 export interface OpenALHost {
   read(pointer: number, length: number): Uint8Array;
@@ -26,6 +27,7 @@ export interface Context {
   readonly sources: Map<number, Source>;
   suspended: boolean;
   error: number;
+  readonly listener: ListenerState;
 }
 export const EMPTY_PCM: PCM = { channels: [], frames: 0, rate: 0, sampleBytes: 0, duration: 0 };
 export class OpenALRuntime {

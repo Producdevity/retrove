@@ -8,5 +8,7 @@ export interface NibHost extends FoundationHost {
   /** Parses a property list; older nibs are binary-plist keyed archives. */
   parse(bytes: Uint8Array): unknown;
   setOutlet(self: number, key: string, value: number): Promise<void>;
+  /** The registered selector for a method name. */
+  selector(name: string): number;
   readonly ipa: Pick<IpaArchive, "bundlePath" | "info" | "has" | "read">;
 }

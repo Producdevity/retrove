@@ -16,6 +16,15 @@ export const SecurityKey = {
   Label: "labl",
   Description: "desc",
   Comment: "icmt",
+  Server: "srvr",
+  SecurityDomain: "sdmn",
+  Protocol: "ptcl",
+  AuthenticationType: "atyp",
+  Port: "port",
+  Path: "path",
+  Type: "type",
+  Creator: "crtr",
+  Accessible: "pdmn",
   Data: "v_Data",
   ReturnData: "r_Data",
   ReturnAttributes: "r_Attributes",
@@ -23,6 +32,8 @@ export const SecurityKey = {
 } as const;
 export const SecurityValue = {
   GenericPassword: "genp",
+  InternetPassword: "inet",
+  AuthenticationDefault: "dflt",
   One: "m_LimitOne",
   All: "m_LimitAll",
 } as const;
@@ -43,7 +54,55 @@ export const SecuritySymbols = {
   _kSecMatchLimit: SecurityKey.MatchLimit,
   _kSecMatchLimitOne: SecurityValue.One,
   _kSecMatchLimitAll: SecurityValue.All,
+  _kSecClassInternetPassword: SecurityValue.InternetPassword,
+  _kSecAttrServer: SecurityKey.Server,
+  _kSecAttrSecurityDomain: SecurityKey.SecurityDomain,
+  _kSecAttrProtocol: SecurityKey.Protocol,
+  _kSecAttrAuthenticationType: SecurityKey.AuthenticationType,
+  _kSecAttrAuthenticationTypeDefault: SecurityValue.AuthenticationDefault,
+  _kSecAttrPort: SecurityKey.Port,
+  _kSecAttrPath: SecurityKey.Path,
+  _kSecAttrType: SecurityKey.Type,
+  _kSecAttrCreator: SecurityKey.Creator,
+  _kSecAttrAccessible: SecurityKey.Accessible,
+  _kSecAttrAccessibleWhenUnlocked: "ak",
+  _kSecAttrAccessibleAfterFirstUnlock: "ck",
+  _kSecAttrAccessibleAlways: "dk",
+  _kSecAttrAccessibleWhenUnlockedThisDeviceOnly: "aku",
+  _kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly: "cku",
+  _kSecAttrAccessibleAlwaysThisDeviceOnly: "dku",
 } as const;
+export const PasswordClasses = new Set<string>([
+  SecurityValue.GenericPassword,
+  SecurityValue.InternetPassword,
+]);
+/** Attributes whose values are NSData; Type, Creator and Port are NSNumber; the rest NSString. */
+export const BinaryKeys = new Set<string>([SecurityKey.Data, SecurityKey.Generic]);
+export const NumericKeys = new Set<string>([
+  SecurityKey.Type,
+  SecurityKey.Creator,
+  SecurityKey.Port,
+]);
+/** The attributes that identify an item; adding a second item with equal values is a duplicate. */
+export const PrimaryKeys: Readonly<Record<string, readonly string[]>> = {
+  [SecurityValue.GenericPassword]: [
+    SecurityKey.Class,
+    SecurityKey.Account,
+    SecurityKey.Service,
+    SecurityKey.Group,
+  ],
+  [SecurityValue.InternetPassword]: [
+    SecurityKey.Class,
+    SecurityKey.Account,
+    SecurityKey.SecurityDomain,
+    SecurityKey.Server,
+    SecurityKey.Protocol,
+    SecurityKey.AuthenticationType,
+    SecurityKey.Port,
+    SecurityKey.Path,
+    SecurityKey.Group,
+  ],
+};
 export const AttributeKeys = new Set<string>([
   SecurityKey.Class,
   SecurityKey.Account,
@@ -53,5 +112,14 @@ export const AttributeKeys = new Set<string>([
   SecurityKey.Label,
   SecurityKey.Description,
   SecurityKey.Comment,
+  SecurityKey.Server,
+  SecurityKey.SecurityDomain,
+  SecurityKey.Protocol,
+  SecurityKey.AuthenticationType,
+  SecurityKey.Port,
+  SecurityKey.Path,
+  SecurityKey.Type,
+  SecurityKey.Creator,
+  SecurityKey.Accessible,
   SecurityKey.Data,
 ]);

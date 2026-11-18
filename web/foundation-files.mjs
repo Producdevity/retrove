@@ -1,5 +1,7 @@
 import {installPropertyListSerialization} from "../src/runtime/ios/foundation/property-list-serialization.ts";
 import {installFileAttributes} from "../src/runtime/ios/foundation/file-attributes.ts";
+import {installFileAttributeReader} from "../src/runtime/ios/foundation/file-attribute-reader.ts";
+import {parseStat,STAT_BYTES} from "../src/runtime/ios/libc/file-metadata.ts";
 import {installErrors,ERROR_INSTANCE_BYTES,ErrorField} from "../src/runtime/ios/foundation/errors.ts";
 import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
 import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
@@ -34,6 +36,11 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
   }
   const makeError=(code,domain)=>{const value=alloc(names.get('NSError'));write(value+ErrorField.Code,code);const name=retain(string(domain));write(value+ErrorField.Domain,name);return autorelease(value);};
   installFileAttributes({method,text,write,entries,isKind,send,error:makeError,setMetadata:(path,update)=>sys.setMetadata(path,update)});
+  installFileAttributeReader({method,text,write,send,property,error:makeError,stat:async path=>{
+    const scratch=heap.zero(STAT_BYTES),pointer=heap.string(path);
+    try {return await invoke('_stat',pointer,scratch)===0?parseStat(cpu.read(scratch,STAT_BYTES)):read(invoke('___error'));}
+    finally {heap.free(pointer);heap.free(scratch);}
+  }});
   installUrlResources({hostClass,method,alloc,destroy,autorelease,retain,release,text,string,write,send,
     stat:async path=>await stat(utf8(path),0)?0:read(invoke('___error')),
     error:makeError});

@@ -99,12 +99,22 @@ export class LabelDrawing {
             ? "right"
             : "left";
       context.textBaseline = "middle";
-      context.fillStyle = this.color(
-        state.highlighted && state.highlightedColor ? state.highlightedColor : state.color,
-      );
       const top = y + (height - Math.min(height, lines.length * lineHeight)) / HALF;
-      lines.forEach((line, index) =>
-        context.fillText(line, x + offset, top + index * lineHeight + lineHeight / HALF),
+      const fill = (color: number, dx: number, dy: number) => {
+        context.fillStyle = this.color(color);
+        lines.forEach((line, index) =>
+          context.fillText(
+            line,
+            x + offset + dx,
+            top + index * lineHeight + lineHeight / HALF + dy,
+          ),
+        );
+      };
+      if (state.shadowColor) fill(state.shadowColor, ...state.shadowOffset);
+      fill(
+        state.highlighted && state.highlightedColor ? state.highlightedColor : state.color,
+        0,
+        0,
       );
     } finally {
       context.restore();

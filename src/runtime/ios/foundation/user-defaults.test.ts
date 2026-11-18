@@ -40,3 +40,15 @@ test("preference names do not resolve inherited properties", () => {
   expect(defaults.get("__proto__")).toBe("saved");
   expect(defaults.get("constructor")).toBeUndefined();
 });
+test("data and dates survive the JSON storage round trip", () => {
+  const defaults = new UserDefaults();
+  defaults.set("profile", {
+    avatar: new Uint8Array([0, 255, 7]),
+    seen: new Date(1_300_000_000_000),
+  });
+  const restored = new UserDefaults(JSON.parse(JSON.stringify(defaults.stored())));
+  expect(restored.get("profile")).toEqual({
+    avatar: new Uint8Array([0, 255, 7]),
+    seen: new Date(1_300_000_000_000),
+  });
+});
