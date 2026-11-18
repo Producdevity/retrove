@@ -1,5 +1,5 @@
 import {MovieLoading,MovieLoadState} from "../src/runtime/ios/media/movie-loading.ts";
-import {MoviePlayback,MovieNotification,MovieUserInfo} from '../src/runtime/ios/media/movie-playback.ts';
+import {MoviePlayback,MovieNotification,MovieUserInfo,MOVIE_OFFSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
 // MPMoviePlayerController delivers notifications from the guest main thread.
 const finished = MovieNotification.PlaybackFinished;
 const reasonKey = MovieUserInfo.FinishReason;
@@ -67,6 +67,8 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     for(const name of ['loadedmetadata','loadeddata','canplay','canplaythrough','playing'])video.addEventListener(name,()=>updateLoad());
     for(const name of ['waiting','stalled'])video.addEventListener(name,()=>updateLoad(true));
     video.addEventListener('ended', () => finish(0));
+    // A game that drops the player's view without stopping it must not keep asking for a tap.
+    video.addEventListener(MOVIE_OFFSCREEN_EVENT, () => { if (s.video === video) s.playback?.pause(); });
     video.addEventListener('error', () => {
       if (s.video !== video) return;
       diagnostic('warn', 'movie', 'Movie decode failed', {path, code: video.error?.code});

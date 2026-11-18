@@ -98,9 +98,9 @@ export class PlayerSession {
   async resumeMedia(): Promise<void> {
     await Promise.all([
       this.audioVisibility?.resume(this.controller.signal),
-      ...[...this.display.host.querySelectorAll("video")].map((video) =>
-        waitForPlayback(video.play(), this.controller.signal),
-      ),
+      ...[...this.display.host.querySelectorAll("video")]
+        .filter((video) => video.style.display !== "none")
+        .map((video) => waitForPlayback(video.play(), this.controller.signal)),
     ]);
   }
 }

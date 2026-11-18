@@ -1,4 +1,5 @@
 import {ImageViewAnimations} from "../src/runtime/ios/uikit/image/animation.ts";
+import {MOVIE_OFFSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
 import {drawLayerBackground,drawLayerBorder} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
@@ -246,7 +247,9 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     }
     if(w&&h)await visit(window,0,0,1);
     // A movie whose view left the window, or was hidden, must not stay on screen with its controls.
-    for(const video of mediaHost.querySelectorAll('video[data-placed]'))if(!placed.has(video))video.style.display='none';
+    for(const video of mediaHost.querySelectorAll('video[data-placed]'))if(!placed.has(video)&&video.style.display!=='none'){
+      video.style.display='none';video.dispatchEvent(new Event(MOVIE_OFFSCREEN_EVENT));
+    }
     const graphics=mediaHost.querySelector('canvas[data-graphics]');
     if(graphics)graphics.style.zIndex=glOrder?String(glOrder):'';
     for(const [view,node] of nodes)if(!shown.has(view)){node.remove();nodes.delete(view);}
