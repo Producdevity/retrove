@@ -1,6 +1,7 @@
 import type { FoundationHost } from "../../objc/host";
 import {
   MILLISECONDS_PER_SECOND,
+  abbreviatedZone,
   fixedZone,
   namedZone,
   offsetForZone,
@@ -33,6 +34,19 @@ export function installTimeZones(host: TimeZoneHost): {
   host.method(ZONE_CLASS, true, "timeZoneWithName:", (_self, args) => {
     const zone = args(0) ? namedZone(host.text(args(0))) : undefined;
     return zone ? create(zone) : 0;
+  });
+  host.method(ZONE_CLASS, true, "timeZoneWithAbbreviation:", (_self, args) => {
+    const zone = args(0) ? abbreviatedZone(host.text(args(0))) : undefined;
+    return zone ? create(zone) : 0;
+  });
+  host.method(ZONE_CLASS, false, "initWithName:", async (self, args) => {
+    const zone = args(0) ? namedZone(host.text(args(0))) : undefined;
+    if (zone) {
+      zones.set(self, zone);
+      return self;
+    }
+    await host.release(self);
+    return 0;
   });
   host.method(ZONE_CLASS, true, "timeZoneForSecondsFromGMT:", (_self, args) =>
     create(fixedZone(args(0) | 0)),

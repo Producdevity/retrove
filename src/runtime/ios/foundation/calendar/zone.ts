@@ -6,7 +6,34 @@ export interface TimeZone {
   name: string;
   offset?: number;
 }
-export function namedZone(name: string): TimeZone | undefined {
+/** Part of NSTimeZone's abbreviationDictionary; Foundation also resolves names through it. */
+const ABBREVIATIONS: Readonly<Record<string, string>> = {
+  GMT: "GMT",
+  UTC: "UTC",
+  PST: "America/Los_Angeles",
+  PDT: "America/Los_Angeles",
+  MST: "America/Denver",
+  MDT: "America/Denver",
+  CST: "America/Chicago",
+  CDT: "America/Chicago",
+  EST: "America/New_York",
+  EDT: "America/New_York",
+  AKST: "America/Juneau",
+  AKDT: "America/Juneau",
+  HST: "Pacific/Honolulu",
+  BST: "Europe/London",
+  WET: "Europe/Lisbon",
+  CET: "Europe/Paris",
+  CEST: "Europe/Paris",
+  EET: "Europe/Istanbul",
+  MSK: "Europe/Moscow",
+  IST: "Asia/Calcutta",
+  JST: "Asia/Tokyo",
+  KST: "Asia/Seoul",
+  HKT: "Asia/Hong_Kong",
+  SGT: "Asia/Singapore",
+};
+function ianaZone(name: string): TimeZone | undefined {
   try {
     const resolved = new Intl.DateTimeFormat("en-US", { timeZone: name }).resolvedOptions()
       .timeZone;
@@ -14,6 +41,14 @@ export function namedZone(name: string): TimeZone | undefined {
   } catch {
     return undefined;
   }
+}
+/** The zone for an abbreviation such as "PST", as +[NSTimeZone timeZoneWithAbbreviation:]. */
+export function abbreviatedZone(abbreviation: string): TimeZone | undefined {
+  const name = ABBREVIATIONS[abbreviation.toUpperCase()];
+  return name ? ianaZone(name) : undefined;
+}
+export function namedZone(name: string): TimeZone | undefined {
+  return ianaZone(name) ?? abbreviatedZone(name);
 }
 /** Foundation names a fixed-offset zone "GMT", "GMT+0530" or "GMT-0800". */
 export function fixedZone(seconds: number): TimeZone {

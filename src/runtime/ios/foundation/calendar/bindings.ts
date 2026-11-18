@@ -53,8 +53,9 @@ export function installCalendars(host: CalendarHost): void {
     return host.autorelease(pointer);
   });
   host.method(CALENDAR_CLASS, false, "calendarIdentifier", () => host.string(GREGORIAN_IDENTIFIER));
+  // A nil zone resets the calendar to the default time zone.
   host.method(CALENDAR_CLASS, false, "setTimeZone:", (self, args) => {
-    calendars.set(self, zones.get(args(0)));
+    calendars.set(self, args(0) ? zones.get(args(0)) : systemZone());
   });
   host.method(CALENDAR_CLASS, false, "timeZone", (self) => zones.create(calendar(self)));
   host.method(CALENDAR_CLASS, false, "components:fromDate:", (self, args) => {
