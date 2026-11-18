@@ -827,6 +827,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const exportedStrings = new Map();
   const directories = new Map([[5, 'Library'], [9, 'Documents'], [13, 'Library/Caches'], [14, 'Library/Application Support']]);
   const booleanConstants=new Map();
+  // UIBackgroundTaskInvalid is an exported integer; apps compare task identifiers against it.
+  const INTEGER_CONSTANTS=new Map([['_UIBackgroundTaskInvalid',0]]),integerConstants=new Map();
   let defaultAllocator;
   function resolveData(name) {
     if (cxx && name.startsWith('_OBJC_EHTYPE_$_')) {
@@ -835,6 +837,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     }
     if(name==='_kCFBooleanTrue'||name==='_kCFBooleanFalse'){if(!booleanConstants.has(name)){const slot=zero(4);write(slot,retain(foundationObjects.number(name==='_kCFBooleanTrue')));booleanConstants.set(name,slot);}return booleanConstants.get(name);}
     if(name.startsWith('_kCF')){const address=cf.resolveData(name);if(address!=null)return address;}
+    if(INTEGER_CONSTANTS.has(name)){if(!integerConstants.has(name)){const slot=zero(4);write(slot,INTEGER_CONSTANTS.get(name));integerConstants.set(name,slot);}return integerConstants.get(name);}
     {const address=network.data(name);if(address!==undefined)return address;}
     if(blockClasses.has(name))return blockClasses.get(name);
     if(cg.constants.has(name))return cg.constants.get(name);

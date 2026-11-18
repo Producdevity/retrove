@@ -1,5 +1,12 @@
 import type { FoundationHost } from "../../objc/host";
-import { MILLISECONDS_PER_SECOND, namedZone, offsetForZone, systemZone } from "./zone";
+import {
+  MILLISECONDS_PER_SECOND,
+  fixedZone,
+  namedZone,
+  offsetForZone,
+  systemZone,
+  zoneAbbreviation,
+} from "./zone";
 import type { TimeZone } from "./zone";
 const ZONE_CLASS = "NSTimeZone";
 export interface TimeZoneHost extends FoundationHost {
@@ -27,7 +34,18 @@ export function installTimeZones(host: TimeZoneHost): {
     const zone = args(0) ? namedZone(host.text(args(0))) : undefined;
     return zone ? create(zone) : 0;
   });
+  host.method(ZONE_CLASS, true, "timeZoneForSecondsFromGMT:", (_self, args) =>
+    create(fixedZone(args(0) | 0)),
+  );
   host.method(ZONE_CLASS, false, "name", (self) => host.string(get(self).name));
+  host.method(ZONE_CLASS, false, "abbreviation", (self) => {
+    const zone = get(self);
+    return host.string(
+      zone.offset === undefined
+        ? zoneAbbreviation(zone, Date.now() / MILLISECONDS_PER_SECOND)
+        : zone.name,
+    );
+  });
   host.method(ZONE_CLASS, false, "secondsFromGMT", (self) =>
     offsetForZone(get(self), Date.now() / MILLISECONDS_PER_SECOND),
   );
