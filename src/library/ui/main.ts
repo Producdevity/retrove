@@ -41,7 +41,8 @@ const { library, recover, storage: management } = browserLibrary(failure);
 const settingsPage = element(Page.Settings, HTMLElement);
 const launch = (app: InstalledApplication): void => {
   dock.release();
-  location.href = `/player.html?app=${encodeURIComponent(app.id)}`;
+  // Replacing keeps no history entry, so a back swipe cannot close the running game.
+  location.replace(`/player.html?app=${encodeURIComponent(app.id)}`);
 };
 const storage = connectSettings(failure, management, () => refresh());
 const showStorage = (): void => void observed(DiagnosticOperation.Settings, storage).catch(failure);

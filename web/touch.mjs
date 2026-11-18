@@ -23,6 +23,7 @@ import {installColors} from '../src/runtime/ios/uikit/colors.ts';
 import {installControls} from '../src/runtime/ios/uikit/control-host.ts';
 import {installButtons} from '../src/runtime/ios/uikit/button-host.ts';
 import {installPageControls} from '../src/runtime/ios/uikit/page-control/bindings.ts';
+import {installActivityIndicators} from '../src/runtime/ios/uikit/activity-indicator.ts';
 import {installSegmentedControls} from '../src/runtime/ios/uikit/segmented-control/bindings.ts';
 import {installLabels} from '../src/runtime/ios/uikit/label-host.ts';
 import {installToolbars} from '../src/runtime/ios/uikit/toolbar/bindings.ts';
@@ -121,6 +122,7 @@ export function touchUIKit({hostClass, method, names, alloc, destroy, autoreleas
   toolbars=installToolbars({...controlHost,elements:p=>items(p),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}});
   pageControls=installPageControls({...controlHost,touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
+  installActivityIndicators(uiHost);
   segmentedControls=installSegmentedControls({...controlHost,elements:p=>items(p),isString:p=>!!lookup(read(p),'UTF8String'),rgba:p=>uiColors?.rgba(p),imageSize:imageViews.size,drawImage:imageViews.drawImage,
     touchPoint:(set,view)=>{const touch=touches.get(items(set)[0]);return touch?convertPoint(touch.point,touch.window,view):undefined;}},controls);
   const webViews=new WebViews({hostClass,method,document:mediaHost?.ownerDocument,mount:mediaHost,layout:fieldLayout});

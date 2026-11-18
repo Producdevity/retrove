@@ -169,7 +169,11 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   const languages=()=>[...(globalThis.navigator?.languages??['en-US'])];
   method('NSLocale',true,'preferredLanguages',()=>autorelease(array(languages().map(string))));
   method('NSLocale',true,'currentLocale',singleton('NSLocale'));
-  method('NSLocale',false,'localeIdentifier',()=>string(languages()[0].replaceAll('-','_')));
+  const localeIds=new Map();
+  method('NSLocale',false,'localeIdentifier',self=>string(localeIds.get(self)??languages()[0].replaceAll('-','_')));
+  method('NSLocale',false,'initWithLocaleIdentifier:',(self,a)=>{if(a(0))localeIds.set(self,text(a(0)));return self;});
+  method('NSLocale',true,'localeWithLocaleIdentifier:',(cls,a)=>{const self=alloc(cls);if(a(0))localeIds.set(self,text(a(0)));return autorelease(self);});
+  for(const name of ['systemLocale','autoupdatingCurrentLocale'])method('NSLocale',true,name,singleton('NSLocale'));
   function unbox(ptr) {
     if (!ptr || isKind(ptr,'NSNull')) return null;
     if (isKind(ptr,'NSString')) return text(ptr);

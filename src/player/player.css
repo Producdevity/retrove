@@ -464,3 +464,7 @@ body[data-turn="-90"] .orientation-menu:popover-open {
 body[data-turn] .orientation-menu:popover-open {
   width: 280px;
 }
+#back.armed {
+  background: rgb(255 92 95 / 24%);
+  color: #ff8a8c;
+}

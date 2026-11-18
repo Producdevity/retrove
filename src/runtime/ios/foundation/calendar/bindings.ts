@@ -1,4 +1,5 @@
 import { composeGregorian } from "./composition";
+import { installDateFormatter } from "./date-formatter";
 import { REFERENCE_DATE_UNIX_SECONDS } from "../dates";
 import type { FoundationHost } from "../../objc/host";
 import {
@@ -22,6 +23,12 @@ export function installCalendars(host: CalendarHost): void {
   const dateSeconds = (pointer: number): number =>
     host.referenceTime(pointer) + REFERENCE_DATE_UNIX_SECONDS;
   const zones = installTimeZones({ ...host, dateSeconds });
+  installDateFormatter({
+    ...host,
+    unixSeconds: dateSeconds,
+    createDate: (seconds) => host.createDate(seconds),
+    zone: (pointer) => zones.get(pointer),
+  });
   const calendarClass = host.hostClass(CALENDAR_CLASS, "NSObject"),
     componentClass = host.hostClass(COMPONENTS_CLASS, "NSObject");
   const calendars = new Map<number, TimeZone>(),

@@ -132,6 +132,21 @@ window.addEventListener("pagehide", () => {
   session?.abort();
   report.store();
 });
+const LEAVE_CONFIRM_MS = 3000;
+const back = element("back", HTMLAnchorElement),
+  backLabel = back.querySelector(".control-label");
+let leaveArmed = 0;
+back.addEventListener("click", (event) => {
+  if (leaveArmed) return;
+  event.preventDefault();
+  back.classList.add("armed");
+  if (backLabel) backLabel.textContent = "Tap again to leave";
+  leaveArmed = window.setTimeout(() => {
+    leaveArmed = 0;
+    back.classList.remove("armed");
+    if (backLabel) backLabel.textContent = "Library";
+  }, LEAVE_CONFIRM_MS);
+});
 const toolbarToggle = element("show-toolbar", HTMLButtonElement);
 element("fullscreen", HTMLButtonElement).addEventListener(
   "click",
