@@ -13,7 +13,7 @@ import { CodeBudget } from "./code-budget";
 import { FunctionIndex } from "./function-index";
 import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches } from "./translation-profile";
-import { Alignment, Batch, Coalesce, PROFILE_SAVE_MS, STOP_PC } from "./tier-options";
+import { Alignment, Batch, Coalesce, PROFILE_SAVE_MS, Replay, STOP_PC } from "./tier-options";
 import type { TierModule, TierOptions } from "./tier-options";
 
 export type { TierModule, TierOptions } from "./tier-options";
@@ -107,7 +107,7 @@ export class TranslatedTier {
       this.#translator.setCode(snapshot);
     if (!this.#options.profile) return;
     const cache = this.#options.cache;
-    profileBatches(this.#options.profile, executable, Batch).forEach((functions, index) => {
+    profileBatches(this.#options.profile, executable, Replay).forEach((functions, index) => {
       const slot = cache && moduleSlot(cache, index);
       this.#replay.push(this.#job(functions, this.#profile.entriesOf(functions), [], slot));
       for (const range of functions) this.#planned.add(range.start);

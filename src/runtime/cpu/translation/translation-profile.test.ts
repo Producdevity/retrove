@@ -40,11 +40,18 @@ describe("translation profiles", () => {
       functions: [0x2200, 0x2101, 0x2050, 0x2000, 0x2200, 0x2400],
       entries: [],
     };
-    const batches = profileBatches(profile, executable, { instructions: 160, functions: 8 });
+    const batches = profileBatches(profile, executable, {
+      instructions: 160,
+      functions: 8,
+      total: 1024,
+    });
     expect(batches.map((batch) => batch.map((range) => range.start))).toEqual([
       [0x2200, 0x2101],
       [0x2000, 0x2400],
     ]);
+    expect(
+      profileBatches(profile, executable, { instructions: 160, functions: 8, total: 1 }),
+    ).toEqual([]);
   });
   it("records new functions and entries once and reports changes", () => {
     const recorder = new ProfileRecorder({

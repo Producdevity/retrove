@@ -20,6 +20,10 @@ export interface BatchLimits {
   readonly instructions: number;
   readonly functions: number;
 }
+/** Splitting limits for a replay, which also stops once the profile reaches `total` instructions. */
+export interface ReplayLimits extends BatchLimits {
+  readonly total: number;
+}
 
 function addresses(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((item) => Number.isSafeInteger(item));
@@ -51,18 +55,22 @@ export function decodeProfile(value: unknown): TranslationProfile | undefined {
 export function profileBatches(
   profile: TranslationProfile,
   executable: Executable,
-  limits: BatchLimits,
+  limits: ReplayLimits,
 ): FunctionRange[][] {
   const batches: FunctionRange[][] = [],
     seen = new Set<number>();
   let batch: FunctionRange[] = [],
-    instructions = 0;
+    instructions = 0,
+    total = 0;
   for (const start of profile.functions) {
     const range = functionAt(executable, start);
     if (!range || range.start !== start || seen.has(start)) continue;
+    const size = (range.end - (range.start & ~THUMB_BIT)) / WORD_BYTES;
+    if (total + size > limits.total) break;
     seen.add(start);
     batch.push(range);
-    instructions += (range.end - (range.start & ~THUMB_BIT)) / WORD_BYTES;
+    instructions += size;
+    total += size;
     if (batch.length < limits.functions && instructions < limits.instructions) continue;
     batches.push(batch);
     batch = [];
