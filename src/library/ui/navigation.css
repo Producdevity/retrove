@@ -139,10 +139,16 @@ main {
   .tab-bar.glass::before {
     display: block;
   }
+  /* Without the Add button beside it, the bar is centred as on iOS. */
+  .shell:has(#library[hidden]) .tab-bar.glass {
+    width: min(320px, 100%);
+    margin-inline: auto;
+  }
+  /* Labels keep a base under them; the WebGL material refracts on top of it. */
   .tab-bar.glass[data-glass="webgl"] {
-    background: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+    background: color-mix(in srgb, var(--glass-thick) 72%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    backdrop-filter: blur(18px) saturate(1.6);
   }
   .tab-bar .selection {
     display: block;

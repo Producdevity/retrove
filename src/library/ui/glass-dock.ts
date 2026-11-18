@@ -35,6 +35,7 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
     MATERIAL,
     false,
     lost,
+    sidebar,
   );
   const lens = new GlassLayer(
     new BackdropPainter(
@@ -44,6 +45,7 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
     LENS_MATERIAL,
     true,
     lost,
+    sidebar,
   );
   const compact = matchMedia(COMPACT);
   const sync = (): void => {

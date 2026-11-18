@@ -28,16 +28,20 @@ export class GlassLayer {
   private awakeUntil = 0;
   private frame = 0;
   private region: Region = { x: 0, y: 0, width: 0, height: 0 };
+  private placement = "";
   private readonly listeners = new AbortController();
   constructor(
     private readonly painter: BackdropPainter,
     material: Partial<LiquidGlassV2Material>,
     above: boolean,
     lost: () => void,
+    private readonly host?: HTMLElement,
   ) {
-    this.canvas.className = above ? "glass-layer above" : "glass-layer";
+    this.canvas.className = ["glass-layer", above ? "above" : "", host ? "hosted" : ""]
+      .filter(Boolean)
+      .join(" ");
     this.canvas.setAttribute("aria-hidden", "true");
-    document.body.append(this.canvas);
+    (host ?? document.body).append(this.canvas);
     this.renderer = new LiquidGlassWebGLV2(this.canvas, {
       compositeMode: "overlay",
       material,
@@ -89,8 +93,15 @@ export class GlassLayer {
   private readonly tick = (now: number): void => {
     this.frame = 0;
     this.draw();
-    if (now < this.awakeUntil) this.frame = requestAnimationFrame(this.tick);
+    if (now < this.awakeUntil || this.animating()) this.frame = requestAnimationFrame(this.tick);
   };
+  /** A control in a CSS transition moves without any event, so follow it until it settles. */
+  private animating(): boolean {
+    for (const { element } of this.targets.values())
+      if (element.getAnimations().some((animation) => animation.playState === "running"))
+        return true;
+    return false;
+  }
   private measure(): { region: Region; boxes: Map<string, Region> } {
     const boxes = new Map<string, Region>();
     let left = Infinity,
@@ -107,26 +118,29 @@ export class GlassLayer {
       bottom = Math.max(bottom, box.y + box.height);
     }
     if (!boxes.size) return { region: { x: 0, y: 0, width: 0, height: 0 }, boxes };
+    // No clamp to innerWidth/innerHeight: iOS home-screen apps report an innerHeight that
+    // excludes the status bar while fixed controls are laid out against the full screen.
     const x = Math.floor(Math.max(0, left - BLEED)),
       y = Math.floor(Math.max(0, top - BLEED));
-    const width = Math.ceil(Math.min(innerWidth, right + BLEED)) - x,
-      height = Math.ceil(Math.min(innerHeight, bottom + BLEED)) - y;
+    const width = Math.ceil(right + BLEED) - x,
+      height = Math.ceil(bottom + BLEED) - y;
     return { region: { x, y, width, height }, boxes };
   }
+  /** Hosted canvases sit inside the controls' own fixed container and move with it. */
   private place(region: Region, scale: number): void {
-    const moved =
-      region.x !== this.region.x ||
-      region.y !== this.region.y ||
-      region.width !== this.region.width ||
-      region.height !== this.region.height;
-    if (!moved) return;
+    const origin = this.host?.getBoundingClientRect() ?? { x: 0, y: 0 },
+      placement = [region.x - origin.x, region.y - origin.y, region.width, region.height].join();
+    if (placement !== this.placement)
+      Object.assign(this.canvas.style, {
+        left: `${region.x - origin.x}px`,
+        top: `${region.y - origin.y}px`,
+        width: `${region.width}px`,
+        height: `${region.height}px`,
+      });
+    this.placement = placement;
+    const resized = region.width !== this.region.width || region.height !== this.region.height;
     this.region = region;
-    Object.assign(this.canvas.style, {
-      left: `${region.x}px`,
-      top: `${region.y}px`,
-      width: `${region.width}px`,
-      height: `${region.height}px`,
-    });
+    if (!resized) return;
     this.backdrop.width = Math.round(region.width * scale);
     this.backdrop.height = Math.round(region.height * scale);
     this.renderer.setBackdrop(this.backdrop, { update: "static", shouldRender: false });

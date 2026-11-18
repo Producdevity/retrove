@@ -42,7 +42,8 @@
   border-radius: var(--radius-group);
   background: var(--surface);
 }
-.group + .group {
+.group + .group,
+.group-footer:empty + .group {
   margin-top: var(--space-4);
 }
 .section-title {

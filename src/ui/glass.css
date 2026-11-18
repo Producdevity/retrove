@@ -117,3 +117,11 @@
 .glass-layer.above {
   z-index: 21;
 }
+/* Inside a fixed container: below its controls, or above them for the lens. */
+.glass-layer.hosted {
+  position: absolute;
+  z-index: -1;
+}
+.glass-layer.hosted.above {
+  z-index: 1;
+}
