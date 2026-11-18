@@ -30,10 +30,10 @@ export function sjljExceptions(cpu, heap, {threads, nested, hostGate, objc}) {
     return address + 8;
   }
   const vtables = new Map(), metatypes = new Map();
-  for (const name of ['class','si_class','fundamental','pbase','pointer']) {
+  for (const name of ['class','si_class','vmi_class','fundamental','pbase','pointer']) {
     const cls = '__' + name + '_type_info', mangled = 'N10__cxxabiv1' + cls.length + cls + 'E';
     const methods = [nop, deleting, nop, nop, canCatch];
-    if (name === 'class' || name === 'si_class') {
+    if (name.endsWith('class')) {
       for (const query of ['search_above_dst','search_below_dst','has_unambiguous_public_base']) {
         methods.push(gate(cls + '::' + query, () => { throw Error('Unsupported standalone C++ RTTI query ' + query); }));
       }
@@ -45,7 +45,7 @@ export function sjljExceptions(cpu, heap, {threads, nested, hostGate, objc}) {
     data.set('__ZTI' + mangled, info);
   }
   for (const [name, info] of metatypes) {
-    const base = {si_class:'class', pointer:'pbase'}[name];
+    const base = {si_class:'class', vmi_class:'class', pointer:'pbase'}[name];
     write(info, vtables.get(base ? 'si_class' : 'class'));
     if (base) write(info+8, metatypes.get(base));
   }
@@ -76,11 +76,15 @@ export function sjljExceptions(cpu, heap, {threads, nested, hostGate, objc}) {
   const standard = new Map();
   for (const [name, base, message] of [['St9exception',null,'std::exception'],
        ['St9bad_alloc','St9exception','std::bad_alloc'], ['St11logic_error','St9exception',''],
-       ['St12length_error','St11logic_error','vector'], ['St12out_of_range','St11logic_error','vector']]) {
+       ['St12length_error','St11logic_error','vector'], ['St12out_of_range','St11logic_error','vector'],
+       ['St16invalid_argument','St11logic_error',''], ['St12domain_error','St11logic_error',''],
+       ['St13runtime_error','St9exception',''], ['St11range_error','St13runtime_error',''],
+       ['St14overflow_error','St13runtime_error',''], ['St15underflow_error','St13runtime_error','']]) {
     const type = builtin(name, base ? 'si_class' : 'class', base ? 12 : 8);
     if (base) write(type+8, data.get('__ZTI' + base));
     const text = heap.string(message);
-    const what = gate(name + '::what', () => text);
+    // The message pointer sits where libstdc++ keeps its std::string's characters.
+    const what = gate(name + '::what', a => read(a(0) + 4) || text);
     const vptr = table('__ZTV' + name, [nop, deleting, what]);
     write(vptr - 4, type);
     standard.set(name, {type, vptr, text});
@@ -106,12 +110,25 @@ export function sjljExceptions(cpu, heap, {threads, nested, hostGate, objc}) {
     if (pointer && (target === 'PK' + thrown.slice(1) || target === 'Pv' && !thrown.startsWith('PK') || target === 'PKv')) return value;
     // Single public, non-virtual inheritance is encoded with the base
     // type_info pointer at offset 8. Pointee qualifiers aren't class bases.
-    if (!pointer) {
-      for (let base = exception.type, count = 0; base && count < 256; count++) {
-        if (read(base) !== vtables.get('si_class')) break;
-        base = read(base + 8);
-        if (base && (type === base || target === nameOf(base))) return value;
+    return pointer ? undefined : upcast(exception.type, type, target, value, 0);
+  }
+  // si_class has one base at offset 0; vmi_class lists bases with offset and flags words.
+  function upcast(from, type, target, value, depth) {
+    if (depth > 64) return undefined;
+    const kind = read(from), bases = [];
+    if (kind === vtables.get('si_class')) bases.push([read(from + 8), 0]);
+    else if (kind === vtables.get('vmi_class')) {
+      for (let i = 0, count = read(from + 12); i < count && i < 256; i++) {
+        const flags = read(from + 20 + 8*i);
+        if ((flags & 2) && !(flags & 1)) bases.push([read(from + 16 + 8*i), flags >> 8]);
       }
+    }
+    for (const [base, offset] of bases) {
+      if (!base) continue;
+      const moved = (value + offset) >>> 0;
+      if (type === base || target === nameOf(base)) return moved;
+      const found = upcast(base, type, target, moved, depth + 1);
+      if (found !== undefined) return found;
     }
     return undefined;
   }
@@ -274,14 +291,20 @@ export function sjljExceptions(cpu, heap, {threads, nested, hostGate, objc}) {
       return 7;
     }
   };
-  function raiseStandard(name) {
+  function raiseStandard(name, message = 0) {
     const {type, vptr, text} = standard.get(name);
     const object = funcs.___cxa_allocate_exception(() => 8);
-    write(object, vptr); write(object+4, text);
+    write(object, vptr); write(object+4, message || text);
     return funcs.___cxa_throw(i => [object, type, 0][i]);
   }
   for (const [suffix, name] of [['length_error','St12length_error'], ['out_of_range','St12out_of_range']]) {
     funcs['__ZNKSt3__120__vector_base_commonILb1EE20__throw_' + suffix + 'Ev'] = () => raiseStandard(name);
+  }
+  funcs.__ZSt17__throw_bad_allocv = () => raiseStandard('St9bad_alloc');
+  for (const name of ['St11logic_error','St12length_error','St12out_of_range','St16invalid_argument','St12domain_error',
+    'St13runtime_error','St11range_error','St14overflow_error','St15underflow_error']) {
+    const helper = '__throw_' + name.replace(/^St\d+/, '');
+    funcs['__ZSt' + helper.length + helper + 'PKc'] = a => raiseStandard(name, a(0));
   }
   funcs.___objc_personality_v0 = funcs.___gxx_personality_sj0;
   funcs._objc_begin_catch = funcs.___cxa_begin_catch;

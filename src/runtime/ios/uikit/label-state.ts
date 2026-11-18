@@ -64,6 +64,11 @@ export class Labels {
     await this.host.release(previous);
   }
   async destroy(self: number): Promise<void> {
+    await this.release(self);
+    await this.host.deallocateView(self);
+  }
+  /** Releases the label's objects without deallocating the view. */
+  async release(self: number): Promise<void> {
     const state = this.states.get(self);
     this.states.delete(self);
     if (state)
@@ -75,7 +80,6 @@ export class Labels {
         state.highlightedColor,
       ])
         await this.host.release(pointer);
-    await this.host.deallocateView(self);
   }
   clear(): void {
     this.states.clear();

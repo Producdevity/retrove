@@ -59,6 +59,7 @@ import {UniformTypeSymbols,identifierForTag,preferredTag} from "../src/runtime/i
 import {AdSymbols,installAdBanners} from "../src/runtime/ios/services/iad.ts";
 import {installNumberFormatter} from "../src/runtime/ios/foundation/number-formatter.ts";
 import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
+import {installStatusBar} from "../src/runtime/ios/uikit/application/status-bar.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
 import {installPorts} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
@@ -588,7 +589,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication', false, 'isNetworkActivityIndicatorVisible', () => Number(networkActivity));
   method('UIApplication', false, 'setNetworkActivityIndicatorVisible:', (_, a) => { networkActivity = Boolean(a(0)); });
   installURLOpening({method, text, send, open: openInBrowser});
-  const input = touchUIKit({movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusOrientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const statusBar={hidden:!!ipa.info.UIStatusBarHidden,orientation:initialOrientation(ipa.info),style:0};
+  const input = touchUIKit({movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusBar.orientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
@@ -618,7 +620,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   let nibs;
   const initializeFoundationArchive=archiveFoundation({string:(p,v)=>{makeString(v,p);},number:foundationObjects.setArchivedNumber,date:foundationObjects.setArchivedDate,data:(p,b)=>{archivedData(b,p);},dictionary:async(p,k,v)=>{await foundationObjects.associated(p,k,v);},collection:(p,values)=>{input.items(p).push(...values.map(retain));}});
   const unarchiver=installUnarchiver({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,
-    parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},send,
+    parse:parsePlist,contents:fileObjects.contents,data:p=>cpu.read(read(p+4),read(p+8)),classNamed:name=>{const cls=names.get(name);if(!cls)throw Error("Unknown archived class "+name);return cls;},hasClass:name=>names.has(name),send,
     scalar:value=>value instanceof Uint8Array?autorelease(archivedData(value)):foundationObjects.property(value),
     initializeBuiltin:async(p,name,fields,graph)=>await nibs.initialize(p,name,fields,graph)??initializeFoundationArchive(p,name,fields,graph)});
   nibs=new NibLoader({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,items:input.items,ipa,parse:parsePlist,openArchive:source=>unarchiver.open(source),
@@ -663,13 +665,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   for(const name of ['currentCalls','callEventHandler'])method('CTCallCenter',false,name,()=>0);
   method('CTCallCenter',false,'setCallEventHandler:',()=>undefined);
   installRemoteNotifications({method,send,responds:(p,name)=>!!p&&!!lookup(read(p),name),delegate:()=>delegate,error:fileObjects.error,later:scheduler.later});
-  let statusBarHidden=!!ipa.info.UIStatusBarHidden, statusOrientation=initialOrientation(ipa.info), shakeToEdit=true, badge=0;
-  for(const name of ['setStatusBarHidden:','setStatusBarHidden:animated:','setStatusBarHidden:withAnimation:'])
-    method('UIApplication',false,name,(_,a)=>{statusBarHidden=!!a(0);});
-  method('UIApplication',false,'isStatusBarHidden',()=>Number(statusBarHidden));
-  method('UIApplication',false,'statusBarOrientation',()=>statusOrientation);
-  for(const name of ['setStatusBarOrientation:','setStatusBarOrientation:animated:'])
-    method('UIApplication',false,name,(_,a)=>{statusOrientation=a(0);});
+  let shakeToEdit=true, badge=0;
+  installStatusBar({method,write},statusBar);
   method('UIApplication',false,'setApplicationSupportsShakeToEdit:',(_,a)=>{shakeToEdit=!!a(0);});
   method('UIApplication',false,'applicationSupportsShakeToEdit',()=>Number(shakeToEdit));
   method('UIApplication',false,'setApplicationIconBadgeNumber:',(_,a)=>{badge=a(0)|0;});

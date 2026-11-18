@@ -1,4 +1,6 @@
 import {sjljExceptions} from './sjlj.mjs';
+import {gnuContainerImports} from '../src/runtime/cxx/gnu-tree.ts';
+import {CowStrings, EMPTY_REP_SYMBOL, gnuStringImports} from '../src/runtime/cxx/gnu-string.ts';
 import { read32, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
 
 export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
@@ -168,6 +170,16 @@ export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
     return (x ^ (x >>> 18)) >>> 0;
   };
   const exceptions = unwind && sjljExceptions(cpu, heap, unwind);
-  return {...exceptions, funcs:Object.assign(funcs, exceptions?.funcs), data:exceptions?.data ?? new Map()};
+  const data = exceptions?.data ?? new Map();
+  const words = {read:p => read32(cpu, p), write:(p, x) => write32(cpu, p, x)};
+  const strings = new CowStrings({...words, readBytes:(p, n) => cpu.read(p, n), writeBytes:(p, bytes) => cpu.write(p, bytes),
+    allocate:n => heap.alloc(n), free:p => heap.free(p), zero:n => heap.zero(n),
+    lengthError:message => {
+      if (!exceptions) throw Error('std::length_error: ' + message);
+      return exceptions.raiseStandard('St12length_error', heap.string(message));
+    }});
+  data.set(EMPTY_REP_SYMBOL, strings.emptyRep);
+  Object.assign(funcs, gnuContainerImports(words), gnuStringImports(strings));
+  return {...exceptions, funcs:Object.assign(funcs, exceptions?.funcs), data};
 
 }

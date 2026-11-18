@@ -10,6 +10,7 @@ interface UnarchiverHost extends FoundationHost {
   contents(path: number): Promise<Uint8Array | undefined>;
   scalar(value: unknown): number;
   classNamed(name: string): number;
+  hasClass(name: string): boolean;
   send(pointer: number, selector: string, args: number[]): Promise<number>;
   initializeBuiltin(
     pointer: number,
@@ -43,6 +44,7 @@ export function installUnarchiver(host: UnarchiverHost) {
     const graph = new ArchiveGraph(source, {
       scalar: (value) => host.retain(host.scalar(value)),
       allocate: (name) => host.alloc(host.classNamed(name)),
+      hasClass: (name) => host.hasClass(name),
       release: (value) => host.release(value),
       async initialize(object, name, fields) {
         contexts.push(fields);

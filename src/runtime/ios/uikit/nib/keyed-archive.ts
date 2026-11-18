@@ -1,6 +1,7 @@
 import {
   ARCHIVE_VERSION,
   ArchiveReference,
+  CUSTOM_OBJECT_KEY,
   type ArchiveFields,
 } from "../../foundation/archives/graph";
 import type { NibArchive, NibObject } from "./archive";
@@ -10,7 +11,7 @@ export const NibKey = {
   TopLevel: "UINibTopLevelObjectsKey",
   Connections: "UINibConnectionsKey",
   VisibleWindows: "UINibVisibleWindowsKey",
-  CustomObject: "RetroveNibCustomObject",
+  CustomObject: CUSTOM_OBJECT_KEY,
 } as const;
 function fields(object: NibObject): ArchiveFields {
   return Object.fromEntries(

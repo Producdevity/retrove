@@ -6,6 +6,7 @@ import { Labels } from "./label-state";
 import { lineBreak } from "./text-layout";
 import { installStringDrawing, type CurrentContext } from "./string-drawing";
 import { UIKitClass, structureMethod, type UIKitHost } from "./host";
+import { installTextViews } from "./text-view";
 
 function installProperties(host: UIKitHost, labels: Labels): void {
   for (const [getter, setter, field] of [
@@ -64,6 +65,8 @@ export function installLabels(
   font(pointer: number): Font;
   size(pointer: number): [number, number];
   draw(pointer: number, context: CanvasRenderingContext2D): void;
+  /** Installs UITextView once UIScrollView exists. */
+  installTextViews(scrollDealloc: (self: number) => unknown): void;
   close(): void;
 } {
   const fonts = new Fonts(host);
@@ -109,6 +112,7 @@ export function installLabels(
     font: (pointer: number) => fonts.get(pointer),
     size: (pointer) => drawing.size(pointer),
     draw: (pointer, context) => drawing.draw(pointer, context),
+    installTextViews: (scrollDealloc) => installTextViews(host, labels, fonts, scrollDealloc),
     close: () => {
       fonts.close();
       labels.clear();

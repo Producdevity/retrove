@@ -1,6 +1,10 @@
 export const ARCHIVE_VERSION = 100000;
 const MAX_DECODE_DEPTH = 128;
 export type ArchiveFields = Record<string, unknown>;
+/** Marks an object Interface Builder archived as a UICustomObject, which is created with -init. */
+export const CUSTOM_OBJECT_KEY = "RetroveNibCustomObject";
+const CLASS_SWAPPER = "UIClassSwapper";
+const CUSTOM_OBJECT = "UICustomObject";
 
 export class ArchiveReference {
   constructor(readonly index: number) {
@@ -20,6 +24,8 @@ export function archiveArray(value: unknown): unknown[] {
 interface ArchiveHost {
   scalar(value: unknown): number;
   allocate(className: string): number;
+  /** Whether the runtime knows the class; swapped nib classes fall back to the original. */
+  hasClass(className: string): boolean;
   initialize(pointer: number, className: string, fields: ArchiveFields): Promise<number>;
   release(pointer: number): Promise<void>;
 }
@@ -91,8 +97,9 @@ export class ArchiveGraph {
     }
     const fields = archiveFields(value);
     const descriptor = archiveFields(this.objects[this.reference(fields.$class)]);
-    const className = descriptor.$classname;
-    if (typeof className !== "string") throw Error("Invalid keyed archive class name");
+    const archived = descriptor.$classname;
+    if (typeof archived !== "string") throw Error("Invalid keyed archive class name");
+    const className = archived === CLASS_SWAPPER ? this.swapped(fields) : archived;
     const pointer = this.host.allocate(className);
     this.ownership.add(pointer);
     this.decoded.set(index, pointer);
@@ -103,6 +110,21 @@ export class ArchiveGraph {
       this.decoded.set(index, initialized);
     }
     return initialized;
+  }
+  /** Interface Builder's stand-in for a custom class: use it, or the original when missing. */
+  private swapped(fields: ArchiveFields): string {
+    const name = (key: string) => {
+      const value =
+        fields[key] === undefined ? undefined : this.objects[this.reference(fields[key])];
+      if (typeof value !== "string") throw Error(`Invalid ${CLASS_SWAPPER} ${key}`);
+      return value;
+    };
+    const original = name("UIOriginalClassName"),
+      custom = name("UIClassName");
+    if (original === CUSTOM_OBJECT) fields[CUSTOM_OBJECT_KEY] = true;
+    if (this.host.hasClass(custom)) return custom;
+    if (original === CUSTOM_OBJECT) throw Error(`Unknown archived class ${custom}`);
+    return original;
   }
   async dispose(): Promise<void> {
     const pointers = [...this.ownership];

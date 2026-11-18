@@ -8,7 +8,7 @@ function float(n){bits.setUint32(0,n,true);return bits.getFloat32(0,true);}
 function fixtures() {
   const bytes=new Uint8Array(1024); let thread=1;
   const cpu={read:(p,n)=>bytes.subarray(p,p+n),write:(p,b)=>bytes.set(b,p)};
-  const {funcs}=cxxImports(cpu,{alloc:n=>n>128?0:64},()=>thread);
+  const {funcs}=cxxImports(cpu,{alloc:n=>n>128?0:64,zero:()=>32},()=>thread);
   return {run:(name,...args)=>funcs[name](i=>args[i]),d:new DataView(bytes.buffer),swap:id=>thread=id};
 }
 test('Darwin new symbols and normal SJLJ registration are isolated across threads',()=>{
