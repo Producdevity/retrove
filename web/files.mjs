@@ -14,11 +14,33 @@ function error(errno) { throw new FileError(errno); }
 function parent(path) { return path.slice(0, path.lastIndexOf("/")); }
 // Separate chunks keep small writes and sparse seeks independent of total save size.
 const CHUNK = 64 * 1024;
+// Bundle files from this size are read through a stored blob instead of being inflated on every open.
+const RANDOM_ACCESS_BYTES = 256 * 1024;
+// Games read packages in small pieces; each blob read is an asynchronous disk round trip.
+const READ_AHEAD_BYTES = 256 * 1024, READ_AHEAD_WINDOWS = 32;
 
 export function fileImports(cpu, ipa, heap, errno, log,
   storage = new SaveStorage(ipa.info?.CFBundleIdentifier || ipa.bundlePath), diagnostic, missingAsset, data) {
   const fds = new Map(), streams = new Map(), directoryStreams = new Map();
-  const largeAssets = new Map();
+  const largeAssets = new Map(), readAhead = new Map();
+  async function readAsset(asset, offset, pointer, count) {
+    const blob = await (asset.blob ??= ipa.assetBlob(asset.path));
+    count = Math.max(0, Math.min(blob.size - offset, count));
+    for (let done = 0; done < count;) {
+      const at = offset + done;
+      let window = readAhead.get(asset);
+      if (!window || at < window.start || at >= window.start + window.bytes.length) {
+        const length = Math.min(blob.size - at, Math.max(READ_AHEAD_BYTES, count - done));
+        window = {start: at, bytes: new Uint8Array(await blob.slice(at, at + length).arrayBuffer())};
+      }
+      readAhead.delete(asset); readAhead.set(asset, window);
+      if (readAhead.size > READ_AHEAD_WINDOWS) readAhead.delete(readAhead.keys().next().value);
+      const from = at - window.start, take = Math.min(count - done, window.bytes.length - from);
+      cpu.write(pointer + done, window.bytes.subarray(from, from + take));
+      done += take;
+    }
+    return count;
+  }
   let next = 3, tmpnameBuffer;
   const bundleDirectory = '/' + ipa.bundlePath;
   let currentDirectory = bundleDirectory;
@@ -129,9 +151,9 @@ export function fileImports(cpu, ipa, heap, errno, log,
         missingBundlePath(p.bundle);
       }
       file.bundle = p.bundle;
-      if (ipa.assetBlob && ipa.entries.get(p.bundle).size >= 8 * 1024 * 1024) {
+      if (ipa.assetBlob && ipa.entries.get(p.bundle).size >= RANDOM_ACCESS_BYTES) {
         let asset = largeAssets.get(p.bundle);
-        if (!asset) { asset = {references: 0, blob: null}; largeAssets.set(p.bundle, asset); }
+        if (!asset) { asset = {references: 0, blob: null, path: p.bundle}; largeAssets.set(p.bundle, asset); }
         asset.references++;
         file.asset = asset;
       }
@@ -172,13 +194,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
     if (!n) return 0;
     if (file.bundle) {
       if (file.asset) {
-        const blob = await (file.asset.blob ??= ipa.assetBlob(file.bundle));
-        const count = Math.max(0, Math.min(blob.size - file.offset, n));
-        for (let i = 0; i < count; i += 1024 * 1024) {
-          const start = file.offset + i;
-          const bytes = await blob.slice(start, start + Math.min(count - i, 1024 * 1024)).arrayBuffer();
-          cpu.write(pointer + i, new Uint8Array(bytes));
-        }
+        const count = await readAsset(file.asset, file.offset, pointer, n);
         file.offset += count;
         return count;
       }
@@ -253,7 +269,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
     if (fd < 3 && !fds.has(fd) && !closedStandard.has(fd)) { closedStandard.add(fd); return 0; }
     const file = fdFor(fd);
     if (file.device) await file.device.close();
-    if (file.asset && --file.asset.references === 0) largeAssets.delete(file.bundle);
+    if (file.asset && --file.asset.references === 0) { largeAssets.delete(file.bundle); readAhead.delete(file.asset); }
     if (file.inode !== undefined) {
       await run("readwrite", async ({ inodes, chunks }) => {
         const node = await inodes.get(file.inode);
