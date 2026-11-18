@@ -171,6 +171,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const aspect=hostBounds.width&&hostBounds.height && w&&h ? (hostBounds.height/h)/(hostBounds.width/w) : 1;
     const now=performance.now();
     let order=1,glOrder=0;
+    const placed=new Set();
     const active=t=>t&&now<t.start+(t.duration+t.delay)*1000?t:null;
     function transitions(names,t) {return t?names.map(n=>n+' '+t.duration+'s '+t.curve+' '+t.delay+'s'):[];}
     async function visit(view,x,y,alpha,opacityTiming,layoutTiming) {
@@ -232,7 +233,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           vx=p[0]-screen[0];vy=p[1]-screen[1];
           matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
         }
-        Object.assign(video.style,{position:'absolute',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
+        placed.add(video);video.dataset.placed='';
+        Object.assign(video.style,{display:'',position:'absolute',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
       }
       // GL content sits in the view order at its EAGL layer, so views behind it stay behind the game.
       if(state.layer&&glLayer?.(state.layer))glOrder=order++;
@@ -243,6 +245,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
       }
     }
     if(w&&h)await visit(window,0,0,1);
+    // A movie whose view left the window, or was hidden, must not stay on screen with its controls.
+    for(const video of mediaHost.querySelectorAll('video[data-placed]'))if(!placed.has(video))video.style.display='none';
     const graphics=mediaHost.querySelector('canvas[data-graphics]');
     if(graphics)graphics.style.zIndex=glOrder?String(glOrder):'';
     for(const [view,node] of nodes)if(!shown.has(view)){node.remove();nodes.delete(view);}
