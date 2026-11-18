@@ -6,8 +6,11 @@ const THUMB_BIT = 1;
 /** Entries found inside one function after translation; more than this keeps the rest on the interpreter. */
 export const MAX_EXTRA_ENTRIES = 64;
 
+/** Version 2 records only functions that became hot; version 1 recorded every function that ran. */
+export const PROFILE_VERSION = 2;
 /** What an app translated in earlier launches, replayed at the next launch. */
 export interface TranslationProfile {
+  readonly version: typeof PROFILE_VERSION;
   /** Function starts in the order they were first translated. */
   readonly functions: readonly number[];
   /** Function start and the entries found inside it after translation. */
@@ -25,7 +28,12 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 export function decodeProfile(value: unknown): TranslationProfile | undefined {
-  if (!record(value) || !addresses(value.functions) || !Array.isArray(value.entries))
+  if (
+    !record(value) ||
+    value.version !== PROFILE_VERSION ||
+    !addresses(value.functions) ||
+    !Array.isArray(value.entries)
+  )
     return undefined;
   const items: unknown[] = value.entries,
     entries: [number, number[]][] = [];
@@ -37,7 +45,7 @@ export function decodeProfile(value: unknown): TranslationProfile | undefined {
       return undefined;
     entries.push([start, list]);
   }
-  return { functions: value.functions, entries };
+  return { version: PROFILE_VERSION, functions: value.functions, entries };
 }
 /** Splits profiled functions into batches in first-translated order, so the same profile yields the same jobs. */
 export function profileBatches(
@@ -116,6 +124,7 @@ export class ProfileRecorder {
     if (!this.#changed) return undefined;
     this.#changed = false;
     return {
+      version: PROFILE_VERSION,
       functions: [...this.#functions],
       entries: [...this.entries].map(([start, list]) => [start, [...list]]),
     };

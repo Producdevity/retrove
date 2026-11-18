@@ -3,37 +3,24 @@ import type { FunctionRange, Translation } from "./translate";
 import { buildJob, runJob, type CodeSnapshot, type TranslationJob } from "./translation-job";
 import { Translator } from "./translator";
 import { installTranslation, instantiateTranslation } from "./install";
-import { GuestPages, type HostHeap } from "./guest-pages";
+import { GuestPages } from "./guest-pages";
 import { ForeignPages, ForeignQueue, FOREIGN_SLOTS } from "./foreign-pages";
 import { discoverExecutable, functionAt, type Executable } from "./executable";
 import { emptyStatistics, recordError, type TierStatistics } from "./tier-statistics";
 import { collectBatch } from "./collect";
+import { HotFunctions } from "./hot-functions";
+import { CodeBudget } from "./code-budget";
+import { FunctionIndex } from "./function-index";
 import { moduleSlot } from "./translation-store";
-import { ProfileRecorder, profileBatches, type TranslationProfile } from "./translation-profile";
+import { ProfileRecorder, profileBatches } from "./translation-profile";
+import { Alignment, Batch, Coalesce, PROFILE_SAVE_MS, STOP_PC } from "./tier-options";
+import type { TierModule, TierOptions } from "./tier-options";
 
-export type { TierStatistics } from "./tier-statistics";
+export type { TierModule, TierOptions } from "./tier-options";
 
-export interface TierModule extends HostHeap {
-  getTciMemory(): WebAssembly.Memory;
-}
-const Alignment = { State: 64, Table: 4096, Index: 16 } as const;
-const Batch = { instructions: 60_000, functions: 400 } as const;
-/** A short wait lets functions noted close together share one module. */
-const Coalesce = { Functions: 32, DelayMs: 30 } as const;
-const PROFILE_SAVE_MS = 5000;
 const WORD_BYTES = 4;
-const HALFWORD_BYTES = 2;
 const THUMB_BIT = 1;
-/** The emitted code exits to this PC when it stops; it is never a valid guest instruction address. */
-const STOP_PC = 1;
 const pageOf = (address: number): number => Math.floor(address / PageBytes);
-export interface TierOptions {
-  /** Functions translated in earlier launches; replayed in large batches when the executable is found. */
-  readonly profile?: TranslationProfile | undefined;
-  readonly onProfile?: ((profile: TranslationProfile) => void) | undefined;
-  /** The app's key for its modules in the worker's cache; without it nothing is cached. */
-  readonly cache?: string | undefined;
-}
 export class TranslatedTier {
   readonly table = new WebAssembly.Table({ element: "anyfunc", initial: 0 });
   readonly pages: GuestPages;
@@ -47,6 +34,12 @@ export class TranslatedTier {
   readonly #allocations: number[] = [];
   readonly #translated = new Set<number>();
   readonly #queued = new Set<number>();
+  readonly #hot = new HotFunctions();
+  readonly #budget: CodeBudget;
+  readonly #index = new FunctionIndex(
+    () => this.pages.view,
+    () => this.#layout.index,
+  );
   /** Profiled functions whose replay job is built but not installed yet. */
   readonly #planned = new Set<number>();
   readonly #replay: TranslationJob[] = [];
@@ -67,6 +60,7 @@ export class TranslatedTier {
     this.#options = options;
     this.#profile = new ProfileRecorder(options.profile);
     this.#memory = module.getTciMemory();
+    this.#budget = new CodeBudget((pointer) => module._free(pointer));
     const state = this.#allocate(StateBytes, Alignment.State);
     this.pages = new GuestPages(
       module,
@@ -84,16 +78,13 @@ export class TranslatedTier {
   get layout(): StateLayout {
     return this.#layout;
   }
-  #allocate(bytes: number, alignment: number): number {
+  #allocate(bytes: number, alignment: number, owner = this.#allocations): number {
     const raw = this.#module._malloc(bytes + alignment);
     if (!raw) throw new Error("Unable to allocate translated-code memory.");
-    this.#allocations.push(raw);
+    owner.push(raw);
     const aligned = Math.ceil(raw / alignment) * alignment;
     this.#module.HEAPU8.fill(0, aligned, aligned + bytes);
     return aligned;
-  }
-  #indexAddress(address: number): number {
-    return this.#layout.index.base + HALFWORD_BYTES * (address - this.#layout.index.start);
   }
   #discover(): void {
     this.#discovered = true;
@@ -107,7 +98,7 @@ export class TranslatedTier {
     if (!executable) return;
     this.#executable = executable;
     const span = executable.codeEnd - executable.codeStart;
-    const base = this.#allocate(HALFWORD_BYTES * span, Alignment.Index);
+    const base = this.#allocate(FunctionIndex.bytes(span), Alignment.Index);
     this.#layout = {
       ...this.#layout,
       index: { base, start: executable.codeStart, end: executable.codeEnd },
@@ -129,10 +120,8 @@ export class TranslatedTier {
   }
   /** Function table slot + 1 for a guest PC, 0 when not translated. */
   entry(pc: number): number {
-    const index = this.#layout.index,
-      address = pc & ~THUMB_BIT;
-    if (address >= index.start && address < index.end)
-      return this.pages.view.getUint32(this.#indexAddress(address), true);
+    const inside = this.#index.get(pc);
+    if (inside !== undefined) return inside;
     if (pc & (WORD_BYTES - 1)) return 0;
     return this.#foreign.entry(pageOf(pc));
   }
@@ -162,7 +151,8 @@ export class TranslatedTier {
       return;
     }
     const range = functionAt(executable, pc);
-    if (!range || this.#handled(range.start) || this.#queued.has(range.start)) return;
+    const skip = !range || this.#handled(range.start) || this.#queued.has(range.start);
+    if (skip || !this.#hot.enter(range.start)) return;
     this.#queued.add(range.start);
     this.statistics.pendingFunctions = this.#queued.size;
     this.#schedule();
@@ -172,19 +162,12 @@ export class TranslatedTier {
     if (this.#working || this.#closed || !waiting) return;
     this.#working = true;
     const urgent = this.#replay.length || this.#queued.size >= Coalesce.Functions;
-    setTimeout(
-      () => {
-        this.#batch()
-          .catch((error: unknown) => {
-            recordError(this.statistics, error);
-          })
-          .finally(() => {
-            this.#working = false;
-            this.#schedule();
-          });
-      },
-      urgent ? 0 : Coalesce.DelayMs,
-    );
+    const run = async (): Promise<void> => {
+      await this.#batch().catch((error: unknown) => recordError(this.statistics, error));
+      this.#working = false;
+      this.#schedule();
+    };
+    setTimeout(() => void run(), urgent ? 0 : Coalesce.DelayMs);
   }
   #job(
     functions: readonly FunctionRange[],
@@ -203,7 +186,7 @@ export class TranslatedTier {
         executable && !pages.length
           ? { start: executable.codeStart, end: executable.codeEnd }
           : undefined,
-      allocate: (bytes) => this.#allocate(bytes, Alignment.Index),
+      allocate: (bytes) => this.#allocate(bytes, Alignment.Index, this.#budget.labels),
       cacheKey,
     });
   }
@@ -222,6 +205,7 @@ export class TranslatedTier {
       this.statistics,
     );
     if (this.#closed || epoch !== this.#epoch) return undefined;
+    this.#budget.add(translation.wasm.length);
     return {
       translation,
       slots: installTranslation(this.table, this.pages.bytes, exports, translation),
@@ -239,7 +223,21 @@ export class TranslatedTier {
       if (slot !== undefined && this.#foreign.set(page, slot)) this.statistics.foreignPages++;
     }
   }
+  /** Drops every module so the engine can free its code; hot functions translate again. */
+  #flush(): void {
+    this.#epoch++;
+    this.#index.clear();
+    this.#translated.clear();
+    this.#replay.length = 0;
+    this.#planned.clear();
+    this.#foreign.clear();
+    this.#foreignQueue.clear();
+    for (let slot = 0; slot < this.table.length; slot++) this.table.set(slot, null);
+    this.#budget.release();
+    this.statistics.flushes++;
+  }
   async #batch(): Promise<void> {
+    if (this.#budget.exceeded) this.#flush();
     if (this.#foreignQueue.size) await this.#foreignBatch();
     const replay = this.#replay.shift();
     if (replay) return this.#install(replay, true);
@@ -267,19 +265,13 @@ export class TranslatedTier {
     }
     compiled.translation.functions.forEach((translated, offset) => {
       if (replay && !this.#planned.delete(translated.start)) return;
-      this.#setIndex(translated, (compiled.slots[offset] ?? -1) + 1);
+      this.#index.set(translated, (compiled.slots[offset] ?? -1) + 1);
       this.#translated.add(translated.start);
       this.#profile.record(translated.start);
     });
     this.statistics.batches++;
     this.statistics.translatedFunctions = this.#translated.size;
     this.#profile.scheduleSave(this.#options.onProfile, PROFILE_SAVE_MS);
-  }
-  /** Points every halfword of a function at a table slot + 1 (0: interpreter). */
-  #setIndex(range: FunctionRange, entry: number): void {
-    const view = this.pages.view;
-    for (let at = range.start & ~THUMB_BIT; at < range.end; at += HALFWORD_BYTES)
-      view.setUint32(this.#indexAddress(at), entry, true);
   }
   /** Drops translations covering written guest memory; later entries retranslate from new bytes. */
   invalidate(address: number, length: number): void {
@@ -300,7 +292,7 @@ export class TranslatedTier {
     for (const range of executable.ranges) {
       const start = range.start & ~THUMB_BIT;
       if (range.end <= address || start >= end || !this.#translated.has(range.start)) continue;
-      this.#setIndex(range, 0);
+      this.#index.set(range, 0);
       this.#translated.delete(range.start);
       this.statistics.invalidations++;
     }
@@ -310,6 +302,7 @@ export class TranslatedTier {
     this.#profile.flush(this.#options.onProfile);
     this.#translator.close();
     this.pages.close();
+    this.#budget.release();
     for (const allocation of this.#allocations) this.#module._free(allocation);
     this.#allocations.length = 0;
   }

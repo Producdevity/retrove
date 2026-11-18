@@ -1,6 +1,6 @@
 import type {ExecutionBudget} from "../src/runtime/cpu/execution-budget";
 import type {TciTierStatistics} from "../src/runtime/cpu/tci/tier";
-import type {TierStatistics} from "../src/runtime/cpu/translation/tier";
+import type {TierStatistics} from "../src/runtime/cpu/translation/tier-statistics";
 export interface GuestCPU {
   readonly compiler: TciTierStatistics | undefined;
   readonly translation: TierStatistics | undefined;

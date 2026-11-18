@@ -42,6 +42,11 @@ export class ForeignPages {
     view.setUint32(this.#base + slot * SLOT_BYTES, page + 1, true);
     return true;
   }
+  /** Drops every page's translation. */
+  clear(): void {
+    const view = this.#view();
+    new Uint8Array(view.buffer, view.byteOffset + this.#base, ForeignPages.bytes).fill(0);
+  }
   /** Returns whether the page had a translation. */
   remove(page: number): boolean {
     const slot = this.#slot(page, false);
@@ -79,5 +84,9 @@ export class ForeignQueue {
   }
   forget(page: number): void {
     this.#entries.delete(page);
+  }
+  clear(): void {
+    this.#entries.clear();
+    this.#queued.clear();
   }
 }

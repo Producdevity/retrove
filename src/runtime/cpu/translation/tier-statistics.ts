@@ -14,6 +14,8 @@ export interface TierStatistics {
   unsupported: number;
   invalidations: number;
   retranslations: number;
+  /** Times every module was dropped because live code passed its budget. */
+  flushes: number;
   /** Times translated code reached the call depth limit and continued from the runner. */
   stackUnwinds: number;
   errors: number;
@@ -34,6 +36,7 @@ export function emptyStatistics(): TierStatistics {
     unsupported: 0,
     invalidations: 0,
     retranslations: 0,
+    flushes: 0,
     stackUnwinds: 0,
     errors: 0,
     lastError: "",
