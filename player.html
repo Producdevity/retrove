@@ -30,6 +30,10 @@
             <rect x="8" y="3" width="8" height="14" rx="2" />
             <path d="M5 13a8 8 0 0 0 13 6M18 19h-3.5M18 19v-3.5" />
           </svg></button
+        ><button id="debug-toggle" class="control" aria-label="Debug overlay" aria-pressed="false">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 12h4l3-7 4 14 3-7h4" />
+          </svg></button
         ><button id="diagnostics" class="control" aria-label="Report">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 4h9l3 3v13H6z" />
@@ -37,6 +41,7 @@
           </svg></button
       ></span>
     </header>
+    <pre id="debug-overlay" class="debug-overlay" aria-hidden="true" hidden></pre>
     <main id="stage">
       <div id="display"></div>
       <div id="loading">

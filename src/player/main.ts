@@ -14,6 +14,7 @@ import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
 import { connectOrientation } from "./orientation";
 import { PlayerSession } from "./session";
+import { DebugOverlay } from "./debug-overlay";
 
 initializeAppearance();
 const LOADER_AREAS = new Set(["ipa", "guest"]);
@@ -29,6 +30,10 @@ let motionPending = false;
 window.addEventListener(MOTION_ACCESS_REQUESTED, () => {
   motionPending = true;
 });
+const overlay = new DebugOverlay(
+  element("debug-overlay", HTMLPreElement),
+  element("debug-toggle", HTMLButtonElement),
+);
 let session: PlayerSession | undefined;
 let imageVisible = false;
 let audioResumeNeeded = false;
@@ -67,6 +72,7 @@ const report = new SessionReport(
     else if (state.frames > 0) showImage();
   },
   (level, area, message, details) => {
+    overlay.record({ level, area, message });
     if (level !== "info" || !LOADER_AREAS.has(area) || imageVisible) return;
     if (!boot.signal(area, message, details)) detail.textContent = message;
   },

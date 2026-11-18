@@ -1,4 +1,5 @@
 import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
+import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
 import createUnicorn from './vendor/unicorn-arm.mjs';
 import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
 import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
@@ -72,7 +73,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   }
   let pending = null;
   let closed = false;
-  let mappedBytes = 0, executedMilliseconds = 0;
+  let mappedBytes = 0, mappedPeak = 0, executedMilliseconds = 0;
   let failedWasm = false;
   const states = new UnicornContexts({
     allocate: () => engine.context_alloc(),
@@ -108,6 +109,12 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   registerTransfer.write(uc.ARM_REG_FPSCR, fpscr | (1 << 24) | (1 << 25));
   registerTransfer.write(uc.ARM_REG_CPSR, 0x10);
 
+  gauges.read(Gauge.WasmMemoryBytes, () => uc.getTciMemory().buffer.byteLength);
+  gauges.read(Gauge.GuestMappedBytes, () => mappedBytes);
+  gauges.read(Gauge.GuestMappedPeak, () => mappedPeak);
+  gauges.read(Gauge.GuestCpuMs, () => executedMilliseconds);
+  gauges.read(Gauge.TranslatedFunctions, () => tier?.statistics.translatedFunctions ?? 0);
+  gauges.read(Gauge.CodeFlushes, () => tier?.statistics.flushes ?? 0);
   const cpu = {
     get budget() { return budget; },
     get compiler() { return compiler?.statistics; },
@@ -125,6 +132,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
       } else engine.mem_map(address, size, permissions);
       markPages(address, size, permissions);
       mappedBytes += size;
+      mappedPeak = Math.max(mappedPeak, mappedBytes);
     },
     unmap(address, size) {
       range(address, size, true);

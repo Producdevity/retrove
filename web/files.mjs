@@ -1,6 +1,7 @@
 import {DIRENT_BYTES, direntBytes, statBytes, virtualInode} from '../src/runtime/ios/libc/file-metadata.ts';
 import { readCStringBytes, readString, write32 } from "../src/runtime/memory/guest-memory.ts";
 import { SaveStorage } from "../src/runtime/storage/save-storage.ts";
+import {Gauge, gauges} from "../src/runtime/diagnostics/gauges.ts";
 
 const E = { PERM: 1, NOENT: 2, IO: 5, BADF: 9, NOMEM: 12, ACCESS: 13, FAULT: 14, EXIST: 17,
   NOTDIR: 20, ISDIR: 21, INVAL: 22, FBIG: 27, NOSPC: 28, SPIPE: 29, ROFS: 30, RANGE: 34,
@@ -18,11 +19,18 @@ const CHUNK = 64 * 1024;
 const RANDOM_ACCESS_BYTES = 256 * 1024;
 // Games read packages in small pieces; each blob read is an asynchronous disk round trip.
 const READ_AHEAD_BYTES = 256 * 1024, READ_AHEAD_WINDOWS = 32;
+// Reads at least one window long bypass the cache, in chunks that bound the temporary copy.
+const DIRECT_READ_BYTES = 1024 * 1024;
 
 export function fileImports(cpu, ipa, heap, errno, log,
   storage = new SaveStorage(ipa.info?.CFBundleIdentifier || ipa.bundlePath), diagnostic, missingAsset, data) {
   const fds = new Map(), streams = new Map(), directoryStreams = new Map();
   const largeAssets = new Map(), readAhead = new Map();
+  function dropWindow(asset, kept) {
+    const window = readAhead.get(asset);
+    if (window && window !== kept) gauges.add(Gauge.FileCacheBytes, -window.bytes.length);
+    readAhead.delete(asset);
+  }
   async function readAsset(asset, offset, pointer, count) {
     const blob = await (asset.blob ??= ipa.assetBlob(asset.path));
     count = Math.max(0, Math.min(blob.size - offset, count));
@@ -30,11 +38,18 @@ export function fileImports(cpu, ipa, heap, errno, log,
       const at = offset + done;
       let window = readAhead.get(asset);
       if (!window || at < window.start || at >= window.start + window.bytes.length) {
-        const length = Math.min(blob.size - at, Math.max(READ_AHEAD_BYTES, count - done));
+        if (count - done >= READ_AHEAD_BYTES) {
+          const length = Math.min(count - done, DIRECT_READ_BYTES);
+          cpu.write(pointer + done, new Uint8Array(await blob.slice(at, at + length).arrayBuffer()));
+          done += length;
+          continue;
+        }
+        const length = Math.min(blob.size - at, READ_AHEAD_BYTES);
         window = {start: at, bytes: new Uint8Array(await blob.slice(at, at + length).arrayBuffer())};
+        gauges.add(Gauge.FileCacheBytes, window.bytes.length);
       }
-      readAhead.delete(asset); readAhead.set(asset, window);
-      if (readAhead.size > READ_AHEAD_WINDOWS) readAhead.delete(readAhead.keys().next().value);
+      dropWindow(asset, window); readAhead.set(asset, window);
+      if (readAhead.size > READ_AHEAD_WINDOWS) dropWindow(readAhead.keys().next().value);
       const from = at - window.start, take = Math.min(count - done, window.bytes.length - from);
       cpu.write(pointer + done, window.bytes.subarray(from, from + take));
       done += take;
@@ -198,7 +213,10 @@ export function fileImports(cpu, ipa, heap, errno, log,
         file.offset += count;
         return count;
       }
-      file.data ??= await ipa.read(file.bundle);
+      if (!file.data) {
+        file.data = await ipa.read(file.bundle);
+        gauges.add(Gauge.FileCacheBytes, file.data.length);
+      }
       const bytes = file.data.subarray(file.offset, file.offset + n);
       if (bytes.length) cpu.write(pointer, bytes);
       file.offset += bytes.length;
@@ -269,7 +287,8 @@ export function fileImports(cpu, ipa, heap, errno, log,
     if (fd < 3 && !fds.has(fd) && !closedStandard.has(fd)) { closedStandard.add(fd); return 0; }
     const file = fdFor(fd);
     if (file.device) await file.device.close();
-    if (file.asset && --file.asset.references === 0) { largeAssets.delete(file.bundle); readAhead.delete(file.asset); }
+    if (file.asset && --file.asset.references === 0) { largeAssets.delete(file.bundle); dropWindow(file.asset); }
+    if (file.data) gauges.add(Gauge.FileCacheBytes, -file.data.length);
     if (file.inode !== undefined) {
       await run("readwrite", async ({ inodes, chunks }) => {
         const node = await inodes.get(file.inode);

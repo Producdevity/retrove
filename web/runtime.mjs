@@ -7,6 +7,7 @@ import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
 import {ExecutionMetrics, ExecutionMetricLimit} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {FrameMetrics} from '../src/runtime/diagnostics/frame-metrics.ts';
+import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
 import {GraphicsMetrics, GraphicsMetricOperation} from '../src/runtime/diagnostics/graphics-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
@@ -48,6 +49,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
   const render = {clearCalls: 0, drawCalls: 0, presentAttempts: 0, presentedFrames: 0};
+  gauges.read(Gauge.PresentedFrames, () => render.presentedFrames);
   const importMetrics = new ImportMetrics();
   const executionMetrics = new ExecutionMetrics();
   const frameMetrics = new FrameMetrics();

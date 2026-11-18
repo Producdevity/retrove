@@ -1,4 +1,5 @@
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
+import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
 import {ThreadAttributes, ThreadPolicy, DEFAULT_PRIORITY} from '../src/runtime/ios/threads/attributes.ts';
 
@@ -12,6 +13,7 @@ export function threadImports(cpu, heap, returnAddress) {
   const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
+  gauges.read(Gauge.GuestThreads, () => 1 + [...workers.values()].filter(t => !t.done).length);
   // Priorities are recorded for the guest to read back; the cooperative scheduler does not use them.
   const schedules = new Map();
   function threadPointer(id) {

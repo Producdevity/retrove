@@ -3,6 +3,8 @@ import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
 import {GLErrorState} from '../src/runtime/graphics/driver-errors.ts';
 import { read32, readString, write32 } from '../src/runtime/memory/guest-memory.ts';
 import { decodePVRTC } from '../src/runtime/graphics/pvrtc.ts';
+import {GpuMemory, TEXEL_BYTES, textureBinding, texturePart} from '../src/runtime/graphics/gpu-memory.ts';
+import {Gauge} from '../src/runtime/diagnostics/gauges.ts';
 
 const ARRAY_BUFFER = 0x8892;
 const ELEMENT_ARRAY_BUFFER = 0x8893;
@@ -42,6 +44,13 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   }
   function bind(name, impl) { api['_gl' + name] = impl; }
   const id=(object,kind)=>objects.register(object,kind);
+  const memory = {Texture: new GpuMemory(Gauge.GpuTextureBytes), Buffer: new GpuMemory(Gauge.GpuBufferBytes), Renderbuffer: new GpuMemory(Gauge.GpuRenderbufferBytes)};
+  const RENDERBUFFER_BINDING = 0x8ca7, JS_COPY = 1;
+  // Accounting only: a context without the query records nothing rather than failing the call.
+  const bound = binding => typeof gl().getParameter === 'function' ? id(gl().getParameter(binding)) : 0;
+  const textureLevel = (target, level, bytes) => memory.Texture.set(bound(textureBinding(target)), texturePart(target, level), bytes);
+  const renderbufferStorage = (width, height, samples = 1) =>
+    memory.Renderbuffer.set(bound(RENDERBUFFER_BINDING), 0, width * height * samples * TEXEL_BYTES);
   const obj=handle=>objects.get(handle);
   function f(word) { scratch.setUint32(0, word, true); return scratch.getFloat32(0,true); }
   function writeNumber(pointer, value, kind) {
@@ -139,6 +148,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
         const target = obj(number);
         gl()['delete'+kind](target);
         objects.remove(number);
+        memory[kind]?.drop(number);
         if (kind === 'Buffer') {
           bufferData.delete(number);
           if (mapped.has(number)) { heap.free(mapped.get(number)); mapped.delete(number); }
@@ -163,6 +173,8 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     if (name) {
       if (mapped.has(name)) {heap.free(mapped.get(name)); mapped.delete(name);}
       bufferData.set(name,{size:a(1),bytes});
+      memory.Buffer.set(name, 0, a(1));
+      memory.Buffer.set(name, JS_COPY, bytes ? a(1) : 0);
     }
   });
   bind('BufferSubData', a => {
@@ -391,6 +403,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
       }
     }
     gl()[sub ? 'texSubImage2D' : 'texImage2D'](...p.slice(0,8), data);
+    if (!sub) textureLevel(p[0], p[1], width * height * TEXEL_BYTES);
   }
   bind('TexImage2D', a => uploadPixels(values(a,9), false));
   bind('TexSubImage2D', a => uploadPixels(values(a,9), true));
@@ -417,6 +430,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     const data = noData ? new Uint8Array(p.at(-2)) : sourceBuffer(p.at(-1),p.at(-2));
     if (enableCompressed(format)) {
       gl()[sub ? 'compressedTexSubImage2D' : 'compressedTexImage2D'](...p.slice(0,-2),data);
+      if (!sub) textureLevel(p[0], p[1], data.byteLength);
       return;
     }
     const width = sub ? p[4] : p[3], height = sub ? p[5] : p[4];
@@ -424,19 +438,32 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     gl().pixelStorei(0x0cf5,1);
     try {
       if (sub) gl().texSubImage2D(p[0],p[1],p[2],p[3],width,height,0x1908,0x1401,rgba);
-      else gl().texImage2D(p[0],p[1],0x1908,width,height,p[5],0x1908,0x1401,rgba);
+      else {
+        gl().texImage2D(p[0],p[1],0x1908,width,height,p[5],0x1908,0x1401,rgba);
+        textureLevel(p[0], p[1], width * height * TEXEL_BYTES);
+      }
     } finally { gl().pixelStorei(0x0cf5,unpackAlign); }
   }
   bind('CompressedTexImage2D',a => uploadCompressed(values(a,8),false));
   bind('CompressedTexSubImage2D',a => uploadCompressed(values(a,9),true));
-  bind('CopyTexImage2D',a => gl().copyTexImage2D(...values(a,8)));
+  bind('CopyTexImage2D',a => {
+    const p = values(a,8);
+    gl().copyTexImage2D(...p);
+    textureLevel(p[0], p[1], p[5] * p[6] * TEXEL_BYTES);
+  });
   bind('CopyTexSubImage2D',a => gl().copyTexSubImage2D(...values(a,8)));
   bind('FramebufferRenderbuffer',a => gl().framebufferRenderbuffer(a(0),a(1),a(2),obj(a(3))));
   bind('FramebufferTexture2D',a => gl().framebufferTexture2D(a(0),a(1),a(2),obj(a(3)),a(4)));
-  bind('RenderbufferStorage',a => gl().renderbufferStorage(...values(a,4)));
+  bind('RenderbufferStorage',a => {
+    const p = values(a,4);
+    gl().renderbufferStorage(...p);
+    renderbufferStorage(p[2], p[3]);
+  });
   bind('RenderbufferStorageMultisampleAPPLE', a => {
     if (!gl().renderbufferStorageMultisample) { setError(0x0502); return; }
-    gl().renderbufferStorageMultisample(...values(a,5));
+    const p = values(a,5);
+    gl().renderbufferStorageMultisample(...p);
+    renderbufferStorage(p[3], p[4], p[1]);
   });
   bind('ResolveMultisampleFramebufferAPPLE', () => {
     const g = gl();

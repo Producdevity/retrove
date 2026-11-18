@@ -239,6 +239,34 @@ body.immersive #display {
   pointer-events: none;
 }
 
+/* Debug figures over the game: never hit-tested, focused or selected, and laid out in isolation. */
+.debug-overlay {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 64px);
+  left: max(var(--space-3), env(safe-area-inset-left));
+  z-index: 90;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 62%);
+  color: #e9edf3;
+  font: 500 10.5px / 1.35 var(--font-mono);
+  white-space: pre;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  contain: layout paint style;
+}
+.debug-overlay[hidden] {
+  display: none;
+}
+body.immersive .debug-overlay {
+  top: max(var(--space-3), env(safe-area-inset-top));
+}
+#debug-toggle[aria-pressed="true"] {
+  color: var(--tint);
+}
+
 dialog {
   width: min(760px, calc(100% - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
