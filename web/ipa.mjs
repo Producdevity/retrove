@@ -1,5 +1,6 @@
 import {InflatedAssets} from "../src/storage/inflated-assets.ts";
 import { crc32 } from '../src/runtime/formats/crc32.ts';
+import { recoverLocalEntries } from "../src/runtime/formats/zip-recovery.ts";
 import { parsePlist } from "../src/runtime/formats/plist/index.ts";
 export { parsePlist } from "../src/runtime/formats/plist/index.ts";
 
@@ -83,14 +84,15 @@ function applyZip64(entry, extra) {
   throw Error("Missing ZIP64 entry sizes");
 }
 
-export async function openZip(blob, diagnostic) {
-  const directory = await directoryLocation(blob);
-  diagnostic?.("info", "ipa", "Reading ZIP central directory", {
-    offset: directory.start, bytes: directory.size, entries: directory.count
-  });
+function modifiedTime(date, time) {
+  return date ? Date.UTC(1980 + (date >>> 9), ((date >>> 5) & 15) - 1, date & 31,
+    time >>> 11, (time >>> 5) & 63, (time & 31) * 2) : 0;
+}
+
+async function centralEntries(blob, directory) {
   const central = await slice(blob, directory.start, directory.size);
   const data = view(central);
-  const entries = new Map(), directories = new Set();
+  const found = [];
   let at = 0;
   for (let index = 0; index < directory.count; index++) {
     if (at + 46 > central.length || data.getUint32(at, true) !== signature.central) throw Error("Invalid ZIP directory entry");
@@ -98,21 +100,54 @@ export async function openZip(blob, diagnostic) {
     const nameAt = at + 46, extraAt = nameAt + nameLen, end = extraAt + extraLen + commentLen;
     if (end > central.length) throw Error("Truncated ZIP directory entry");
     if (data.getUint16(at + 34, true) !== 0) throw Error("Multi-disk ZIP entries are unsupported");
-    const rawPath = utf8.decode(central.subarray(nameAt, extraAt));
-    const isDir = rawPath.endsWith("/");
-    const path = isDir ? rawPath.slice(0, -1) : rawPath;
-    const date = data.getUint16(at + 14, true), time = data.getUint16(at + 12, true);
-    const modified = date ? Date.UTC(1980 + (date >>> 9), ((date >>> 5) & 15) - 1, date & 31,
-      time >>> 11, (time >>> 5) & 63, (time & 31) * 2) : 0;
     const entry = {
-      path, modified, flags: data.getUint16(at + 8, true), method: data.getUint16(at + 10, true),
+      rawPath: central.subarray(nameAt, extraAt),
+      modified: modifiedTime(data.getUint16(at + 14, true), data.getUint16(at + 12, true)),
+      flags: data.getUint16(at + 8, true), method: data.getUint16(at + 10, true),
       crc: data.getUint32(at + 16, true), compressedSize: data.getUint32(at + 20, true),
       size: data.getUint32(at + 24, true), offset: data.getUint32(at + 42, true)
     };
     if ([entry.size, entry.compressedSize, entry.offset].includes(0xffffffff)) {
       applyZip64(entry, central.subarray(extraAt, extraAt + extraLen));
     }
+    found.push(entry);
     at = end;
+  }
+  return found;
+}
+
+// Archives cut off inside their central directory still have intact members before it.
+async function recoveredDirectory(blob, cause, diagnostic) {
+  const recovery = await recoverLocalEntries((start, length) => slice(blob, start, length), blob.size);
+  if (!recovery.entries.length) throw cause;
+  diagnostic?.("warn", "ipa", "ZIP directory missing; rebuilt from member headers", {
+    error: String(cause.message ?? cause), entries: recovery.entries.length, archiveBytes: blob.size
+  });
+  return {
+    directory: { start: recovery.end, size: 0, count: recovery.entries.length },
+    found: recovery.entries.map(entry => ({...entry, modified: modifiedTime(entry.date, entry.time)}))
+  };
+}
+
+export async function openZip(blob, diagnostic) {
+  let directory, found;
+  try {
+    directory = await directoryLocation(blob);
+    diagnostic?.("info", "ipa", "Reading ZIP central directory", {
+      offset: directory.start, bytes: directory.size, entries: directory.count
+    });
+    found = await centralEntries(blob, directory);
+  } catch (error) {
+    if (!/ZIP end record|ZIP directory/.test(String(error?.message))) throw error;
+    ({ directory, found } = await recoveredDirectory(blob, error, diagnostic));
+  }
+  const entries = new Map(), directories = new Set();
+  for (const {rawPath: raw, ...fields} of found) {
+    const rawPath = utf8.decode(raw);
+    const isDir = rawPath.endsWith("/");
+    const path = isDir ? rawPath.slice(0, -1) : rawPath;
+    const entry = { path, modified: fields.modified, flags: fields.flags, method: fields.method,
+      crc: fields.crc, compressedSize: fields.compressedSize, size: fields.size, offset: fields.offset };
     if (path.includes("\\") || path.includes("\0") || path.split("/").some(part => !part || part === "." || part === "..")) {
       throw Error("Unsafe ZIP path: " + path);
     }

@@ -194,3 +194,18 @@ test('random access blobs preserve CRC validation and exact bytes for stored and
   const broken = await openZip(new Blob([damaged]));
   await assert.rejects(broken.assetBlob('stored'),/CRC/);
 });
+
+test("rebuilds the index of an IPA cut off inside its central directory", async () => {
+  const exe = Buffer.from([0xce, 0xfa, 0xed, 0xfe]);
+  const whole = zip([[prefix + "Info.plist", xml], [prefix + "BioShock", exe, false], [prefix + "data.bin", "x".repeat(4000)]]);
+  const directoryStart = whole.readUInt32LE(whole.length - 6);
+  const events = [];
+  const ipa = await openIPA(new Blob([whole.subarray(0, directoryStart + 20)]), (level, area, message, data) => events.push({level, message, data}));
+  assert.deepEqual(await ipa.readExecutable(), Uint8Array.from(exe));
+  assert.equal(new TextDecoder().decode(await ipa.read(prefix + "data.bin")), "x".repeat(4000));
+  assert.ok(events.some(e => e.level === "warn" && e.data?.entries === 3));
+  const cut = whole.subarray(0, whole.indexOf(Buffer.from(prefix + "data.bin")) + 40);
+  const partial = await openZip(new Blob([cut]));
+  assert.deepEqual([...partial.entries.keys()], [prefix + "Info.plist", prefix + "BioShock"]);
+  await assert.rejects(openZip(new Blob([Buffer.from("not a zip at all, no headers here")])), /ZIP end record/);
+});
