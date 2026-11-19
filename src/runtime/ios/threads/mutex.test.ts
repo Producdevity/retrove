@@ -2,10 +2,18 @@ import { expect, test } from "vite-plus/test";
 import { GuestMutexes, MutexError, MutexLayout, MutexType, StaticMutex } from "./mutex";
 function fixture() {
   const words = new Map<number, number>();
-  const memory = {
-    read: (pointer: number) => words.get(pointer) ?? 0,
-    write: (pointer: number, value: number) => {
+  const read = (pointer: number) => words.get(pointer) ?? 0,
+    write = (pointer: number, value: number) => {
       words.set(pointer, value);
+    };
+  const memory = {
+    read,
+    write,
+    store: write,
+    compareExchange: (pointer: number, expected: number, replacement: number) => {
+      const old = read(pointer);
+      if (old === expected) write(pointer, replacement);
+      return old;
     },
   };
   return { mutexes: new GuestMutexes(memory), memory };

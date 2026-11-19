@@ -21,9 +21,15 @@ export const StaticMutex = {
   ErrorChecking: 0x32aaaba1,
   Recursive: 0x32aaaba2,
 } as const;
-interface MutexMemory {
+/**
+ * Guest words of a mutex. Ownership changes go through `compareExchange` and `store`, which are
+ * atomic on shared memory, because translated ARM helpers on other threads update the same words.
+ */
+export interface MutexMemory {
   read(address: number): number;
   write(address: number, value: number): void;
+  compareExchange(address: number, expected: number, replacement: number): number;
+  store(address: number, value: number): void;
 }
 export interface MutexWait {
   wait(): number | undefined;
@@ -47,7 +53,7 @@ export class GuestMutexes {
     this.memory.write(pointer + MutexLayout.Type, type);
     this.memory.write(pointer + MutexLayout.Owner, 0);
     this.memory.write(pointer + MutexLayout.Depth, 0);
-    this.memory.write(pointer, MutexLayout.Initialized);
+    this.memory.store(pointer, MutexLayout.Initialized);
     return 0;
   }
   private ready(pointer: number): boolean {
@@ -65,12 +71,15 @@ export class GuestMutexes {
   }
   take(pointer: number, thread: number): number | undefined {
     if (!this.ready(pointer)) return MutexError.Invalid;
-    const owner = this.memory.read(pointer + MutexLayout.Owner);
-    const type = this.memory.read(pointer + MutexLayout.Type);
-    if (owner && (owner !== thread || type !== MutexType.Recursive)) return undefined;
+    const owner = this.memory.compareExchange(pointer + MutexLayout.Owner, 0, thread);
+    if (!owner) {
+      this.memory.write(pointer + MutexLayout.Depth, 1);
+      return 0;
+    }
+    if (owner !== thread || this.memory.read(pointer + MutexLayout.Type) !== MutexType.Recursive)
+      return undefined;
     const depth = this.memory.read(pointer + MutexLayout.Depth);
     if (depth === MutexLayout.MaximumDepth) return MutexError.Again;
-    this.memory.write(pointer + MutexLayout.Owner, thread);
     this.memory.write(pointer + MutexLayout.Depth, depth + 1);
     return 0;
   }
@@ -91,7 +100,7 @@ export class GuestMutexes {
     if (this.memory.read(pointer + MutexLayout.Owner) !== thread) return MutexError.Permission;
     const depth = this.memory.read(pointer + MutexLayout.Depth) - 1;
     this.memory.write(pointer + MutexLayout.Depth, depth);
-    if (!depth) this.memory.write(pointer + MutexLayout.Owner, 0);
+    if (!depth) this.memory.store(pointer + MutexLayout.Owner, 0);
     return 0;
   }
   destroy(pointer: number): number {

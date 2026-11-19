@@ -1,4 +1,5 @@
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
+import {compareExchange32, store32} from '../src/runtime/memory/guest-atomics.ts';
 import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
 import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
@@ -13,7 +14,8 @@ const asWait = poll => {
 const MS_PER_SECOND = 1000, NS_PER_MS = 1e6;
 export function threadImports(cpu, heap, returnAddress) {
   const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
-  const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
+  const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value),
+    compareExchange:(p,expected,value)=>compareExchange32(cpu,p,expected,value),store:(p,value)=>store32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
   gauges.read(Gauge.GuestThreads, () => 1 + [...workers.values()].filter(t => !t.done).length);
   // Priorities are recorded for the guest to read back; the cooperative scheduler does not use them.

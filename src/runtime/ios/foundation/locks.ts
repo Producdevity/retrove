@@ -1,9 +1,16 @@
 import { Argument, type FoundationHost, type GuestArguments, type HostResult } from "../objc/host";
 import { WORD_BYTES } from "../abi/scalars";
-import { GuestMutexes, MutexError, MutexLayout, MutexType, type MutexWait } from "../threads/mutex";
+import {
+  GuestMutexes,
+  MutexError,
+  MutexLayout,
+  MutexType,
+  type MutexMemory,
+  type MutexWait,
+} from "../threads/mutex";
 
 const SECONDS_TO_MILLISECONDS = 1000;
-interface LockHost extends FoundationHost {
+interface LockHost extends FoundationHost, MutexMemory {
   read(address: number): number;
   currentThread(): number;
   send(self: number, selector: string): Promise<HostResult>;
