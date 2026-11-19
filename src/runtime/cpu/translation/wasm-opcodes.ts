@@ -84,6 +84,7 @@ export const Op = {
   I64Or: 0x84,
   I64Xor: 0x85,
   I64Shl: 0x86,
+  I64ShrS: 0x87,
   I64ShrU: 0x88,
   F32Abs: 0x8b,
   F32Neg: 0x8c,

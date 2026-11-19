@@ -3,17 +3,16 @@ import { at } from "./emit-simd-float";
 import type { Emitter } from "./emitter";
 import type { InstructionOf } from "./instruction";
 import { vectorLanes } from "./lanes";
-import { Op } from "./wasm-opcodes";
+import { Op, Saturating } from "./wasm-opcodes";
 
 const SOURCE_LANES = 4;
+const BYTE_BITS = 8;
+const WORD_BITS = 32;
+/** Narrowed elements come from sources twice as wide. */
+const WIDENING = 2;
+const FIXED_RADIX = 2;
 /** Two 16-bit results pack into each destination word. */
 const PER_WORD = 2;
-const HALF_BITS = 16;
-const HALF_MASK = 0xffff;
-const Range = {
-  Signed: { low: -0x8000, high: 0x7fff },
-  Unsigned: { low: 0, high: 0xffff },
-} as const;
 
 export function emitIntegerOrder(e: Emitter, i: InstructionOf<"viorder">): void {
   const n = vectorLanes(i.n, i.q),
@@ -46,30 +45,108 @@ export function emitShiftImmediate(e: Emitter, i: InstructionOf<"vshli">): void 
   });
 }
 
-/** Pushes `local` clamped to the 16-bit result range. */
+/** Pushes the element in `local` (already extended to 32 bits) clamped to the result range. */
 function saturate(e: Emitter, local: number, i: InstructionOf<"vqmovn">): void {
   const { c } = e,
     [clamped] = e.t,
-    range = i.signedResult ? Range.Signed : Range.Unsigned;
+    bits = BYTE_BITS * i.bytes,
+    high = i.signedResult ? (1 << (bits - 1)) - 1 : (1 << bits) - 1,
+    low = i.signedResult ? -(1 << (bits - 1)) : 0;
+  if (!i.saturate) return void c.get(local);
   if (i.signedSource) {
-    c.i32(range.low).get(local).get(local).i32(range.low).op(Op.I32LtS).op(Op.Select);
+    c.i32(low).get(local).get(local).i32(low).op(Op.I32LtS).op(Op.Select);
     c.set(clamped);
   } else c.get(local).set(clamped);
   const above = i.signedSource ? Op.I32GtS : Op.I32GtU;
-  c.i32(range.high).get(clamped).get(clamped).i32(range.high).op(above).op(Op.Select);
+  c.i32(high).get(clamped).get(clamped).i32(high).op(above).op(Op.Select);
 }
 
+/** Narrows the four source words: each holds 4 / bytes elements of twice `bytes` width. */
 export function emitSaturatingNarrow(e: Emitter, i: InstructionOf<"vqmovn">): void {
-  const { c } = e;
+  const { c } = e,
+    [, element] = e.t,
+    sourceBits = WIDENING * BYTE_BITS * i.bytes,
+    perSource = WORD_BITS / sourceBits,
+    resultBits = BYTE_BITS * i.bytes,
+    perWord = WORD_BITS / resultBits;
   for (let k = 0; k < SOURCE_LANES; k++) {
     getLane(e, at(i.m, k));
     c.set(e.laneTemp(k));
   }
-  for (let k = 0; k < SOURCE_LANES / PER_WORD; k++) {
-    saturate(e, e.laneTemp(PER_WORD * k), i);
-    c.i32(HALF_MASK).op(Op.I32And);
-    saturate(e, e.laneTemp(PER_WORD * k + 1), i);
-    c.i32(HALF_BITS).op(Op.I32Shl).op(Op.I32Or);
+  for (let word = 0; word < SOURCE_LANES / PER_WORD; word++) {
+    for (let k = 0; k < perWord; k++) {
+      const index = word * perWord + k,
+        source = e.laneTemp(Math.floor(index / perSource)),
+        offset = (index % perSource) * sourceBits;
+      c.get(source)
+        .i32(WORD_BITS - offset - sourceBits)
+        .op(Op.I32Shl);
+      c.i32(WORD_BITS - sourceBits)
+        .op(i.signedSource ? Op.I32ShrS : Op.I32ShrU)
+        .set(element);
+      saturate(e, element, i);
+      c.i32((1 << resultBits) - 1).op(Op.I32And);
+      if (k)
+        c.i32(k * resultBits)
+          .op(Op.I32Shl)
+          .op(Op.I32Or);
+    }
+    setLane(e, at(i.d, word));
+  }
+}
+
+const ZeroCompare = {
+  gt: Op.I32GtS,
+  ge: Op.I32GeS,
+  eq: Op.I32Eq,
+  le: Op.I32LeS,
+  lt: Op.I32LtS,
+} as const;
+
+export function emitZeroCompare(e: Emitter, i: InstructionOf<"vizero">): void {
+  const m = vectorLanes(i.m, i.q);
+  vectorLanes(i.d, i.q).forEach((lane, k) => {
+    e.c.i32(0);
+    getLane(e, m[k] ?? 0);
+    e.c.i32(0).op(ZeroCompare[i.op]).op(Op.I32Sub);
+    setLane(e, lane);
+  });
+}
+
+export function emitFixedConvert(e: Emitter, i: InstructionOf<"vcvtfixed">): void {
+  const { c } = e,
+    m = vectorLanes(i.m, i.q),
+    scale = FIXED_RADIX ** i.fraction;
+  vectorLanes(i.d, i.q).forEach((lane, k) => {
+    getLane(e, m[k] ?? 0);
+    if (i.toFixed) {
+      c.op(Op.F32ReinterpretI32, Op.F64PromoteF32).f64(scale).op(Op.F64Mul);
+      c.saturating(i.unsigned ? Saturating.I32TruncSatF64U : Saturating.I32TruncSatF64S);
+    } else {
+      c.op(i.unsigned ? Op.F64ConvertI32U : Op.F64ConvertI32S)
+        .f64(1 / scale)
+        .op(Op.F64Mul);
+      c.op(Op.F32DemoteF64, Op.I32ReinterpretF32);
+    }
+    setLane(e, lane);
+  });
+}
+
+const HALF_BITS = 16;
+
+/** Each 16-bit element of Dm, extended to 32 bits, added to (or taken from) a lane of Qn. */
+export function emitWidenAdd(e: Emitter, i: InstructionOf<"vaddw">): void {
+  const { c } = e;
+  for (let k = 0; k < PER_WORD; k++) {
+    getLane(e, at(i.m, k));
+    c.set(e.laneTemp(k));
+  }
+  for (let k = 0; k < SOURCE_LANES; k++) {
+    getLane(e, at(i.n, k));
+    c.get(e.laneTemp(Math.floor(k / PER_WORD)));
+    c.i32(k % PER_WORD ? 0 : HALF_BITS).op(Op.I32Shl);
+    c.i32(HALF_BITS).op(i.unsigned ? Op.I32ShrU : Op.I32ShrS);
+    c.op(i.sub ? Op.I32Sub : Op.I32Add);
     setLane(e, at(i.d, k));
   }
 }

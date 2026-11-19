@@ -176,7 +176,7 @@ export class OwnCpu {
         trap.fn(this.facade ?? this, address);
         return { reason: "trap", address, pc: state.pc };
       }
-      if ((pc & ~1) === (until & ~1) && pc !== start) return { reason: "until", pc };
+      if (until && (pc & ~1) === (until & ~1)) return { reason: "until", pc };
       if (!tier.entry(pc) || tries > 0) {
         if (tries >= RETRIES || !tier.translateNow(pc)) throw new GuestCodeError(pc);
       }

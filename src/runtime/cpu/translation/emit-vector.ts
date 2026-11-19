@@ -1,4 +1,7 @@
 import {
+  emitFixedConvert,
+  emitWidenAdd,
+  emitZeroCompare,
   emitIntegerOrder,
   emitSaturatingNarrow,
   emitShiftImmediate,
@@ -151,6 +154,12 @@ function emitSimd(e: Emitter, pc: number, i: Instruction): void {
       return emitShiftImmediate(e, i);
     case "vqmovn":
       return emitSaturatingNarrow(e, i);
+    case "vizero":
+      return emitZeroCompare(e, i);
+    case "vcvtfixed":
+      return emitFixedConvert(e, i);
+    case "vaddw":
+      return emitWidenAdd(e, i);
     default:
       return emitUnsupported(e, pc);
   }

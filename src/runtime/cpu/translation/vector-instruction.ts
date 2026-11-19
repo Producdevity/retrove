@@ -160,12 +160,35 @@ type SimdInstruction =
   | (Unary & { readonly kind: "vmvn" })
   /** VSHL by an immediate, 32-bit lanes. */
   | (Unary & { readonly kind: "vshli"; readonly amount: number })
-  /** VQMOVN/VQMOVUN from 32-bit to 16-bit lanes; the sticky QC flag is not tracked. */
+  /**
+   * VMOVN.I16 and VQMOVN/VQMOVUN to `bytes`-wide elements (from twice that); the sticky QC flag
+   * is not tracked.
+   */
   | {
       readonly kind: "vqmovn";
+      readonly saturate: boolean;
       readonly signedSource: boolean;
       readonly signedResult: boolean;
+      readonly bytes: LaneBytes;
       readonly d: number;
+      readonly m: number;
+    }
+  /** VCGT/VCGE/VCEQ/VCLE/VCLT against zero on signed 32-bit lanes. */
+  | (Unary & { readonly kind: "vizero"; readonly op: "gt" | "ge" | "eq" | "le" | "lt" })
+  /** VCVT between f32 and 32-bit fixed point with `fraction` bits. */
+  | (Unary & {
+      readonly kind: "vcvtfixed";
+      readonly toFixed: boolean;
+      readonly unsigned: boolean;
+      readonly fraction: number;
+    })
+  /** VADDW/VSUBW: 32-bit lanes of Qn plus or minus the extended 16-bit elements of Dm. */
+  | {
+      readonly kind: "vaddw";
+      readonly sub: boolean;
+      readonly unsigned: boolean;
+      readonly d: number;
+      readonly n: number;
       readonly m: number;
     }
   | (Unary & { readonly kind: "viunary"; readonly abs: boolean })

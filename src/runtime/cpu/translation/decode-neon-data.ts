@@ -109,7 +109,7 @@ const Matchers: readonly Matcher[] = [
   threeSameFloat,
   integerForms,
   logic,
+  decodeSimdExtra,
   decodeSimdImmediate,
   decodeSimdOther,
-  decodeSimdExtra,
 ];

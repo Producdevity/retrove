@@ -79,6 +79,8 @@ function simdLanes(i: Instruction): number[] {
     case "viunary":
     case "vmvn":
     case "vshli":
+    case "vizero":
+    case "vcvtfixed":
     case "vrev64":
     case "vestimate":
       return [...q(i.d, i.q), ...q(i.m, i.q)];
@@ -95,6 +97,8 @@ function simdLanes(i: Instruction): number[] {
       return q(i.d, i.q);
     case "vmovl":
       return [...q(i.d, true), ...d(i.m)];
+    case "vaddw":
+      return [...q(i.d, true), ...q(i.n, true), ...d(i.m)];
     default:
       return [];
   }

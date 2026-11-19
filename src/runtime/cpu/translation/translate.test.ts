@@ -73,6 +73,34 @@ describe("translate", () => {
     ["vshl.i32", [0xec400b10, 0xf2a40510, 0xec510b10], 0x10000001, 0, 0x10],
     // vmov d2, r0, r1; vmov d3, r0, r1; vqmovn.s32 d0, q1; vmov r0, r1, d0
     ["vqmovn.s32", [0xec410b12, 0xec410b13, 0xf3b60282, 0xec510b10], 0x12345, -0x20000, 0x80007fff],
+    // vmov d0, r0, r0; vclt.s32 d0, d0, #0; vmov r0, r1, d0
+    ["vclt.s32 #0", [0xec400b10, 0xf3b90200, 0xec510b10], -2, 0, 0xffffffff],
+    // vmov d2, r0, r1; vmov d3, r0, r1; vmovn.i16 d0, q1; vmov r0, r1, d0
+    [
+      "vmovn.i16",
+      [0xec410b12, 0xec410b13, 0xf3b20202, 0xec510b10],
+      0x12345678,
+      0xaabbccdd,
+      0xbbdd3478,
+    ],
+    // vmov d2, r0, r1; vmov d3, r0, r1; vqmovun.s16 d0, q1; vmov r0, r1, d0
+    [
+      "vqmovun.s16",
+      [0xec410b12, 0xec410b13, 0xf3b20242, 0xec510b10],
+      0x0100ff80,
+      0x007f0005,
+      0x7f05ff00,
+    ],
+    // vmov d0, r0, r0; vcvt.s32.f32 d0, d0, #16; vmov r0, r1, d0
+    ["vcvt.s32.f32 #16", [0xec400b10, 0xf2b00f10, 0xec510b10], 0x3fc00000, 0, 0x18000],
+    // vmov d2, r0, r1; vmov d3, r0, r1; vmov d4, r0, r1; vaddw.u16 q0, q1, d4; vmov r0, r1, d0
+    [
+      "vaddw.u16",
+      [0xec410b12, 0xec410b13, 0xec410b14, 0xf3920104, 0xec510b10],
+      0x10002,
+      0,
+      0x10004,
+    ],
   ])("%s on 32-bit lanes", async (_, words, r0, r1, expected) => {
     expect((await run([...words, 0xe12fff1e], false, r0, r1 >>> 0)).r0).toBe(expected);
   });
