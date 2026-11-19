@@ -213,9 +213,9 @@ describe("encoding constants", () => {
   });
 
   test("LEB128 encodes signed and unsigned values", () => {
-    expect(new Bytes().unsigned(624485).values).toEqual([0xe5, 0x8e, 0x26]);
-    expect(new Bytes().signed(-123456).values).toEqual([0xc0, 0xbb, 0x78]);
-    expect(new Bytes().signed(0x80000000).values).toEqual([0x80, 0x80, 0x80, 0x80, 0x78]);
-    expect(new Bytes().signed64(-1n).values).toEqual([0x7f]);
+    expect([...new Bytes().unsigned(624485).values]).toEqual([0xe5, 0x8e, 0x26]);
+    expect([...new Bytes().signed(-123456).values]).toEqual([0xc0, 0xbb, 0x78]);
+    expect([...new Bytes().signed(0x80000000).values]).toEqual([0x80, 0x80, 0x80, 0x80, 0x78]);
+    expect([...new Bytes().signed64(-1n).values]).toEqual([0x7f]);
   });
 });

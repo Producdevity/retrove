@@ -66,5 +66,5 @@ export function module(options: {
   );
   section(Section.Export, new Bytes().vector(exports));
   section(Section.Code, new Bytes().vector(options.functions.map((entry) => entry.code.encode())));
-  return Uint8Array.from(out.values);
+  return out.values.slice();
 }

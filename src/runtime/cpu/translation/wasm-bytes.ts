@@ -22,28 +22,56 @@ const Wide = {
   MinusOne: -1n,
 } as const;
 
+const INITIAL_CAPACITY = 256;
+const GROWTH = 2;
+
 /** Byte sink with the LEB128 and vector encodings of the Wasm binary format. */
 export class Bytes {
-  readonly values: number[] = [];
+  #buffer = new Uint8Array(INITIAL_CAPACITY);
+  #length = 0;
+
+  get length(): number {
+    return this.#length;
+  }
+
+  /** The bytes written so far, as a view that later writes may detach from the sink. */
+  get values(): Uint8Array<ArrayBuffer> {
+    return this.#buffer.subarray(0, this.#length);
+  }
+
+  #reserve(extra: number): void {
+    const needed = this.#length + extra;
+    if (needed <= this.#buffer.length) return;
+    const grown = new Uint8Array(Math.max(needed, this.#buffer.length * GROWTH));
+    grown.set(this.values);
+    this.#buffer = grown;
+  }
+
+  #push(value: number): void {
+    this.#reserve(1);
+    this.#buffer[this.#length++] = value;
+  }
 
   byte(...values: number[]): this {
     for (const value of values) {
       if (!Number.isInteger(value) || value < 0 || value > Limit.Byte)
         throw new RangeError("Invalid byte " + value);
-      this.values.push(value);
+      this.#push(value);
     }
     return this;
   }
 
-  append(values: readonly number[]): this {
-    for (const value of values) this.values.push(value);
+  append(values: Uint8Array | readonly number[]): this {
+    this.#reserve(values.length);
+    this.#buffer.set(values, this.#length);
+    this.#length += values.length;
     return this;
   }
 
   /** Little-endian 32-bit word. */
   word(value: number): this {
     for (let index = 0; index < Limit.WordBytes; index++)
-      this.byte((value >>> (index * Limit.ByteBits)) & Limit.Byte);
+      this.#push((value >>> (index * Limit.ByteBits)) & Limit.Byte);
     return this;
   }
 
@@ -55,7 +83,7 @@ export class Bytes {
       let next = rest & Leb.Payload;
       rest = Math.floor(rest / Leb.Radix);
       if (rest) next |= Leb.Continue;
-      this.values.push(next);
+      this.#push(next);
     } while (rest);
     return this;
   }
@@ -68,7 +96,7 @@ export class Bytes {
       const next = rest & Leb.Payload;
       rest >>= Leb.Bits;
       const done = (rest === 0 && !(next & Leb.Sign)) || (rest === -1 && !!(next & Leb.Sign));
-      this.values.push(done ? next : next | Leb.Continue);
+      this.#push(done ? next : next | Leb.Continue);
       if (done) return this;
     }
   }
@@ -81,7 +109,7 @@ export class Bytes {
       const done =
         (rest === Wide.Zero && !(next & Leb.Sign)) ||
         (rest === Wide.MinusOne && !!(next & Leb.Sign));
-      this.values.push(done ? next : next | Leb.Continue);
+      this.#push(done ? next : next | Leb.Continue);
       if (done) return this;
     }
   }
@@ -89,7 +117,7 @@ export class Bytes {
   name(text: string): this {
     const bytes = new TextEncoder().encode(text);
     this.unsigned(bytes.length);
-    return this.byte(...bytes);
+    return this.append(bytes);
   }
 
   vector(items: readonly Bytes[]): this {
@@ -99,7 +127,7 @@ export class Bytes {
   }
 
   sized(content: Bytes): this {
-    this.unsigned(content.values.length);
+    this.unsigned(content.length);
     return this.append(content.values);
   }
 }
