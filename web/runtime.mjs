@@ -287,7 +287,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       for (;;) {
         signal?.throwIfAborted();
         try {
-          const result = await step(pc);
+          let result = step(pc);
+          if (result instanceof Promise) result = await result;
           if (result.unwind) throw result.unwind;
           if (result.done) return result.value;
           pc = result.pc;
@@ -329,13 +330,16 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
     }
 
-    async function step(pc) {
+    // Host imports that return plain values complete without a microtask turn; only promises are awaited.
+    function step(pc) {
       // Capture before nested guest callbacks and cooperative threads restore their caller's registers.
-      try { return await executeStep(pc); }
-      catch (error) { captureFault(error); throw error; }
+      try {
+        const result = executeStep(pc);
+        return result instanceof Promise ? result.catch(error => { captureFault(error); throw error; }) : result;
+      } catch (error) { captureFault(error); throw error; }
     }
 
-    async function executeStep(pc) {
+    function executeStep(pc) {
       cpuSlices++;
       let result;
       if (stubs.has(pc)) { pending = pc; result = {reason:'trap'}; }
@@ -365,14 +369,20 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       host.counter.calls++;
       const arg = n => n < 4 ? cpu.getReg(n) : read32(cpu, cpu.getReg(13) + (n - 4) * 4);
       active.push({name:lastSymbol,thread});
+      const site = {host, symbol:lastSymbol, gate, lr,
+        graphicsStarted: host.graphics ? performance.now() : 0,
+        graphicsCpuStarted: host.graphics ? cpu.executedMilliseconds : 0};
       let value;
-      const graphicsStarted = host.graphics ? performance.now() : 0;
-      const graphicsCpuStarted = host.graphics ? cpu.executedMilliseconds : 0;
+      try { value = host.fn(arg); }
+      catch (error) { return settle(site, error, true); }
+      if (typeof value?.then === 'function')
+        return Promise.resolve(value).then(resolved => settle(site, resolved, false), error => settle(site, error, true));
+      return settle(site, value, false);
+    }
+
+    function settle({host, symbol:lastSymbol, gate, lr, graphicsStarted, graphicsCpuStarted}, value, failed) {
       try {
-        value = await host.fn(arg);
-      } catch (error) {
-        if (error instanceof GuestLandingPad) value = error;
-        else { captureFault(error); throw error; }
+        if (failed && !(value instanceof GuestLandingPad)) { captureFault(value); throw value; }
       } finally {
         if (host.graphics) {
           const duration = Math.max(0, performance.now() - graphicsStarted - (cpu.executedMilliseconds - graphicsCpuStarted));

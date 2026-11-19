@@ -257,7 +257,8 @@ export function threadImports(cpu, heap, returnAddress) {
             if (t.resume !== undefined) { cpu.setReg(0,t.resume); t.resume = undefined; }
             progressed = true;
             for (let i = 0; i < 8; i++) {
-              const result = await step(t.pc);
+              let result = step(t.pc);
+              if (result instanceof Promise) result = await result;
               if (result.done) {
                 t.value = result.value;
                 for (let pass = 0; pass < 4; pass++) {
