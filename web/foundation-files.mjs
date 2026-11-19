@@ -4,7 +4,9 @@ import {installFileAttributeReader} from "../src/runtime/ios/foundation/file-att
 import {parseStat,STAT_BYTES} from "../src/runtime/ios/libc/file-metadata.ts";
 import {installErrors,ERROR_INSTANCE_BYTES,ErrorField} from "../src/runtime/ios/foundation/errors.ts";
 import {installDictionaryFiles} from "../src/runtime/ios/foundation/property-lists.ts";
-import {installStringFiles} from "../src/runtime/ios/foundation/string-files.ts";
+import {installDataURLReaders} from "../src/runtime/ios/foundation/file-url-readers.ts";
+import {installDirectoryEnumerator} from "../src/runtime/ios/foundation/directory-enumerator.ts";
+import {installStringFiles,installInferredStringFiles,installStringWrites} from "../src/runtime/ios/foundation/string-files.ts";
 import {writeArchiveFile} from "../src/runtime/ios/foundation/archives/file-writer.ts";
 import {installUrlResources} from '../src/runtime/ios/foundation/url-resources.ts';
 import {parsePlist} from '../src/runtime/formats/plist/index.ts';
@@ -81,6 +83,19 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
     } finally {await invoke('_closedir',dir);}
     return autorelease(array(items));
   });
+  async function listDirectory(path) {
+    const pointer=heap.string(path),dir=await invoke('_opendir',pointer);
+    if(!dir){heap.free(pointer);return;}
+    const names=[];
+    try {
+      let entry;while((entry=await invoke('_readdir',dir))){const name=readString(cpu,entry+21);if(name!=='.'&&name!=='..')names.push(name);}
+    } finally {await invoke('_closedir',dir);heap.free(pointer);}
+    const entries=[];
+    for(const name of names){const child=heap.string(path.replace(/\/+$/,'')+'/'+name);try{entries.push({name,directory:((await stat(child,0))&0xf000)===0x4000});}finally{heap.free(child);}}
+    return entries;
+  }
+  installDirectoryEnumerator({hostClass,method,alloc,destroy,retain,release,autorelease,text,string,write,send,list:listDirectory,
+    classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown class '+name);return p;}});
   async function contents(path) {
     if(!path)return;
     const fd=await invoke('_open',utf8(path),0);
@@ -99,7 +114,10 @@ export function fileManager({release,destroy,cpu,heap,sys,hostClass,method,names
       return output;
     } finally {if(buffer)heap.free(buffer);heap.free(statbuf);await invoke('_close',fd);}
   }
-  installStringFiles({method,alloc,destroy,autorelease,write,contents,errno:()=>read(invoke('___error')),decode:decodeText,initialize:(p,v)=>makeString(v,p),error:makeError});
+  const stringFiles={method,alloc,destroy,autorelease,write,text,send,contents,errno:()=>read(invoke('___error')),decode:decodeText,initialize:(p,v)=>makeString(v,p),error:makeError,
+    writeFile:(path,bytes)=>writeArchiveFile(archiveWriter,path,bytes)};
+  for(const install of [installStringFiles,installInferredStringFiles,installStringWrites])install(stringFiles);
+  installDataURLReaders({...stringFiles,initialize:(pointer,bytes)=>{const p=heap.alloc(Math.max(1,bytes.length));try{cpu.write(p,bytes);return dataFrom(p,bytes.length,pointer);}finally{heap.free(p);}}});
   installPropertyListSerialization({hostClass,method,string,retain,write,error:makeError,parse:parsePlist,property,bytes:p=>{if(!isKind(p,'NSData'))throw Error('Expected NSData property list');return cpu.read(read(p+4),read(p+8));}});
   installDictionaryFiles({method,autorelease,destroy,contents,parse:parsePlist,property,send});
   method('NSData',true,'dataWithContentsOfFile:',async(_,a)=>{

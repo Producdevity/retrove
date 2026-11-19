@@ -82,6 +82,7 @@ export function installStringPaths(host: StringPathHost): void {
     stringByDeletingLastPathComponent: deleteLastPathComponent,
   }))
     host.method("NSString", false, selector, (self) => host.string(read(host.text(self))));
+  host.method("NSString", false, "isAbsolutePath", (self) => Number(/^[/~]/.test(host.text(self))));
   host.method("NSString", true, "pathWithComponents:", (_, args) =>
     host.string(pathWithComponents(host.items(args(0)).map((pointer) => host.text(pointer)))),
   );

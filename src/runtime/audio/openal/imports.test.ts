@@ -75,6 +75,17 @@ function fixture() {
     },
   };
 }
+test("alGetEnumValue resolves OpenAL names and rejects unknown ones", () => {
+  const x = fixture();
+  const name = (value: string, at: number) => {
+    x.memory.set(new TextEncoder().encode(value + "\0"), at);
+    return at;
+  };
+  expect(x.call("_alGetEnumValue", name("AL_FORMAT_STEREO16", 40000))).toBe(PCMFormat.Stereo16);
+  expect(x.call("_alGetError")).toBe(0);
+  expect(x.call("_alGetEnumValue", name("AL_NOT_A_NAME", 40100))).toBe(0);
+  expect(x.call("_alGetError")).toBe(ALError.InvalidValue);
+});
 test("OpenAL ABI controls real PCM queues, errors, gain and resource lifetimes", () => {
   const x = fixture();
   x.call("_alGenBuffers", 2, 512);

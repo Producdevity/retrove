@@ -41,6 +41,8 @@ function link(gl: Context, state: FixedDrawState) {
       projection: gl.getUniformLocation(program, "uProjection"),
       pointSize: gl.getUniformLocation(program, "uPointSize"),
       alphaReference: gl.getUniformLocation(program, "uAlphaReference"),
+      fog: gl.getUniformLocation(program, "uFog"),
+      fogColor: gl.getUniformLocation(program, "uFogColor"),
       textures: state.textures.map((_stage, unit) => ({
         matrix: gl.getUniformLocation(program, `uTextureMatrix${unit}`),
         environment: gl.getUniformLocation(program, `uEnvironment${unit}`),
@@ -78,6 +80,11 @@ export class FixedPrograms {
     gl.uniformMatrix4fv(entry.projection, false, state.projection);
     gl.uniform1f(entry.pointSize, state.pointSize);
     gl.uniform1f(entry.alphaReference, Math.min(1, Math.max(0, state.alphaReference)));
+    if (state.fog.mode) {
+      const { density, start, end, color } = state.fog;
+      gl.uniform4f(entry.fog, density, start, end, 0);
+      gl.uniform4f(entry.fogColor, ...color);
+    }
     for (const [unit, locations] of entry.textures.entries()) {
       const stage = state.textures[unit];
       if (!stage?.enabled) continue;

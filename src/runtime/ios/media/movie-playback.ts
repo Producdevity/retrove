@@ -5,6 +5,12 @@ export const MovieNotification = {
   LoadStateChanged: "MPMoviePlayerLoadStateDidChangeNotification",
   ScalingChanged: "MPMoviePlayerScalingModeDidChangeNotification",
   ContentPreloaded: "MPMoviePlayerContentPreloadDidFinishNotification",
+  PlaybackStateChanged: "MPMoviePlayerPlaybackStateDidChangeNotification",
+  WillEnterFullscreen: "MPMoviePlayerWillEnterFullscreenNotification",
+  DidEnterFullscreen: "MPMoviePlayerDidEnterFullscreenNotification",
+  WillExitFullscreen: "MPMoviePlayerWillExitFullscreenNotification",
+  DidExitFullscreen: "MPMoviePlayerDidExitFullscreenNotification",
+  NaturalSizeAvailable: "MPMovieNaturalSizeAvailableNotification",
 } as const;
 export const MovieUserInfo = {
   FinishReason: "MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",

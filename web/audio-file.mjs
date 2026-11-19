@@ -1,5 +1,6 @@
 import {audioFileReading} from "../src/runtime/audio/files/imports.ts";
 import {audioURLSource} from "../src/runtime/audio/files/source.ts";
+import {compressedFileType,decodedAudioFile,MAX_COMPRESSED_BYTES} from "../src/runtime/audio/files/decoded.ts";
 import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 
 export const tag=s=>[...s].reduce((v,c)=>v*256+c.charCodeAt(0),0);
@@ -15,11 +16,18 @@ function streamASBD({rate,format,flags,packetBytes,packetFrames,frameBytes,chann
   [format,flags,packetBytes,packetFrames,frameBytes,channels,bits].forEach((n,i)=>v.setUint32(8+i*4,n,true));
   return b;
 }
-export async function inspectAudioFile(read, size) {
+// Browsers decode at the rate of the decoding context, so compressed files keep a common output rate.
+const DECODE_RATE=44100;
+const browserDecode=bytes=>new OfflineAudioContext(1,1,DECODE_RATE).decodeAudioData(Uint8Array.from(bytes).buffer);
+export async function inspectAudioFile(read, size, decode=browserDecode) {
   if (size<12)fail(unsupported);
   const head=await read(0,12), kind=text(head,0);
   const caf=kind==='caff',wave=kind==='RIFF'&&text(head,8)==='WAVE';
-  if(!caf&&!wave)fail(unsupported);
+  if(!caf&&!wave){
+    const type=compressedFileType(head);
+    if(type===undefined||size>MAX_COMPRESSED_BYTES)fail(unsupported);
+    return decodedAudioFile(await read(0,size),type,decode);
+  }
   let at=caf?8:12, format, dataAt, dataSize, cookie, table;
   while(at+(caf?12:8)<=size) {
     const h=await read(at,caf?12:8),v=bytesView(h),name=text(h,0);at+=h.length;
