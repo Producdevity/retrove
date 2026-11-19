@@ -1,5 +1,7 @@
 /** Sent to a movie's video element when its player's view is no longer on screen. */
 export const MOVIE_OFFSCREEN_EVENT = "retrove:movie-offscreen";
+/** Sent to a movie's video element when its player's view comes on screen. */
+export const MOVIE_ONSCREEN_EVENT = "retrove:movie-onscreen";
 export const MovieNotification = {
   PlaybackFinished: "MPMoviePlayerPlaybackDidFinishNotification",
   LoadStateChanged: "MPMoviePlayerLoadStateDidChangeNotification",

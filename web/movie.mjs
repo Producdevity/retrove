@@ -1,10 +1,10 @@
 import {MovieLoading,MovieLoadState} from "../src/runtime/ios/media/movie-loading.ts";
-import {MoviePlayback,MovieNotification,MovieUserInfo,MOVIE_OFFSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
+import {MoviePlayback,MovieNotification,MovieUserInfo,MOVIE_OFFSCREEN_EVENT,MOVIE_ONSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
 // MPMoviePlayerController delivers notifications from the guest main thread.
 const finished = MovieNotification.PlaybackFinished;
 const reasonKey = MovieUserInfo.FinishReason;
 const floatBits = new DataView(new ArrayBuffer(8));
-const MOVIE_CONTROL_MODE_HIDDEN = 2, MOVIE_CONTROL_STYLE_FULLSCREEN = 2;
+const MOVIE_CONTROL_MODE_HIDDEN = 2, MOVIE_CONTROL_STYLE_FULLSCREEN = 2, FULLSCREEN_LAYER = 10000;
 
 export function moviePlayers({hostClass, method, names, alloc, destroy, retain, release, string, text, send,
   ipa, mediaHost, diagnostic, needsMovieResume = () => {}}) {
@@ -26,7 +26,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     s.playback = null;
     s.video?.remove();
     if (s.blobURL) URL.revokeObjectURL(s.blobURL);
-    s.video = null; s.blobURL = null; s.reason = undefined; s.reported = false; s.wantsPlay = false;
+    s.video = null; s.blobURL = null; s.reason = undefined; s.reported = false; s.wantsPlay = false; s.autoplayed = false;
   }
   async function setURL(self, a) {
     const s = state(self), old = s.url;
@@ -70,6 +70,8 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     video.addEventListener('ended', () => finish(0));
     // A game that drops the player's view without stopping it must not keep asking for a tap.
     video.addEventListener(MOVIE_OFFSCREEN_EVENT, () => { if (s.video === video) s.playback?.pause(); });
+    video.addEventListener(MOVIE_ONSCREEN_EVENT, () => { if (s.video === video) autoplay(s); });
+    if (s.fullscreen) showFullscreen(s);
     video.addEventListener('error', () => {
       if (s.video !== video) return;
       diagnostic('warn', 'movie', 'Movie decode failed', {path, code: video.error?.code});
@@ -90,6 +92,23 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     }
   }
   async function prepare(self) {const s=state(self);s.prepared=true;await load(self);if(s.autoplay||s.wantsPlay)playElement(s);}
+  // Like iOS, a player that should autoplay starts once it is on screen, even if never told to play.
+  function autoplay(s) {
+    if (!s.video || !s.autoplay || s.autoplayed) return;
+    s.autoplayed = true; s.prepared = true;
+    if (s.video.src) playElement(s); else s.wantsPlay = true;
+  }
+  // A full-screen movie covers the screen in its own window instead of drawing in its view.
+  function showFullscreen(s) {
+    const video = s.video;
+    if (!video) return;
+    if (s.fullscreen) {
+      Object.assign(video.style, {display:'', position:'absolute', left:'0', top:'0', width:'100%', height:'100%',
+        transform:'', clipPath:'none', opacity:'1', zIndex:String(FULLSCREEN_LAYER)});
+      delete video.dataset.placed;
+      autoplay(s);
+    } else if (!('placed' in video.dataset)) video.style.display = 'none';
+  }
   function playElement(s) {
     if (s.video?.src) s.playback.play();
   }
@@ -120,6 +139,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       if (field === 'repeat') s.video.loop = !!s.repeat;
       if (field === 'controls') s.video.controls = !!s.controls;
       if (field === 'scaling') s.video.style.objectFit = ['none','contain','cover','fill'][s.scaling] ?? 'contain';
+      if (field === 'fullscreen') showFullscreen(s);
     });
   }
   // iOS 3.1 MPMovieControlMode: only MPMovieControlModeHidden removes the playback controls.
@@ -127,7 +147,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
   method(cls, false, 'movieControlMode', self => state(self).controls ? 0 : MOVIE_CONTROL_MODE_HIDDEN);
   method(cls, false, 'useApplicationAudioSession', self => Number(state(self).appAudioSession ?? true));
   method(cls, false, 'setUseApplicationAudioSession:', (self,a) => { state(self).appAudioSession = !!a(0); });
-  method(cls, false, 'setFullscreen:animated:', (self,a) => { state(self).fullscreen = a(0); });
+  method(cls, false, 'setFullscreen:animated:', (self,a) => { const s = state(self); s.fullscreen = a(0); showFullscreen(s); });
   method(cls, false, 'setCurrentPlaybackRate:', (self,a) => {
     const s = state(self);
     floatBits.setUint32(0,a(0),true); const rate = floatBits.getFloat32(0,true);
@@ -159,7 +179,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     destroy(self);
   });
   return {
-    videoForView: view => [...players.values()].find(player => player.view === view)?.video,
+    videoForView: view => [...players.values()].find(player => player.view === view && !player.fullscreen)?.video,
     async pump() {
       if (delivering) return;
       delivering = true;

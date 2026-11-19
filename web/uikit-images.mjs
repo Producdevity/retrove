@@ -1,5 +1,5 @@
 import {ImageViewAnimations} from "../src/runtime/ios/uikit/image/animation.ts";
-import {MOVIE_OFFSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
+import {MOVIE_OFFSCREEN_EVENT,MOVIE_ONSCREEN_EVENT} from '../src/runtime/ios/media/movie-playback.ts';
 import {drawLayerBackground,drawLayerBorder} from "../src/runtime/ios/uikit/layer-colors.ts";
 import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
@@ -234,8 +234,10 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
           vx=p[0]-screen[0];vy=p[1]-screen[1];
           matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
         }
+        const appeared=!('placed' in video.dataset)||video.style.display==='none';
         placed.add(video);video.dataset.placed='';
         Object.assign(video.style,{display:'',position:'absolute',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
+        if(appeared)video.dispatchEvent(new Event(MOVIE_ONSCREEN_EVENT));
       }
       // GL content sits in the view order at its EAGL layer, so views behind it stay behind the game.
       if(state.layer&&glLayer?.(state.layer))glOrder=order++;
