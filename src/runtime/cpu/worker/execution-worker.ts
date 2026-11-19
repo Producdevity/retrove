@@ -1,9 +1,11 @@
+import { graphicsService } from "../../graphics/remote/graphics-service";
+import type { FromGraphics } from "../../graphics/remote/protocol";
 import { serveExecution } from "./execution-core";
-import type { FailedMessage } from "./protocol";
+import type { FailedMessage, WorkerPort } from "./protocol";
 
-declare function postMessage(message: FailedMessage): void;
+declare function postMessage(message: FailedMessage | FromGraphics): void;
 
-serveExecution({
+const port: WorkerPort = {
   post: (message) => {
     postMessage(message);
   },
@@ -12,4 +14,5 @@ serveExecution({
       handler(event.data);
     });
   },
-});
+};
+serveExecution(port, graphicsService(port));

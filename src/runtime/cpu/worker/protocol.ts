@@ -1,5 +1,10 @@
 import type { StateLayout } from "../translation/layout";
 import type { CompiledModule } from "../translation/tier-options";
+import type {
+  FromGraphics,
+  GraphicsGates,
+  GraphicsStartPost,
+} from "../../graphics/remote/protocol";
 
 export const ExecutionMessage = { Start: "start", Code: "code", Failed: "failed" } as const;
 
@@ -43,12 +48,12 @@ export interface FailedMessage {
 
 /** The worker's end of its message port. */
 export interface WorkerPort {
-  post(message: FailedMessage): void;
+  post(message: FailedMessage | FromGraphics): void;
   listen(handler: (message: unknown) => void): void;
 }
 /** The main thread's handle on an execution worker. */
 export interface ExecutionPort {
-  post(message: ToWorker): void;
+  post(message: ToWorker | GraphicsStartPost | GraphicsGates, transfer?: Transferable[]): void;
   listen(handler: (message: unknown) => void): void;
   terminate(): void;
 }

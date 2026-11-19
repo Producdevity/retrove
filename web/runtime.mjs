@@ -24,6 +24,9 @@ import {parseMachO, loadMachO, prepareStartup} from './macho.mjs';
 import {Heap, read32, readString, write32} from '../src/runtime/memory/guest-memory.ts';
 import {systemImports} from './libsystem.mjs';
 import {glesImports} from './gles.mjs';
+import {remoteDrawable} from './drawable.mjs';
+import {startRemoteGraphics} from '../src/runtime/graphics/remote/remote-graphics.ts';
+import {threadPlacement} from '../src/runtime/cpu/worker/placement.ts';
 import {audioQueues} from './audio-queue.mjs';
 import {audioFiles} from './audio-file.mjs';
 import {audioImports} from './audio.mjs';
@@ -46,9 +49,9 @@ const label = value => String(value).slice(0, 192);
 const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', 'lr', 'pc');
 
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
-  log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
+  offscreenGraphics, log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
-  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, glErrorFlag = 0, bindingShadow = 0, image;
+  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, glErrorFlag = 0, bindingShadow = 0, image, remoteGraphics;
   const threadCpuMs = new Map(), THREAD_TIMING_STRIDE = 64;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
@@ -82,13 +85,18 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     // Put fault context before variable-length lists so it survives a shortened mobile export.
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), cpuMethod: cpu ? cpu.method ?? (cpu.translation ? 'interpreter with translation' : 'interpreter') : undefined, mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
-      lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
+      lastSelector: objc?.lastSelector, render: renderCounts(), frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
       // Retrove's own memory accounting in MB; reports from phones that iOS closed for memory need it.
       memoryMB: Object.fromEntries([Gauge.GuestMappedBytes, Gauge.GuestMappedPeak, Gauge.WasmMemoryBytes, Gauge.TranslatedCodeBytes,
         Gauge.GpuTextureBytes, Gauge.GpuBufferBytes, Gauge.GpuRenderbufferBytes, Gauge.FileCacheBytes]
         .map(gauge => [gauge, Math.round(gauges.value(gauge) / 1e6)])),
       threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])), workerThreads: threads?.remote?.statistics(),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
+  }
+  // The graphics worker's own thread draws without passing through settle().
+  function renderCounts() {
+    const local = remoteGraphics?.localRender;
+    return local ? {...render, clearCalls: render.clearCalls + local.clearCalls, drawCalls: render.drawCalls + local.drawCalls} : {...render};
   }
   function milestone(message, details) {
     phase = message;
@@ -182,14 +190,21 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     audio = audioImports(cpu, heap, nested, audioContext);
     al=openAL({read:(p,n)=>cpu.read(p,n),readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),text:p=>readString(cpu,p),string:s=>heap.string(s),allocate:n=>heap.zero(n),free:p=>heap.free(p),
       output:()=>{const context=audioContext();return !context||context.state==='closed'?null:new WebAudioOutput(context);},gate:(name,fn)=>hostGate({name,library:'OpenAL'},fn)});
-    objc = objcImports(cpu, heap, ipa, graphics, nested, signal, service, {
+    if (cpu.workers && prepared.threads) cpu.workers.placement = threadPlacement(prepared.threads, image, p => read32(cpu, p));
+    // With worker threads, the app's graphics thread runs where the WebGL context lives.
+    remoteGraphics = await startRemoteGraphics({workers: cpu.workers, rules: prepared.threads, display: offscreenGraphics, heap,
+      idle: promise => threads.idle(promise), diagnostic});
+    if (remoteGraphics) cpu.workers.graphicsState = () => [objc.graphicsAPI(), objc.graphicsContext()];
+    objc = objcImports(cpu, heap, ipa, remoteGraphics ? () => ({canvas: remoteGraphics.canvas}) : graphics, nested, signal, service, {
       threads, sys, audio, audioOutput:audioContext, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
+      drawable: remoteGraphics && (geometry => remoteDrawable(remoteGraphics.command, geometry, diagnostic)),
       onLifecycle: milestone,
       onPresent(presented, duration = 0) {
         graphicsMilliseconds += duration;
         graphicsMetrics.record(GraphicsMetricOperation.Present,duration);
         if (presented) graphicsMetrics.present();
-        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds,yieldMs:yieldMilliseconds});
+        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds,yieldMs:yieldMilliseconds,
+          ...(remoteGraphics ? {workerGraphicsMs: remoteGraphics.localMs} : {})});
         render.presentAttempts++;
         if (presented && ++render.presentedFrames === 1) {
           report(snapshot());
@@ -205,7 +220,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), guestSqlite(cpu,heap,sys,nested,diagnostic), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;},onErrorFlag:address=>{glErrorFlag=address;},onBindingShadow:address=>{bindingShadow=address;}}));
+      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), guestSqlite(cpu,heap,sys,nested,diagnostic), remoteGraphics ? remoteGraphics.imports(cpu, () => [objc.graphicsAPI(), objc.graphicsContext()]) :
+        glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;},onErrorFlag:address=>{glErrorFlag=address;},onBindingShadow:address=>{bindingShadow=address;}}));
+    if (remoteGraphics) ({errorFlag: glErrorFlag, bindingShadow} = remoteGraphics);
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
@@ -256,6 +273,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
       return hostGate(b, fn);
     });
+    remoteGraphics?.publishGates(stubs);
     // Host kernels replace hot guest routines for the interpreter; translated code runs the
     // originals faster than a round trip that copies their buffers (BioShock: 21 to 30 FPS).
     const hooks = prepared.native?.({cpu, heap}) ?? 0;

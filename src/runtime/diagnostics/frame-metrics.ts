@@ -7,6 +7,8 @@ interface Counters {
   readonly cpuMs: number;
   readonly graphicsMs: number;
   readonly yieldMs: number;
+  /** GL time of the graphics worker's own thread, in parallel with the main thread. */
+  readonly workerGraphicsMs?: number;
 }
 interface Sample {
   readonly frameMs: number;
@@ -14,6 +16,7 @@ interface Sample {
   readonly graphicsMs: number;
   readonly yieldMs: number;
   readonly otherMs: number;
+  readonly workerGraphicsMs: number | undefined;
 }
 interface Distribution {
   readonly mean: number;
@@ -55,6 +58,10 @@ export class FrameMetrics {
       graphicsMs,
       yieldMs,
       otherMs: Math.max(0, frameMs - cpuMs - graphicsMs - yieldMs),
+      workerGraphicsMs:
+        counters.workerGraphicsMs === undefined || previous.workerGraphicsMs === undefined
+          ? undefined
+          : counters.workerGraphicsMs - previous.workerGraphicsMs,
     });
     if (this.samples.length > FrameMetricLimit.Samples) this.samples.shift();
   }
@@ -69,6 +76,7 @@ export class FrameMetrics {
         readonly graphicsImportMs: Distribution;
         readonly yieldWaitMs: Distribution;
         readonly otherMs: Distribution;
+        readonly workerGraphicsMs?: Distribution;
       }
     | undefined {
     if (!this.samples.length) return undefined;
@@ -84,6 +92,13 @@ export class FrameMetrics {
       graphicsImportMs: distribution(this.samples.map((sample) => sample.graphicsMs)),
       yieldWaitMs: distribution(this.samples.map((sample) => sample.yieldMs)),
       otherMs: distribution(this.samples.map((sample) => sample.otherMs)),
+      ...this.#worker(),
     };
+  }
+  #worker(): { workerGraphicsMs?: Distribution } {
+    const values = this.samples.flatMap((sample) =>
+      sample.workerGraphicsMs === undefined ? [] : [sample.workerGraphicsMs],
+    );
+    return values.length ? { workerGraphicsMs: distribution(values) } : {};
   }
 }

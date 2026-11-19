@@ -1,23 +1,56 @@
 import {drawableStorageFormat} from "../src/runtime/graphics/drawable-format.ts";
 import {blitRectangle, coversDisplay, drawablePlacement, drawableSize, isAxisAligned} from "../src/runtime/graphics/drawable-placement.ts";
-const FULL_DISPLAY = {origin:[-1,-1], u:[2,0], v:[0,2]};
+export const FULL_DISPLAY = {origin:[-1,-1], u:[2,0], v:[0,2]};
+const placementOf = layer => layer?.display ? drawablePlacement(layer) : FULL_DISPLAY;
+const allocated = (layer, size) => ({width:size?.width, height:size?.height, points:layer && [layer.width, layer.height], scale:layer?.scale});
+
 // A CAEAGLLayer owns a renderbuffer sized from its bounds and contents scale. Presenting draws it
 // where UIKit places the layer, turned when a portrait layer shows in a landscape interface.
 export function eaglDrawable(context, geometry = () => undefined, diagnostic = () => {}) {
+  const renderer = drawableRenderer(context);
+  return {
+    allocate(target, drawable, colorFormat) {
+      const layer = geometry(drawable), size = renderer.allocate(target, drawable, colorFormat, layer && drawableSize(layer));
+      if (size) diagnostic('info', 'graphics', 'Drawable allocated', allocated(layer, size));
+      return size ? 1 : 0;
+    },
+    present: target => renderer.present(target, drawable => placementOf(geometry(drawable))),
+  };
+}
+
+// The same drawable for a WebGL context another thread owns: UIKit geometry stays here, so each
+// command carries the sizes and placements the owner needs.
+export function remoteDrawable(command, geometry = () => undefined, diagnostic = () => {}) {
+  const drawables = new Set();
+  return {
+    allocate(target, drawable, colorFormat) {
+      const layer = geometry(drawable), size = (layer && drawableSize(layer)) ?? null;
+      const result = command('allocate', {target, drawable, colorFormat, size});
+      if (result) {
+        drawables.add(drawable);
+        diagnostic('info', 'graphics', 'Drawable allocated', allocated(layer, size));
+      }
+      return result;
+    },
+    present: target => command('present', {target, placements: [...drawables].map(drawable => [drawable, placementOf(geometry(drawable))])}),
+  };
+}
+
+// Renderbuffer storage and presentation where the WebGL context lives. `size` defaults to the
+// drawing buffer; `placement` maps a drawable to where it shows.
+export function drawableRenderer(context) {
   const storage = new WeakMap();
   let quad, readFramebuffer;
 
-  function allocate(target, drawable, colorFormat) {
+  function allocate(target, drawable, colorFormat, size) {
     const gl = context();
-    if (!drawable || target !== gl.RENDERBUFFER) return 0;
+    if (!drawable || target !== gl.RENDERBUFFER) return undefined;
     const rb = gl.getParameter(gl.RENDERBUFFER_BINDING);
-    if (!rb) return 0;
-    const layer = geometry(drawable);
-    const size = (layer && drawableSize(layer)) ?? {width:gl.drawingBufferWidth, height:gl.drawingBufferHeight};
+    if (!rb) return undefined;
+    size ??= {width:gl.drawingBufferWidth, height:gl.drawingBufferHeight};
     gl.renderbufferStorage(target, drawableStorageFormat(gl,colorFormat), size.width, size.height);
-    storage.set(rb, {...size, drawable});
-    diagnostic('info', 'graphics', 'Drawable allocated', {width:size.width, height:size.height, points:layer && [layer.width, layer.height], scale:layer?.scale});
-    return 1;
+    storage.set(rb, {width:size.width, height:size.height, drawable});
+    return size;
   }
   function shader(gl, kind, source) {
     const sh = gl.createShader(kind);
@@ -57,10 +90,6 @@ export function eaglDrawable(context, geometry = () => undefined, diagnostic = (
     gl.clearColor(0, 0, 0, 1); gl.colorMask(true, true, true, true);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.clearColor(...color); gl.colorMask(...mask);
-  }
-  function placementOf(size) {
-    const layer = geometry(size.drawable);
-    return layer?.display ? drawablePlacement(layer) : FULL_DISPLAY;
   }
   function blit(gl, rb, size, placement) {
     const savedRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
@@ -140,12 +169,12 @@ export function eaglDrawable(context, geometry = () => undefined, diagnostic = (
       for (const cap of caps) gl.enable(cap);
     }
   }
-  function present(target) {
+  function present(target, placementOfDrawable) {
     const gl = context();
     const rb = gl.getParameter(gl.RENDERBUFFER_BINDING);
     const size = storage.get(rb);
     if (target !== gl.RENDERBUFFER || !size) return 0;
-    const placement = placementOf(size);
+    const placement = placementOfDrawable(size.drawable);
     return gl.blitFramebuffer && isAxisAligned(placement) ? blit(gl, rb, size, placement) : draw(gl, rb, size, placement);
   }
   return { allocate, present };

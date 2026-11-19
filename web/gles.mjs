@@ -21,7 +21,7 @@ const encoder = new TextEncoder();
 function values(arg, count) { return Array.from({ length: count }, (_, i) => arg(i)); }
 function signed(value) { return value | 0; }
 
-export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{},onErrorFlag=()=>{},onBindingShadow=()=>{}} = {}) {
+export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{},onErrorFlag=()=>{},onBindingShadow=()=>{},errorFlag:givenErrorFlag,bindingShadow:givenShadow} = {}) {
   const api = {};
   const objects = new GraphicsObjects();
   const strings = new Map();
@@ -33,10 +33,10 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   const mapped = new Map();
   const errors = new GLErrorState();
   // Nonzero while glGetError must ask the host: an error is pending or a driver check is due.
-  const errorFlag = heap.zero?.(4) ?? 0;
+  const errorFlag = givenErrorFlag ?? heap.zero?.(4) ?? 0;
   const flagErrors = value => { if (errorFlag) write32(cpu, errorFlag, value); };
   if (errorFlag) { flagErrors(1); onErrorFlag(errorFlag); }
-  const shadowAddress = heap.zero?.(BINDING_SHADOW_BYTES) ?? 0;
+  const shadowAddress = givenShadow ?? heap.zero?.(BINDING_SHADOW_BYTES) ?? 0;
   const shadow = shadowAddress ? new BindingShadow(shadowAddress, (pointer, value) => write32(cpu, pointer, value)) : undefined;
   if (shadow) onBindingShadow(shadowAddress);
   // Fixed-function state follows each EAGL context, so only OpenGL ES 2 bindings may be skipped.

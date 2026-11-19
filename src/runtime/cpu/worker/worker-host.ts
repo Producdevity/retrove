@@ -1,7 +1,10 @@
+import type { GraphicsLink, GraphicsLinkStatistics } from "../../graphics/remote/graphics-link";
 import { GuestState } from "../own/guest-state";
 import { StateBytes, stateLayout, type ArenaRegion } from "../translation/layout";
 import { MaxWorkerThreads, ThreadChannel } from "./channel";
+import { startGraphics, type GraphicsOptions } from "./graphics-start";
 import type { ModuleRegistry } from "./module-registry";
+import { Placement, type ThreadCandidate } from "./placement";
 import { ExecutionMessage, isFailedMessage, type ExecutionPort, type TrapRange } from "./protocol";
 import { RemoteThread, type WorkerCpu } from "./remote-thread";
 
@@ -11,25 +14,22 @@ const GENERAL_REGISTERS = 13;
 const IDLE_WAIT_MS = 50;
 const US_PER_MS = 1000;
 
-export interface ThreadStart {
-  readonly id: number;
-  readonly pc: number;
-  readonly args: readonly number[];
+export interface ThreadStart extends ThreadCandidate {
   readonly sp: number;
   /** Guest thread pointer (TPIDRURO). */
   readonly pointer: number;
   readonly returnAddress: number;
 }
 export interface WorkerThreadOptions {
-  /** Picks the guest threads that run on an execution worker; the rest stay cooperative. */
-  readonly place: (thread: { readonly id: number; readonly pc: number }) => boolean;
+  /** Overrides the app profile's placement (tests and experiments); `true` means any worker. */
+  readonly place: ((thread: ThreadCandidate) => boolean | Placement) | undefined;
   readonly spawn: () => ExecutionPort;
 }
 function browserWorker(): ExecutionPort {
   const worker = new Worker(new URL("./execution-worker.ts", import.meta.url), { type: "module" });
   return {
-    post: (message) => {
-      worker.postMessage(message);
+    post: (message, transfer = []) => {
+      worker.postMessage(message, transfer);
     },
     listen: (handler) => {
       worker.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -44,8 +44,7 @@ function browserWorker(): ExecutionPort {
     },
   };
 }
-let configured: WorkerThreadOptions = { place: () => false, spawn: browserWorker };
-/** No thread is placed on a worker unless a caller configures a predicate (tests and experiments). */
+let configured: WorkerThreadOptions = { place: undefined, spawn: browserWorker };
 export function configureWorkerThreads(options: Partial<WorkerThreadOptions>): void {
   configured = { ...configured, ...options };
 }
@@ -57,12 +56,20 @@ export interface WorkerThreadStatistics {
   readonly maxRoundTripMs: number;
   readonly hostMs: number;
   readonly codeRequests: number;
+  /** Worker milliseconds spent running translated code. */
+  readonly executeMs: number;
+  /** Guest thread ids running on the worker that owns the WebGL context. */
+  readonly graphicsThreads: readonly number[];
+  readonly graphics?: GraphicsLinkStatistics;
 }
 interface ExecutionWorker {
   readonly port: ExecutionPort;
   thread: RemoteThread | undefined;
+  readonly listeners: ((message: unknown) => void)[];
 }
-type Totals = { -readonly [K in keyof WorkerThreadStatistics]: WorkerThreadStatistics[K] };
+type Totals = {
+  -readonly [K in Exclude<keyof WorkerThreadStatistics, "graphics" | "graphicsThreads">]: number;
+};
 
 /**
  * Guest threads on execution workers. Each worker owns one state block in the arena's state page
@@ -71,7 +78,13 @@ type Totals = { -readonly [K in keyof WorkerThreadStatistics]: WorkerThreadStati
 export class WorkerThreads {
   readonly #workers: (ExecutionWorker | undefined)[] = [];
   readonly #finished: Totals = WorkerThreads.#empty();
+  readonly #graphicsThreads: number[] = [];
   #seen = 0;
+  #graphics: { readonly index: number; readonly link: GraphicsLink } | undefined;
+  /** The app profile's placement; nothing is placed without one. */
+  placement: (thread: ThreadCandidate) => Placement = () => Placement.Cooperative;
+  /** The EAGL rendering API and context of the guest thread the main thread runs host calls for. */
+  graphicsState: (() => readonly [number, number]) | undefined;
   constructor(
     private readonly cpu: WorkerCpu & { readonly traps: readonly TrapRange[] },
     private readonly registry: ModuleRegistry,
@@ -87,19 +100,44 @@ export class WorkerThreads {
       maxRoundTripMs: 0,
       hostMs: 0,
       codeRequests: 0,
+      executeMs: 0,
     };
   }
-  /** Starts the thread on a free worker when the predicate picks it; undefined keeps it cooperative. */
-  place(start: ThreadStart): RemoteThread | undefined {
-    if (!configured.place({ id: start.id, pc: start.pc })) return undefined;
-    let index = this.#workers.findIndex((worker) => !worker?.thread);
+  get graphics(): GraphicsLink | undefined {
+    return this.#graphics?.link;
+  }
+  #placementOf(start: ThreadStart): Placement {
+    const placed = configured.place ? configured.place(start) : this.placement(start);
+    if (typeof placed !== "boolean") return placed;
+    return placed ? Placement.Worker : Placement.Cooperative;
+  }
+  /** A free worker for `placement`, or -1; the graphics worker only takes graphics threads. */
+  #slot(placement: Placement): number {
+    const graphics = this.#graphics?.index;
+    if (placement === Placement.Graphics)
+      return graphics !== undefined && !this.#workers[graphics]?.thread ? graphics : -1;
+    let index = this.#workers.findIndex((worker, at) => at !== graphics && !worker?.thread);
     if (index < 0) index = this.#workers.length;
-    if (index >= MaxWorkerThreads) return undefined;
+    return index < MaxWorkerThreads ? index : -1;
+  }
+  /** Starts the thread on a free worker when its placement asks for one; undefined keeps it cooperative. */
+  place(start: ThreadStart): RemoteThread | undefined {
+    const placement = this.#placementOf(start);
+    if (placement === Placement.Cooperative) return undefined;
+    const index = this.#slot(placement);
+    if (index < 0) return undefined;
+    if (placement === Placement.Graphics) this.#graphicsThreads.push(start.id);
     const worker = this.#workers[index] ?? this.#spawn(index),
       base = this.#initialize(index, start),
       channel = new ThreadChannel(this.registry.control);
-    const thread = new RemoteThread(this.cpu, this.registry, worker.port, channel, base, () =>
-      this.#release(index),
+    const thread = new RemoteThread(
+      this.cpu,
+      this.registry,
+      worker.port,
+      channel,
+      base,
+      () => this.#release(index),
+      () => this.graphicsState?.(),
     );
     worker.thread = thread;
     const { arena, mask, index: code, foreign } = this.cpu.layout;
@@ -117,10 +155,32 @@ export class WorkerThreads {
     });
     return thread;
   }
+  /** Moves the WebGL context to a worker of its own, which graphics threads then run on. */
+  async startGraphics(options: GraphicsOptions): Promise<GraphicsLink> {
+    const index = this.#slot(Placement.Worker);
+    if (index < 0) throw new Error("No execution worker is free for graphics.");
+    const worker = this.#spawn(index),
+      { arena, mask } = this.cpu.layout;
+    const link = await startGraphics(
+      worker.port,
+      (handler) => worker.listeners.push(handler),
+      { memory: this.memory, control: this.registry.control.buffer, arena, mask },
+      options,
+      () => this.#workers[index]?.thread?.channel.signal(),
+    );
+    this.#graphics = { index, link };
+    return link;
+  }
+  /** Answers the GL owner's guest heap requests. */
+  serviceGraphics(): void {
+    const link = this.#graphics?.link;
+    if (link) while (link.serve());
+  }
   #spawn(index: number): ExecutionWorker {
-    const worker: ExecutionWorker = { port: configured.spawn(), thread: undefined };
+    const worker: ExecutionWorker = { port: configured.spawn(), thread: undefined, listeners: [] };
     worker.port.listen((message) => {
       if (isFailedMessage(message)) worker.thread?.listen(message);
+      for (const listener of worker.listeners) listener(message);
     });
     this.#workers[index] = worker;
     return worker;
@@ -150,13 +210,14 @@ export class WorkerThreads {
     worker.thread = undefined;
   }
   #add(totals: Totals, thread: RemoteThread): void {
-    const { calls, totalMs, maxMs } = thread.channel.statistics;
+    const { calls, totalMs, maxMs, executeMs } = thread.channel.statistics;
     totals.threads++;
     totals.hostCalls += calls;
     totals.roundTripMs += totalMs;
     totals.maxRoundTripMs = Math.max(totals.maxRoundTripMs, maxMs);
     totals.hostMs += thread.hostMs;
     totals.codeRequests += thread.codeRequests;
+    totals.executeMs += executeMs;
   }
   /** Whether a worker posted a request since `acknowledge`. */
   pending(): boolean {
@@ -186,7 +247,12 @@ export class WorkerThreads {
     totals.meanRoundTripUs = totals.hostCalls
       ? (US_PER_MS * totals.roundTripMs) / totals.hostCalls
       : 0;
-    return totals;
+    const graphics = this.#graphics?.link.statistics();
+    return {
+      ...totals,
+      graphicsThreads: [...this.#graphicsThreads],
+      ...(graphics ? { graphics } : {}),
+    };
   }
   close(): void {
     this.#workers.forEach((worker, index) => {

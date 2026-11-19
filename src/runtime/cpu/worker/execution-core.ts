@@ -16,10 +16,33 @@ import {
 } from "./protocol";
 import { WorkerCode } from "./worker-code";
 import { runWorkerSlice } from "./worker-runner";
+import type { CallingThread } from "../../graphics/remote/graphics-server";
+import type { WorkerGraphics } from "../../graphics/remote/graphics-owner";
+
+/** The GL owner on this worker, if the main thread moved its WebGL context here. */
+export interface GraphicsService {
+  /** Handles a graphics message; false when the message is not one. */
+  receive(message: unknown): boolean;
+  readonly owner: WorkerGraphics | undefined;
+}
 
 /** Instructions per slice; the worker checks for stop requests and code flushes between slices. */
 export const WORKER_SLICE = 65_536;
 const THUMB_BIT = 1;
+const WORD_BYTES = 4;
+const RESULT_REGISTER = 0;
+
+/** Lets the worker's event loop run once: OffscreenCanvas frames show and async work finishes. */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(undefined);
+  });
+}
 /**
  * Table slots kept beyond the main table's length. The main thread can install modules while this
  * worker runs a slice, and translated code may already reach their slots through the shared index;
@@ -36,7 +59,10 @@ export class ExecutionThread {
   readonly #traps: readonly TrapRange[];
   #layout: StateLayout;
   #codeWaiter: ((message: CodeMessage) => void) | undefined;
-  constructor(private readonly start: StartMessage) {
+  constructor(
+    private readonly start: StartMessage,
+    private readonly graphics: () => WorkerGraphics | undefined = () => undefined,
+  ) {
     this.#control = new WorkerControl(start.control);
     this.#channel = new ThreadChannel(this.#control, start.channel);
     this.#view = new DataView(start.memory.buffer);
@@ -78,14 +104,46 @@ export class ExecutionThread {
   }
   /** Runs translated code from `pc`; returns the PC it stopped at and why. */
   #slice(pc: number, budget: number) {
-    const worker = this.start.worker;
+    const worker = this.start.worker,
+      started = performance.now();
     this.#code.reserve(this.#control.slots + TABLE_HEADROOM);
     if (!this.#control.enter(worker, this.#code.generation)) return undefined;
     try {
       return runWorkerSlice(this.#code, this.#view, this.#layout, pc, this.start.until, budget);
     } finally {
       this.#control.leave(worker);
+      this.#channel.executed(performance.now() - started);
     }
+  }
+  /** This thread's registers for a GL call it makes on the worker that owns the context. */
+  #callingThread(): CallingThread {
+    const view = this.#view,
+      registers = this.#layout.registers,
+      { api, context } = this.#channel.graphicsState;
+    return {
+      register: (index) => view.getUint32(registers + WORD_BYTES * index, true),
+      setResult: (value) =>
+        view.setUint32(registers + WORD_BYTES * RESULT_REGISTER, value >>> 0, true),
+      api,
+      context,
+    };
+  }
+  /** Answers the main thread's GL requests; yields when a frame or async GL work waits. */
+  async #serveGraphics(graphics: WorkerGraphics): Promise<void> {
+    graphics.serve();
+    if (graphics.takeFrame() || graphics.asynchronous) await nextTask();
+  }
+  /** Runs the host call at gate `pc`; returns where to resume, or undefined when the thread ended. */
+  async #hostCall(pc: number, graphics: WorkerGraphics | undefined): Promise<number | undefined> {
+    if (graphics?.has(pc)) {
+      const next = graphics.local(pc, this.#callingThread());
+      return typeof next === "number" ? next : await next;
+    }
+    const answer = this.#channel.call(
+      this.#request(RequestKind.HostCall, pc),
+      graphics && (() => graphics.serve()),
+    );
+    return answer.result === ResponseKind.Finish ? undefined : answer.pc;
   }
   async run(): Promise<void> {
     let pc = this.start.pc,
@@ -93,10 +151,12 @@ export class ExecutionThread {
       tries = 0,
       missing = false;
     while (!this.#channel.stopped) {
+      const graphics = this.graphics();
+      if (graphics) await this.#serveGraphics(graphics);
       if (this.#trapped(pc)) {
-        const answer = this.#channel.call(this.#request(RequestKind.HostCall, pc));
-        if (answer.result === ResponseKind.Finish) return;
-        [pc, budget, tries] = [answer.pc, WORKER_SLICE, 0];
+        const next = await this.#hostCall(pc, graphics);
+        if (next === undefined) return;
+        [pc, budget, tries] = [next, WORKER_SLICE, 0];
         continue;
       }
       if ((pc & ~THUMB_BIT) === (this.start.until & ~THUMB_BIT)) {
@@ -124,15 +184,15 @@ export class ExecutionThread {
 }
 
 /** Serves one execution worker: each start message runs a thread; code replies feed the running one. */
-export function serveExecution(port: WorkerPort): void {
+export function serveExecution(port: WorkerPort, graphics?: GraphicsService): void {
   let thread: ExecutionThread | undefined;
   port.listen((message) => {
-    if (!isToWorker(message)) return;
+    if (graphics?.receive(message) || !isToWorker(message)) return;
     if (message.type === ExecutionMessage.Code) {
       thread?.receive(message);
       return;
     }
-    const current = new ExecutionThread(message);
+    const current = new ExecutionThread(message, () => graphics?.owner);
     thread = current;
     current.run().catch((error: unknown) => {
       port.post({ type: ExecutionMessage.Failed, message: String(error) });

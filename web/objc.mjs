@@ -88,7 +88,8 @@ const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder() };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
-  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx} = {}) {
+  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx,
+  drawable: makeDrawable = geometry => eaglDrawable(graphics, geometry, diagnostic)} = {}) {
   let quartz;
   const lastDispatch = new Map();
   const classes = new Map(), names = new Map(), selectors = new Map(), owned = new Map(), poolStacks = new Map();
@@ -451,7 +452,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
 
   hostClass('CALayer', 'NSObject');
   hostClass('CAEAGLLayer', 'CALayer');
-  const drawable = eaglDrawable(graphics, layer => input.drawableGeometry(layer), diagnostic);
+  const drawable = makeDrawable(layer => input.drawableGeometry(layer));
   const currentContexts = new Map();
   const threadId = () => threads?.funcs._pthread_self() ?? 1;
   const currentContext = () => currentContexts.get(threadId()) ?? 0;

@@ -61,6 +61,7 @@ export class PlayerSession {
         await runGuest(this.archive, {
           signal: this.controller.signal,
           graphics: this.display.graphics,
+          offscreenGraphics: this.display.offscreen,
           audioContext: () => this.sound,
           mediaHost: this.display.host,
           needsMovieResume: this.mediaResume.movie,

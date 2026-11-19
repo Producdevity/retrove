@@ -39,6 +39,8 @@ export class RemoteThread {
     /** Host address of the thread's state block. */
     readonly base: number,
     private readonly release: () => void,
+    /** The thread's EAGL rendering API and context; read when the thread resumes. */
+    private readonly graphicsState: () => readonly [number, number] | undefined = () => undefined,
   ) {}
   /** Records a failure the worker reported; the next `take` throws it. */
   listen(message: unknown): void {
@@ -82,6 +84,8 @@ export class RemoteThread {
   resume(pc: number, result?: number): void {
     if (result !== undefined)
       this.cpu.view.setUint32(this.base + WORD_BYTES * RESULT_REGISTER, result >>> 0, true);
+    const graphics = this.graphicsState();
+    if (graphics) this.channel.setGraphicsState(...graphics);
     this.channel.respond(ResponseKind.Resume, pc);
   }
   /** Ends the thread on the worker and frees its state block. */

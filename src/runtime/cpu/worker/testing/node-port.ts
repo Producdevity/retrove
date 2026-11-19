@@ -41,8 +41,12 @@ serve({ post: (message) => parentPort.postMessage(message), listen: (handler) =>
 export function nodeExecutionPort(code: string): ExecutionPort {
   const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(code)}`));
   return {
-    post: (message) => {
-      worker.postMessage(message);
+    post: (message, transfer = []) => {
+      // Tests stand in for the display canvas with an ArrayBuffer.
+      worker.postMessage(
+        message,
+        transfer.filter((item) => item instanceof ArrayBuffer),
+      );
     },
     listen: (handler) => {
       worker.on("message", handler);

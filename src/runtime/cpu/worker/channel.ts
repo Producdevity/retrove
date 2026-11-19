@@ -89,10 +89,16 @@ const Word = {
   Result: 5,
   ResumePc: 6,
   Stop: 7,
+  /** Counts events the blocked worker must look at: answers and graphics requests. */
+  Signal: 8,
+  /** The thread's EAGL rendering API and current context, for GL calls it makes on its worker. */
+  Api: 9,
+  Context: 10,
 } as const;
-const CHANNEL_WORDS = 8;
-const Statistic = { Calls: 0, TotalMs: 1, MaxMs: 2 } as const;
-const STATISTICS = 3;
+// Even, so the statistics after the words stay 8-byte aligned.
+const CHANNEL_WORDS = 12;
+const Statistic = { Calls: 0, TotalMs: 1, MaxMs: 2, ExecuteMs: 3 } as const;
+const STATISTICS = 4;
 
 export interface ChannelRequest {
   readonly kind: RequestKind;
@@ -106,6 +112,8 @@ export interface HostCallStatistics {
   readonly calls: number;
   readonly totalMs: number;
   readonly maxMs: number;
+  /** Worker milliseconds spent running translated code. */
+  readonly executeMs: number;
 }
 
 /**
@@ -133,14 +141,21 @@ export class ThreadChannel {
     Atomics.store(words, Word.State, ChannelState.Request);
     this.control.ring();
   }
-  /** Worker side: publishes a request and blocks until the main thread answers. */
-  call(request: ChannelRequest): { readonly result: number; readonly pc: number } {
+  /**
+   * Worker side: publishes a request and blocks until the main thread answers, running `wake`
+   * whenever the main thread signals meanwhile.
+   */
+  call(
+    request: ChannelRequest,
+    wake?: () => void,
+  ): { readonly result: number; readonly pc: number } {
     const started = performance.now();
     this.post(request);
     for (;;) {
-      const state = Atomics.load(this.words, Word.State);
-      if (state === ChannelState.Response) break;
-      Atomics.wait(this.words, Word.State, state);
+      const signal = Atomics.load(this.words, Word.Signal);
+      if (Atomics.load(this.words, Word.State) === ChannelState.Response) break;
+      wake?.();
+      Atomics.wait(this.words, Word.Signal, signal);
     }
     const answer = this.answer();
     if (request.kind === RequestKind.HostCall) this.#record(performance.now() - started);
@@ -160,12 +175,18 @@ export class ThreadChannel {
     statistics[Statistic.TotalMs] = (statistics[Statistic.TotalMs] ?? 0) + milliseconds;
     statistics[Statistic.MaxMs] = Math.max(statistics[Statistic.MaxMs] ?? 0, milliseconds);
   }
+  /** Worker side. */
+  executed(milliseconds: number): void {
+    this.#statistics[Statistic.ExecuteMs] =
+      (this.#statistics[Statistic.ExecuteMs] ?? 0) + milliseconds;
+  }
   get statistics(): HostCallStatistics {
     const statistics = this.#statistics;
     return {
       calls: statistics[Statistic.Calls] ?? 0,
       totalMs: statistics[Statistic.TotalMs] ?? 0,
       maxMs: statistics[Statistic.MaxMs] ?? 0,
+      executeMs: statistics[Statistic.ExecuteMs] ?? 0,
     };
   }
   /** Main side: the waiting request, now marked taken, or undefined. */
@@ -192,7 +213,23 @@ export class ThreadChannel {
     words[Word.Result] = result;
     words[Word.ResumePc] = pc | 0;
     Atomics.store(words, Word.State, ChannelState.Response);
-    Atomics.notify(words, Word.State);
+    this.signal();
+  }
+  /** Wakes the worker if it is blocked in `call`. */
+  signal(): void {
+    Atomics.add(this.words, Word.Signal, 1);
+    Atomics.notify(this.words, Word.Signal);
+  }
+  /** The thread's EAGL rendering API and current context, as the main thread last saw them. */
+  get graphicsState(): { readonly api: number; readonly context: number } {
+    return {
+      api: Atomics.load(this.words, Word.Api),
+      context: Atomics.load(this.words, Word.Context) >>> 0,
+    };
+  }
+  setGraphicsState(api: number, context: number): void {
+    Atomics.store(this.words, Word.Api, api | 0);
+    Atomics.store(this.words, Word.Context, context | 0);
   }
   /** Asks the worker to stop at its next slice boundary. */
   stop(): void {

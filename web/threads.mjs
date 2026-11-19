@@ -253,6 +253,8 @@ export function threadImports(cpu, heap, returnAddress) {
   // thread's registers, exactly as a cooperative thread's would.
   let connected, servicing = false;
   async function serviceRemote() {
+    // The GL owner's heap requests come from inside one GL call; answer them even mid-service.
+    remote?.serviceGraphics();
     if (!remote || !connected || servicing) return;
     servicing = true;
     try {
