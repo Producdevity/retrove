@@ -8,6 +8,7 @@ declare const clients: {
   claim(): Promise<void>;
 };
 declare function skipWaiting(): Promise<void>;
+import { withIsolation } from "./isolation";
 import { navigationResponse, shellDocument } from "./navigation";
 declare const __RETROVE_ASSETS__: readonly string[];
 declare const __RETROVE_VERSION__: string;
@@ -56,7 +57,7 @@ async function respond(request: Request, pathname: string): Promise<Response> {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(pathname);
   if (!cached) return fetch(request);
-  return request.mode === "navigate" ? navigationResponse(cached) : cached;
+  return withIsolation(request.mode === "navigate" ? navigationResponse(cached) : cached);
 }
 globalThis.addEventListener("install", (event) => {
   if (isLifetimeEvent(event)) event.waitUntil(install());
@@ -76,7 +77,7 @@ globalThis.addEventListener("fetch", (event) => {
         for (const name of await caches.keys())
           if (name.startsWith(CACHE_PREFIX)) {
             const response = await (await caches.open(name)).match(pathname);
-            if (response) return response;
+            if (response) return withIsolation(response);
           }
         return fetch(event.request);
       })(),

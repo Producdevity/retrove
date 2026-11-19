@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { defineConfig } from "vite-plus";
 import { runtimeVendors } from "./src/build/runtime-vendor-plugin";
+import { ISOLATION_HEADERS } from "./src/pwa/isolation";
 import { offlineAssets } from "./src/build/offline-plugin";
 
 const DEVELOPMENT_PORT = 8088;
@@ -15,7 +16,13 @@ export default defineConfig({
     ),
   },
   plugins: [runtimeVendors(), offlineAssets()],
-  server: { host: "127.0.0.1", port: DEVELOPMENT_PORT, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: DEVELOPMENT_PORT,
+    strictPort: true,
+    headers: ISOLATION_HEADERS,
+  },
+  preview: { headers: ISOLATION_HEADERS },
   build: {
     rolldownOptions: {
       input: {

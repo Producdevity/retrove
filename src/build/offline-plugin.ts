@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import type { Plugin } from "vite-plus";
+import { headersFile } from "./headers-file";
 const STATIC_FILES = [
   "app.webmanifest",
   "icons/icon.svg",
@@ -64,8 +65,7 @@ export function offlineAssets(): Plugin {
         this.emitFile({
           type: "asset",
           fileName: "_headers",
-          source:
-            "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n/sw.js\n  Cache-Control: no-cache\n",
+          source: headersFile(),
         });
       },
     },

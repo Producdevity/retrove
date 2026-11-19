@@ -81,3 +81,24 @@ test("a failed install discards its incomplete cache and preserves the prior ver
   await expect(Promise.all(install.pending)).rejects.toThrow("Storage full");
   expect(state.deleted).toEqual(["retrove.shell:test-build"]);
 });
+test("cached shells and scripts carry isolation headers even when stored without them", async () => {
+  const state = await worker();
+  const install = new Lifetime("install");
+  state.handlers.get("install")?.(install);
+  await Promise.all(install.pending);
+  state.entries.set("/assets/old.js", new Response("script"));
+  const navigation = new Request("https://retrove.test/");
+  Object.defineProperty(navigation, "mode", { value: "navigate" });
+  const requests = [
+    navigation,
+    new Request("https://retrove.test/runtime/cpu.mjs"),
+    new Request("https://retrove.test/assets/old.js"),
+  ];
+  for (const request of requests) {
+    const event = new FetchRequest(request);
+    state.handlers.get("fetch")?.(event);
+    const response = await event.response;
+    expect(response?.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+    expect(response?.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+  }
+});
