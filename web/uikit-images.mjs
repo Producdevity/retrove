@@ -5,6 +5,7 @@ import {imageFile} from "../src/runtime/ios/uikit/image/files.ts";
 import {installImageInitializers} from "../src/runtime/ios/uikit/image/initializers.ts";
 import {capSlices,stretchableCaps} from "../src/runtime/ios/uikit/image/caps.ts";
 import {decodeCgBI} from './cgbi.mjs';
+import {PlacementCache} from "../src/runtime/ios/uikit/view/placement-cache.ts";
 
 const transforms = [
   [1,0,0,1,0,0], [-1,0,0,-1,1,1], [0,-1,1,0,0,1], [0,1,-1,0,1,0],
@@ -163,6 +164,14 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const top=[5,9,10].includes(mode)?0:[6,11,12].includes(mode)?1:0.5;
     return [x+(w-iw)*left,y+(h-ih)*top,iw,ih];
   }
+  const placements=new PlacementCache(), appliedStyles=new WeakMap();
+  // Writing an unchanged style still invalidates it; the compositor runs every event-loop turn.
+  function applyStyle(node,name,value) {
+    let applied=appliedStyles.get(node);
+    if(!applied)appliedStyles.set(node,applied={});
+    if(applied[name]===value)return;
+    applied[name]=value;node.style[name]=value;
+  }
   async function render(window) {
     if(!document)return;
     const shown=new Set(), root=window&&data(window);
@@ -171,6 +180,8 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     const hostBounds={width:mediaHost.offsetWidth,height:mediaHost.offsetHeight};
     const aspect=hostBounds.width&&hostBounds.height && w&&h ? (hostBounds.height/h)/(hostBounds.width/w) : 1;
     const now=performance.now();
+    const origin=toDisplay?.([0,0],window,window),unit=toDisplay?.([1,1],window,window);
+    const screenKey=screen?[...screen,aspect,origin?.[0]??0,origin?.[1]??0,unit?.[0]??0,unit?.[1]??0]:[];
     let order=1,glOrder=0;
     const placed=new Set();
     const active=t=>t&&now<t.start+(t.duration+t.delay)*1000?t:null;
@@ -198,14 +209,20 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
         const scale=state.contentScaleFactor?float(state.contentScaleFactor):1;
         const px=Math.max(1,Math.ceil(vw*scale)),py=Math.max(1,Math.ceil(vh*scale));
         if(node.width!==px||node.height!==py){node.width=px;node.height=py;state.needsDisplay=true;}
-        let matrix='';
+        let matrix='',clipPath;
         if(toDisplay) {
-          const p=toDisplay([bx,by],view,window),qx=toDisplay([bx+1,by],view,window),qy=toDisplay([bx,by+1],view,window);
-          x=p[0]-screen[0];y=p[1]-screen[1];
-          matrix='matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')';
-        }
-        const transition=[...transitions(['opacity'],opacityTiming),...transitions(['transform','width','height','left','top'],layoutTiming)].join(',');
-        Object.assign(node.style,{clipPath:clip?.(view)??'none',transition,left:100*x/w+'%',top:100*y/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha*(state.imageAdjustment?.opacity??1)),filter:state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'',zIndex:String(z)});
+          const compute=()=>{
+            const p=toDisplay([bx,by],view,window),qx=toDisplay([bx+1,by],view,window),qy=toDisplay([bx,by+1],view,window);
+            return {x:p[0]-screen[0],y:p[1]-screen[1],matrix:'matrix('+[qx[0]-p[0],(qx[1]-p[1])*aspect,(qy[0]-p[0])/aspect,qy[1]-p[1],0,0].join(',')+')',clipPath:clip?.(view)??'none'};
+          };
+          const placed=opacityTiming||layoutTiming?compute():placements.get(view,data,screenKey,compute);
+          ({x,y,matrix,clipPath}=placed);
+        } else clipPath=clip?.(view)??'none';
+        const transition=opacityTiming||layoutTiming?[...transitions(['opacity'],opacityTiming),...transitions(['transform','width','height','left','top'],layoutTiming)].join(','):'';
+        applyStyle(node,'clipPath',clipPath);applyStyle(node,'transition',transition);
+        applyStyle(node,'left',100*x/w+'%');applyStyle(node,'top',100*y/h+'%');applyStyle(node,'width',100*vw/w+'%');applyStyle(node,'height',100*vh/h+'%');
+        applyStyle(node,'transform',matrix);applyStyle(node,'opacity',String(alpha*(state.imageAdjustment?.opacity??1)));
+        applyStyle(node,'filter',state.imageAdjustment?'brightness('+state.imageAdjustment.brightness+')':'');applyStyle(node,'zIndex',String(z));
         if(state.needsDisplay) {
           state.needsDisplay=false;
           const ctx=node.getContext('2d');
@@ -254,9 +271,9 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
     }
     const graphics=mediaHost.querySelector('canvas[data-graphics]');
     if(graphics)graphics.style.zIndex=glOrder?String(glOrder):'';
-    for(const [view,node] of nodes)if(!shown.has(view)){node.remove();nodes.delete(view);}
+    for(const [view,node] of nodes)if(!shown.has(view)){node.remove();nodes.delete(view);placements.forget(view);}
   }
-  function close() {for(const n of nodes.values())n.remove();nodes.clear();images.clear();}
-  function removeView(view) {nodes.get(view)?.remove();nodes.delete(view);}
+  function close() {for(const n of nodes.values())n.remove();nodes.clear();images.clear();placements.clear();}
+  function removeView(view) {nodes.get(view)?.remove();nodes.delete(view);placements.forget(view);}
   return {render,close,removeView,size:p=>[images.get(p)?.width??0,images.get(p)?.height??0],drawImage:(p,ctx,x,y,width,height)=>draw(images.get(p),ctx,x,y,width,height)};
 }
