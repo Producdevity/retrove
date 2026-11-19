@@ -65,8 +65,10 @@ export class GuestState {
       bytes = new Uint8Array(this.view().buffer, base, STATE_SPAN).slice();
     return { bytes, pc: this.pc, cpsrBase: this.#cpsrBase };
   }
+  /** A thread switch clears the exclusive monitor, as the kernel does with CLREX. */
   restore(saved: SavedState): void {
     new Uint8Array(this.view().buffer, this.layout().registers, STATE_SPAN).set(saved.bytes);
+    this.view().setUint32(this.layout().exclusiveAddress, 0, true);
     this.pc = saved.pc;
     this.#cpsrBase = saved.cpsrBase;
   }

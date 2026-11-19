@@ -9,6 +9,7 @@ export class TierJobs {
   constructor(
     private readonly layout: () => StateLayout,
     private readonly executable: () => Executable | undefined,
+    private readonly shared: boolean,
   ) {}
   build(
     functions: readonly FunctionRange[],
@@ -26,6 +27,7 @@ export class TierJobs {
       stopPC: STOP_PC,
       code: pages.length ? undefined : code,
       cacheKey,
+      shared: this.shared,
     });
   }
 }

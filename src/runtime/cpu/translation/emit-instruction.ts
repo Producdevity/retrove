@@ -15,11 +15,12 @@ import {
   emitMultiplyHigh,
   emitReverse,
 } from "./emit-integer";
-import { emitExclusive, emitMemory, emitMultiple, emitPair, emitTable } from "./emit-memory";
+import { emitExclusive, emitSync } from "./emit-exclusive";
+import { emitMemory, emitMultiple, emitPair, emitTable } from "./emit-memory";
 import { emitUnsupported } from "./emit-state";
 import { emitVector } from "./emit-vector";
 import type { Emitter } from "./emitter";
-import { Condition, Register, type Instruction } from "./instruction";
+import { Condition, Register, nop, type Instruction } from "./instruction";
 import { lanesOf } from "./lanes";
 import { Op } from "./wasm-opcodes";
 import { stateOffset } from "./layout";
@@ -121,6 +122,8 @@ function emitControl(e: Emitter, pc: number, i: Instruction, current: number): v
       return emitTable(e, pc, i);
     case "exclusive":
       return emitExclusive(e, pc, i);
+    case "sync":
+      return e.input.shared ? emitSync(e, i) : emitData(e, pc, nop());
     case "mull":
       return emitLongMultiply(e, pc, i);
     case "pair":

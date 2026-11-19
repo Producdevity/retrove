@@ -23,6 +23,12 @@ export interface StateLayout {
   readonly missingLabel: number;
   /** Nested calls between translated functions on the current Wasm stack. */
   readonly depth: number;
+  /**
+   * Exclusive monitor of shared-memory modules: host address LDREX read (0 when clear) and the
+   * value it read (i64 for LDREXD), which STREX compares and swaps against.
+   */
+  readonly exclusiveAddress: number;
+  readonly exclusiveValue: number;
   readonly vfp: number;
   readonly scratch: number;
   /** Host address of guest address 0. */
@@ -49,6 +55,8 @@ const Offset = {
   LogLimit: 132,
   MissingLabel: 136,
   Depth: 140,
+  ExclusiveAddress: 144,
+  ExclusiveValue: 152,
   Vfp: 256,
   Scratch: 512,
 } as const;
@@ -111,6 +119,8 @@ const ADDRESS_FIELDS = [
   "logLimit",
   "missingLabel",
   "depth",
+  "exclusiveAddress",
+  "exclusiveValue",
   "vfp",
   "scratch",
 ] as const satisfies readonly (keyof StateLayout)[];
@@ -147,6 +157,8 @@ export function stateLayout(
     logLimit: base + Offset.LogLimit,
     missingLabel: base + Offset.MissingLabel,
     depth: base + Offset.Depth,
+    exclusiveAddress: base + Offset.ExclusiveAddress,
+    exclusiveValue: base + Offset.ExclusiveValue,
     vfp: base + Offset.Vfp,
     scratch: base + Offset.Scratch,
     arena: memory.arena,

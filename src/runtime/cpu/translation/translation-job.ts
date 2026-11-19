@@ -24,6 +24,8 @@ export interface TranslationJob {
   readonly pages: readonly CodeSnapshot[];
   /** Slot for this job's module in the worker's cache; replayed batches reuse their slot every launch. */
   readonly cacheKey: string | undefined;
+  /** Emit for a shared memory (atomic exclusives, shared memory import); see `module`. */
+  readonly shared: boolean;
 }
 export interface JobResult {
   readonly translation: Translation;
@@ -79,6 +81,7 @@ export function runJob(
     entries: job.entries,
     stopPC: job.stopPC,
     layout: job.layout,
+    shared: job.shared,
     labelAddress: (range) => {
       const address = job.labels.get(range.start);
       if (address === undefined) throw new Error("Missing label table for a translated function.");

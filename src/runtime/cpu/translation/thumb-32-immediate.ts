@@ -1,3 +1,4 @@
+import { decodeThumbSync } from "./decode-exclusive";
 import { WordBits, align4, bit, field, flag, ror, signBit, signExtend } from "./bits";
 import { DataOp, Register, nop, unsupported, type Instruction, type Operand } from "./instruction";
 import { ThumbPipeline, data, immediate, wideData } from "./thumb-shared";
@@ -134,9 +135,10 @@ export function decodeThumbBranch(h1: number, h2: number, pc: number, cond: numb
   if (!flag(h2, Bit.Branch) && !flag(h2, Bit.Link)) {
     const c = field(h1, Field.Condition);
     if (c >= Branch.Reserved)
-      return (h1 & Branch.HintMask) === Branch.Hint || h1 === Branch.Nop
-        ? nop()
-        : unsupported(cond);
+      return (
+        decodeThumbSync(h1, h2) ??
+        ((h1 & Branch.HintMask) === Branch.Hint || h1 === Branch.Nop ? nop() : unsupported(cond))
+      );
     const offset = signExtend(
       (s << Branch.ConditionalS) |
         (j2 << Branch.ConditionalJ2) |

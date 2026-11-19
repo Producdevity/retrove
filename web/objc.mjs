@@ -82,6 +82,7 @@ import {LocaleSymbols} from '../src/runtime/ios/foundation/locale-components.ts'
 import {installMovieViewControllers} from '../src/runtime/ios/media/movie-view-controller.ts';
 import { eaglDrawable } from './drawable.mjs';
 import { read32, readString, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
+import { compareExchange32, store32 } from '../src/runtime/memory/guest-atomics.ts';
 
 const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder() };
@@ -618,6 +619,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});
   installStringSearch({text,write,structureMethod:(selector,implementation)=>{implementation.stret=true;method('NSString',false,selector,implementation);}},characterSets);
   installLocks({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,read,send,
+    compareExchange:(p,expected,value)=>compareExchange32(cpu,p,expected,value),store:(p,value)=>store32(cpu,p,value),
     currentThread:()=>threads?.funcs._pthread_self()??1,waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});
   let runLoopSources;
   const ports=installPorts({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,hasPendingSource:(loop,mode)=>scheduler.hasThreadSource(threads?.funcs._pthread_self()??1,mode)||!!runLoopSources?.signaled(loop,mode),hasRunLoopSource:(loop,mode)=>!!runLoopSources?.has(loop,mode),pollSources:async(loop,mode)=>{const delivered=await scheduler.pollThread(threads?.funcs._pthread_self()??1,mode);const connected=await foundationObjects.pollConnections(loop,mode);return (await runLoopSources?.perform(loop,mode))||connected||delivered;},waitMethod:(cls,name,fn)=>method(cls,false,name,fn)});

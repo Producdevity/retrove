@@ -125,24 +125,6 @@ export function emitPair(e: Emitter, pc: number, i: InstructionOf<"pair">): void
   if (i.writeback) c.get(updated).set(e.register(i.rn));
 }
 
-/** LDREX/STREX on a single core: the store always succeeds. */
-export function emitExclusive(e: Emitter, pc: number, i: InstructionOf<"exclusive">): void {
-  const { c } = e;
-  if (i.rt === Register.PC || i.rn === Register.PC || i.rd === Register.PC)
-    return emitUnsupported(e, pc);
-  reg(e, i.rn, pc);
-  c.i32(i.offset).op(Op.I32Add);
-  host(e);
-  if (i.load) {
-    guest(e, Op.I32Load);
-    c.set(e.register(i.rt));
-  } else {
-    reg(e, i.rt, pc);
-    guest(e, Op.I32Store);
-    c.i32(0).set(e.register(i.rd));
-  }
-}
-
 /** TBB/TBH: loads the halfword count and dispatches to the target. */
 export function emitTable(e: Emitter, pc: number, i: InstructionOf<"table">): void {
   const { c } = e,

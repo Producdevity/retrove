@@ -1,4 +1,5 @@
 import {move, read32, write32} from '../src/runtime/memory/guest-memory.ts';
+import {compareExchange32, store32} from '../src/runtime/memory/guest-atomics.ts';
 
 const ON_HEAP=1<<24, HELPERS=1<<25, GLOBAL=1<<28, COUNT=65535;
 
@@ -108,15 +109,16 @@ export function dispatchImports(cpu,heap,threads,nested,objc,hostGate) {
     __Block_object_dispose:a=>field(a(0),a(1),true),
     _dispatch_once:async a=>{
       const at=a(0),block=a(1);
-      if(read(at)===0xffffffff) return;
-      if(read(at)) return {wait:()=>read(at)===0xffffffff?0:undefined};
-      write(at,1);
+      // Guest code tests the predicate inline, so claiming and publishing it must be atomic.
+      const claimed=compareExchange32(cpu,at,0,1);
+      if(claimed===0xffffffff) return;
+      if(claimed) return {wait:()=>read(at)===0xffffffff?0:undefined};
       if(hostGate) {
-        onceReturn ||= continuation('dispatch_once block return',token=>write(token,0xffffffff));
+        onceReturn ||= continuation('dispatch_once block return',token=>store32(cpu,token,0xffffffff));
         return invokeOnCaller(block,at,onceReturn);
       }
-      try { await invoke(block); write(at,0xffffffff); }
-      catch(err){write(at,0);throw err;}
+      try { await invoke(block); store32(cpu,at,0xffffffff); }
+      catch(err){store32(cpu,at,0);throw err;}
     },
     _dispatch_get_global_queue:a=>a(1)?0:queues.get(a(0)|0)??0,
     _dispatch_get_current_queue:()=>current.get(caller())??(threads.funcs._pthread_main_np()?main:queues.get(0)),

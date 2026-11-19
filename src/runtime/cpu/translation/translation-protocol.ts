@@ -49,6 +49,7 @@ export function isTranslationRequest(value: unknown): value is TranslationReques
     (value.type === TranslationMessage.Translate || value.type === TranslationMessage.Prepare) &&
     typeof value.id === "number" &&
     record(value.job) &&
+    typeof value.job.shared === "boolean" &&
     Array.isArray(value.job.functions) &&
     value.job.labels instanceof Map
   );

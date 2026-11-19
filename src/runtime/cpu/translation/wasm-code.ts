@@ -1,5 +1,12 @@
 import { Bytes } from "./wasm-bytes";
-import { BlockType, Op, SaturatingPrefix, type ValueType } from "./wasm-opcodes";
+import {
+  Atomic,
+  AtomicPrefix,
+  BlockType,
+  Op,
+  SaturatingPrefix,
+  type ValueType,
+} from "./wasm-opcodes";
 
 /**
  * Translated modules import the arena base, the host address of their own label block and the
@@ -72,6 +79,17 @@ export class Code {
 
   memory(opcode: number, offset = 0): this {
     this.body.byte(opcode).unsigned(0).unsigned(offset);
+    return this;
+  }
+
+  /** Atomic access whose memarg alignment is log2 of its access size, as validation requires. */
+  atomic(opcode: number, alignment: number, offset = 0): this {
+    this.body.byte(AtomicPrefix).unsigned(opcode).unsigned(alignment).unsigned(offset);
+    return this;
+  }
+
+  fence(): this {
+    this.body.byte(AtomicPrefix).unsigned(Atomic.Fence).byte(0);
     return this;
   }
 

@@ -1,5 +1,6 @@
 import { field, flag, registerList, ror, signBit } from "./bits";
 import { decodeMedia } from "./decode-arm-media";
+import { decodeArmExclusive } from "./decode-exclusive";
 import { ArmBit, ArmField } from "./decode-fields";
 import { decodeUnconditional } from "./decode-neon";
 import { decodeVfpData, decodeVfpTransfer } from "./decode-vfp";
@@ -27,10 +28,6 @@ const Encoding = {
   Clz: 0x016f0f10,
   HintMask: 0x0fffff00,
   Hint: 0x0320f000,
-  LoadExclusiveMask: 0x0ff00fff,
-  LoadExclusive: 0x01900f9f,
-  StoreExclusiveMask: 0x0ff00ff0,
-  StoreExclusive: 0x01800f90,
 } as const;
 const Group = {
   Register: 0b000,
@@ -171,10 +168,8 @@ function decodeMultiply(w: number, cond: number): Instruction {
     ra = field(w, ArmField.Rd),
     rm = field(w, ArmField.Rs),
     rn = field(w, ArmField.Rm);
-  if ((w & Encoding.LoadExclusiveMask) === Encoding.LoadExclusive)
-    return { cond, kind: "exclusive", load: true, rn: rd, rt: ra, rd: 0, offset: 0 };
-  if ((w & Encoding.StoreExclusiveMask) === Encoding.StoreExclusive)
-    return { cond, kind: "exclusive", load: false, rn: rd, rt: rn, rd: ra, offset: 0 };
+  const exclusive = decodeArmExclusive(w, cond);
+  if (exclusive) return exclusive;
   if (field(w, ArmField.Top) !== 0) return unsupported(cond);
   const group = op >> 1,
     s = (op & 1) === 1;

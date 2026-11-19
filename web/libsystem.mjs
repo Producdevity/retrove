@@ -4,6 +4,7 @@ import {networkImports} from './network.mjs';
 import {calendarImports} from './calendar.mjs';
 import {darwinAlgorithms} from './darwin-algorithms.mjs';
 import {fill, move, read32, readCStringBytes, readString, write32} from '../src/runtime/memory/guest-memory.ts';
+import {add32, compareExchange32} from '../src/runtime/memory/guest-atomics.ts';
 import {defaultRuneLocale, stringImports} from './strings.mjs';
 import {guestZlibStreams} from './guest-zlib.mjs';
 import {formatImports} from './format.mjs';
@@ -40,11 +41,7 @@ export function systemImports(cpu, heap, ipa, log, threadID = () => 1, diagnosti
   data.set('__DefaultRuneLocale', defaultRuneLocale(cpu, heap));
   const double = new DataView(new ArrayBuffer(8));
   const absoluteTime = () => BigInt(Math.floor(performance.now() * 1e6));
-  const compareSwap = a => {
-    if (read32(cpu, a(2)) !== a(0)) return 0;
-    write32(cpu, a(2), a(1));
-    return 1;
-  };
+  const compareSwap = a => Number(compareExchange32(cpu, a(2), a(0), a(1)) === a(0) >>> 0);
   // The guest environment starts in the portable C locale.
   const cLocale = heap.string('C');
   const decimalPoint = heap.string('.');
@@ -146,11 +143,7 @@ export function systemImports(cpu, heap, ipa, log, threadID = () => 1, diagnosti
       const locale = readString(cpu, a(1));
       return locale === '' || locale === 'C' || locale === 'POSIX' ? cLocale : 0;
     },
-    _OSAtomicAdd32Barrier: a => {
-      const value = (read32(cpu, a(1)) + a(0)) >>> 0;
-      write32(cpu, a(1), value);
-      return value;
-    },
+    _OSAtomicAdd32Barrier: a => add32(cpu, a(1), a(0)),
     _OSAtomicCompareAndSwap32Barrier: compareSwap,
     _OSAtomicCompareAndSwapPtrBarrier: compareSwap,
     _time: a => {

@@ -123,7 +123,7 @@ export function translate(input: TranslationInput): Translation {
     { params: stateTypes(), results: [] },
     { params: [], results: stateTypes() },
   ];
-  const wasm = module({ types, functions: bodies });
+  const wasm = module({ types, functions: bodies, shared: input.shared });
   return {
     wasm,
     functions: translated,

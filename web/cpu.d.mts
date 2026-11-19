@@ -11,6 +11,12 @@ export interface GuestCPU {
   write(address: number, bytes: Uint8Array): void;
   read(address: number, size: number): Uint8Array;
   read32(address: number): number;
+  /** The own CPU's guest memory is a shared WebAssembly.Memory. */
+  readonly sharedMemory?: boolean;
+  /** Atomic guest words (see guest-atomics.ts); absent on CPUs that run one thread at a time. */
+  compareExchange32?(address: number, expected: number, replacement: number): number;
+  add32?(address: number, delta: number): number;
+  store32?(address: number, value: number): void;
   getReg(index: number): number;
   setReg(index: number, value: number): void;
   run(address: number, options?: { until?: number; count?: number }): {

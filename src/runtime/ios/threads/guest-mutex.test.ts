@@ -1,10 +1,21 @@
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createCPU } from "../../../../web/cpu.mjs";
 import { ExecutionBudget } from "../../cpu/execution-budget";
+import { ownCpuObject } from "../../cpu/own/own-cpu-object";
+import { compareExchange32, store32 } from "../../memory/guest-atomics";
+import { read32, write32 } from "../../memory/guest-memory";
 import { guestMutexFunctions } from "./guest-mutex";
 import { GuestMutexes, MutexLayout, MutexType, StaticMutex } from "./mutex";
-async function fixture() {
-  const cpu = await createCPU({ budget: ExecutionBudget.Blocks });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+/** The own CPU over a shared memory, as on a cross-origin isolated page. */
+function sharedOwnCpu() {
+  vi.stubGlobal("crossOriginIsolated", true);
+  return ownCpuObject(ExecutionBudget.Blocks, {});
+}
+async function fixture(shared = false) {
+  const cpu = shared ? sharedOwnCpu() : await createCPU({ budget: ExecutionBudget.Blocks });
   const code = 0x1000,
     data = 0x8000,
     fallback = 0x4000,
@@ -12,12 +23,11 @@ async function fixture() {
     tls = 0x8800;
   for (const address of [code, data, fallback, done]) cpu.map(address, 4096);
   const memory = {
-    read: (address: number) => new DataView(cpu.read(address, 4).buffer).getUint32(0, true),
-    write: (address: number, value: number) => {
-      const bytes = new Uint8Array(4);
-      new DataView(bytes.buffer).setUint32(0, value, true);
-      cpu.write(address, bytes);
-    },
+    read: (address: number) => read32(cpu, address),
+    write: (address: number, value: number) => write32(cpu, address, value),
+    store: (address: number, value: number) => store32(cpu, address, value),
+    compareExchange: (address: number, expected: number, replacement: number) =>
+      compareExchange32(cpu, address, expected, replacement),
   };
   const mutexes = new GuestMutexes(memory);
   const helpers = guestMutexFunctions(
@@ -142,6 +152,26 @@ test("a competing owner cannot be overwritten when the ARM helper resumes", asyn
         expect(result.reason).toBe(operation === "_pthread_mutex_lock" ? "trap" : "until");
         expect(f.mutexes.unlock(f.data, 2)).toBe(0);
       }
+  } finally {
+    f.close();
+  }
+});
+test("the ARM helper takes, nests and releases ownership on a shared own CPU", async () => {
+  const f = await fixture(true);
+  try {
+    expect(f.cpu.sharedMemory).toBe(true);
+    f.mutexes.initialize(f.data, MutexType.Recursive);
+    expect(f.call("_pthread_mutex_lock", 1)).toMatchObject({ reason: "until", value: 0 });
+    expect(f.call("_pthread_mutex_lock", 1)).toMatchObject({ reason: "until", value: 0 });
+    expect(f.memory.read(f.data + MutexLayout.Depth)).toBe(2);
+    expect(f.call("_pthread_mutex_lock", 2).reason).toBe("trap");
+    expect(f.mutexes.take(f.data, 2)).toBeUndefined();
+    expect(f.call("_pthread_mutex_unlock", 1).reason).toBe("until");
+    expect(f.call("_pthread_mutex_unlock", 1).reason).toBe("until");
+    expect(f.memory.read(f.data + MutexLayout.Owner)).toBe(0);
+    expect(f.mutexes.take(f.data, 2)).toBe(0);
+    expect(f.call("_pthread_mutex_lock", 1).reason).toBe("trap");
+    expect(f.mutexes.unlock(f.data, 2)).toBe(0);
   } finally {
     f.close();
   }

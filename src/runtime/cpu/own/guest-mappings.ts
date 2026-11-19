@@ -5,6 +5,13 @@ const ADDRESS_SPACE = 0x1_0000_0000;
 const EXECUTE = 4;
 const ALL_PERMISSIONS = 7;
 const WORD_BYTES = 4;
+const WORD_ALIGNMENT = WORD_BYTES - 1;
+/** Atomic guest word operations; values are unsigned 32-bit and `old` values are returned. */
+export interface GuestAtomics {
+  compareExchange32(address: number, expected: number, replacement: number): number;
+  add32(address: number, delta: number): number;
+  store32(address: number, value: number): void;
+}
 
 /** Validates a guest address and the range after it; returns the address. */
 export function guestRange(address: number, size: number, aligned = false): number {
@@ -21,7 +28,7 @@ export function guestRange(address: number, size: number, aligned = false): numb
  * Guest mappings straight in the translated tier's arena. Writes to pages that may hold code drop
  * their translations; data pages skip that check.
  */
-export class GuestMappings {
+export class GuestMappings implements GuestAtomics {
   mappedBytes = 0;
   mappedPeak = 0;
   readonly #dataPages = new Uint8Array(ADDRESS_SPACE / PAGE_BYTES);
@@ -75,6 +82,27 @@ export class GuestMappings {
     if (!this.tier.pages.read(address, bytes))
       throw new Error("Guest memory read failed: Invalid memory read (unmapped)");
     return bytes;
+  }
+  /** Runs an `Atomics` operation on an aligned guest word, so it holds against other guest threads. */
+  #atomic(address: number, operation: (words: Int32Array, index: number) => number): number {
+    guestRange(address, WORD_BYTES);
+    if (address & WORD_ALIGNMENT) throw new RangeError("Atomic guest words must be aligned");
+    const host = this.tier.pages.host(address);
+    if (host < 0) throw new Error("Guest memory write failed: Invalid memory write (unmapped)");
+    const old = operation(this.tier.pages.words, host / WORD_BYTES) >>> 0;
+    if (!this.#dataOnly(address, WORD_BYTES)) this.tier.invalidate(address, WORD_BYTES);
+    return old;
+  }
+  compareExchange32(address: number, expected: number, replacement: number): number {
+    return this.#atomic(address, (words, index) =>
+      Atomics.compareExchange(words, index, expected | 0, replacement | 0),
+    );
+  }
+  add32(address: number, delta: number): number {
+    return this.#atomic(address, (words, index) => Atomics.add(words, index, delta | 0));
+  }
+  store32(address: number, value: number): void {
+    this.#atomic(address, (words, index) => Atomics.store(words, index, value | 0));
   }
   read32(address: number): number {
     const word = this.tier.pages.word(guestRange(address, WORD_BYTES));

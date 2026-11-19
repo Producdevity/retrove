@@ -1,13 +1,10 @@
 import { bit, field, flag } from "./bits";
 import { ArmBit, ArmField, vfpRegister } from "./decode-fields";
 import { decodeSimdData } from "./decode-neon-data";
-import { Condition, nop, unsupported, type Instruction } from "./instruction";
+import { decodeArmSync } from "./decode-exclusive";
+import { Condition, unsupported, type Instruction } from "./instruction";
 
 const Encoding = {
-  BarrierMask: 0xfffffff0,
-  DataSync: 0xf57ff040,
-  DataMemory: 0xf57ff050,
-  InstructionSync: 0xf57ff060,
   MultipleMask: 0xff100000,
   Multiple: 0xf4000000,
   LaneMask: 0xff900000,
@@ -50,13 +47,8 @@ const masked = (w: number, mask: number): number => (w & mask) >>> 0;
 /** Unconditional space: barriers, BLX immediate and Advanced SIMD. */
 export function decodeUnconditional(w: number, pc = 0): Instruction {
   const cond = Condition.Unconditional;
-  const barrier = masked(w, Encoding.BarrierMask);
-  if (
-    barrier === Encoding.DataMemory ||
-    barrier === Encoding.DataSync ||
-    barrier === Encoding.InstructionSync
-  )
-    return nop();
+  const barrier = decodeArmSync(w);
+  if (barrier) return barrier;
   const registers: SimdRegisters = {
     d: vfpRegister(field(w, ArmField.Rd), bit(w, ArmBit.Double), true),
     n: vfpRegister(field(w, ArmField.Rn), bit(w, ArmBit.N), true),
