@@ -5,6 +5,7 @@ const finished = MovieNotification.PlaybackFinished;
 const reasonKey = MovieUserInfo.FinishReason;
 const floatBits = new DataView(new ArrayBuffer(8));
 const MOVIE_CONTROL_MODE_HIDDEN = 2, MOVIE_CONTROL_STYLE_FULLSCREEN = 2, FULLSCREEN_LAYER = 10000;
+const FINISH_USER_EXITED = 2;
 
 export function moviePlayers({hostClass, method, names, alloc, destroy, retain, release, string, text, send,
   ipa, mediaHost, diagnostic, needsMovieResume = () => {}}) {
@@ -48,14 +49,19 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     const video = mediaHost.ownerDocument.createElement('video');
     s.video = video;
     video.playsInline = true; video.preload = 'auto'; video.loop = !!s.repeat;
-    video.playbackRate = s.rate; video.controls = !!s.controls;
+    video.playbackRate = s.rate; video.controls = false;
     video.style.objectFit = ['none','contain','cover','fill'][s.scaling] ?? 'contain';
     const finish = reason => { if (s.video === video && !s.reported) s.reason = reason; };
     s.playback = new MoviePlayback(video, mediaHost.ownerDocument, {
+      // Safari plays sound only after a tap: start muted and unmute on the next tap anywhere.
       needsResume: needed => {
-        if (needed) {
-          video.controls = true;
-          diagnostic('info', 'movie', 'Tap the video play control to start playback');
+        if (needed && !video.muted) {
+          video.muted = true;
+          diagnostic('info', 'movie', 'Playing muted until the next tap');
+          const unmute = () => { if (s.video === video) video.muted = false; };
+          mediaHost.ownerDocument.addEventListener('pointerdown', unmute, {once: true, capture: true});
+          s.playback?.play();
+          return;
         }
         setResume(s, needed);
       },
@@ -68,6 +74,11 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     for(const name of ['loadedmetadata','loadeddata','canplay','canplaythrough','playing'])video.addEventListener(name,()=>updateLoad());
     for(const name of ['waiting','stalled'])video.addEventListener(name,()=>updateLoad(true));
     video.addEventListener('ended', () => finish(0));
+    // Like the Done button of iOS movie controls: a tap on a full-screen movie with controls ends it.
+    video.addEventListener('pointerdown', event => {
+      if (s.video !== video || !s.controls || 'placed' in video.dataset) return;
+      event.stopPropagation(); s.playback?.pause(); finish(FINISH_USER_EXITED);
+    });
     // A game that drops the player's view without stopping it must not keep asking for a tap.
     video.addEventListener(MOVIE_OFFSCREEN_EVENT, () => { if (s.video === video) s.playback?.pause(); });
     video.addEventListener(MOVIE_ONSCREEN_EVENT, () => { if (s.video === video) autoplay(s); });
@@ -98,13 +109,14 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     s.autoplayed = true; s.prepared = true;
     if (s.video.src) playElement(s); else s.wantsPlay = true;
   }
-  // A full-screen movie covers the screen in its own window instead of drawing in its view.
+  // A full-screen movie covers the screen in its own window, unless its view is on screen: iOS
+  // ignores full screen for a view in a window, which games use for menu backgrounds.
   function showFullscreen(s) {
     const video = s.video;
-    if (!video) return;
+    if (!video || ('placed' in video.dataset && video.style.display !== 'none')) return;
     if (s.fullscreen) {
       Object.assign(video.style, {display:'', position:'absolute', left:'0', top:'0', width:'100%', height:'100%',
-        transform:'', clipPath:'none', opacity:'1', zIndex:String(FULLSCREEN_LAYER)});
+        transform:'', clipPath:'none', opacity:'1', zIndex:String(FULLSCREEN_LAYER), pointerEvents:s.controls ? 'auto' : 'none'});
       delete video.dataset.placed;
       autoplay(s);
     } else if (!('placed' in video.dataset)) video.style.display = 'none';
@@ -137,7 +149,6 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       const s = state(self); s[field] = a(0);
       if (!s.video) return;
       if (field === 'repeat') s.video.loop = !!s.repeat;
-      if (field === 'controls') s.video.controls = !!s.controls;
       if (field === 'scaling') s.video.style.objectFit = ['none','contain','cover','fill'][s.scaling] ?? 'contain';
       if (field === 'fullscreen') showFullscreen(s);
     });
@@ -179,7 +190,7 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
     destroy(self);
   });
   return {
-    videoForView: view => [...players.values()].find(player => player.view === view && !player.fullscreen)?.video,
+    videoForView: view => [...players.values()].find(player => player.view === view)?.video,
     async pump() {
       if (delivering) return;
       delivering = true;

@@ -236,7 +236,7 @@ export function uiImages({hostClass,method,names,alloc,destroy,autorelease,retai
         }
         const appeared=!('placed' in video.dataset)||video.style.display==='none';
         placed.add(video);video.dataset.placed='';
-        Object.assign(video.style,{display:'',position:'absolute',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
+        Object.assign(video.style,{display:'',position:'absolute',pointerEvents:'none',transformOrigin:'0 0',clipPath:clip?.(view)??'none',left:100*vx/w+'%',top:100*vy/h+'%',width:100*vw/w+'%',height:100*vh/h+'%',transform:matrix,opacity:String(alpha),zIndex:String(order++)});
         if(appeared)video.dispatchEvent(new Event(MOVIE_ONSCREEN_EVENT));
       }
       // GL content sits in the view order at its EAGL layer, so views behind it stay behind the game.
