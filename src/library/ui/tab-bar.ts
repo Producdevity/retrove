@@ -100,6 +100,8 @@ export class TabBar {
     this.x.target = this.localX(event);
     this.selection.classList.add("lifted");
     this.start();
+    // A finger that slides off the bar still releases on it.
+    this.nav.setPointerCapture(event.pointerId);
   };
   private readonly move = (event: PointerEvent): void => {
     const press = this.press;
@@ -115,7 +117,9 @@ export class TabBar {
     this.releasing = true;
     const target = event.type === "pointercancel" ? this.index : this.nearest(this.localX(event));
     this.x.target = this.center(target);
-    if (press.dragging) {
+    // The release itself switches pages: iOS drops the click of a tap that moved slightly,
+    // which left the selection on the new tab while the old page stayed.
+    if (event.type !== "pointercancel") {
       this.suppressUntil = performance.now() + CLICK_SUPPRESSION_MS;
       this.buttons[target]?.click();
     }
