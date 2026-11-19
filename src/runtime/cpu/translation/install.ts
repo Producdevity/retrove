@@ -1,5 +1,6 @@
 import type { Translation } from "./translate";
 import type { TierStatistics } from "./tier-statistics";
+import { wasmLifetimes } from "../../diagnostics/wasm-lifetimes";
 
 export const i32Global = (value: number): WebAssembly.Global =>
   new WebAssembly.Global({ value: "i32", mutable: false }, value);
@@ -31,6 +32,7 @@ export async function instantiateTranslation(
   const { module, instance } = await WebAssembly.instantiate(translation.wasm, { env: imports });
   statistics.compileMs += performance.now() - compiled;
   statistics.wasmBytes += translation.wasm.length;
+  wasmLifetimes.track(instance, translation.wasm.length);
   return { module, exports: instance.exports };
 }
 /** Compiles and instantiates on the calling thread, for code that must run before a worker could answer. */
@@ -44,6 +46,7 @@ export function instantiateTranslationNow(
   const instance = new WebAssembly.Instance(module, { env: imports });
   statistics.compileMs += performance.now() - compiled;
   statistics.wasmBytes += translation.wasm.length;
+  wasmLifetimes.track(instance, translation.wasm.length);
   return { module, exports: instance.exports };
 }
 /** Adds the module's functions to the shared table and writes their label tables; returns table slots. */

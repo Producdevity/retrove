@@ -15,6 +15,12 @@ export const Gauge = {
   GpuRenderbufferBytes: "gpuRenderbufferBytes",
   FileCacheBytes: "fileCacheBytes",
   GuestThreads: "guestThreads",
+  WasmInstancesCompiled: "wasmInstancesCompiled",
+  WasmInstancesLive: "wasmInstancesLive",
+  WasmBytesCompiled: "wasmBytesCompiled",
+  WasmBytesLive: "wasmBytesLive",
+  BundleReads: "bundleReads",
+  BundleReadBytes: "bundleReadBytes",
 } as const;
 export type Gauge = (typeof Gauge)[keyof typeof Gauge];
 

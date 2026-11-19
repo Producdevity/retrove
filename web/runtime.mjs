@@ -10,6 +10,7 @@ import {ExecutionMetrics, ExecutionMetricLimit} from '../src/runtime/diagnostics
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {FrameMetrics} from '../src/runtime/diagnostics/frame-metrics.ts';
 import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
+import {MemoryTimeline} from '../src/runtime/diagnostics/memory-timeline.ts';
 import {GraphicsMetrics, GraphicsMetricOperation} from '../src/runtime/diagnostics/graphics-metrics.ts';
 import {compressionImports} from './compression.mjs';
 import {guestStack} from './backtrace.mjs';
@@ -61,6 +62,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   const importMetrics = new ImportMetrics();
   const executionMetrics = new ExecutionMetrics();
   const frameMetrics = new FrameMetrics();
+  const memoryTimeline = new MemoryTimeline();
   const graphicsMetrics = new GraphicsMetrics();
   let graphicsMilliseconds = 0, yieldMilliseconds = 0;
   async function yieldToBrowser() {
@@ -90,6 +92,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       memoryMB: Object.fromEntries([Gauge.GuestMappedBytes, Gauge.GuestMappedPeak, Gauge.WasmMemoryBytes, Gauge.TranslatedCodeBytes,
         Gauge.GpuTextureBytes, Gauge.GpuBufferBytes, Gauge.GpuRenderbufferBytes, Gauge.FileCacheBytes]
         .map(gauge => [gauge, Math.round(gauges.value(gauge) / 1e6)])),
+      memoryTimeline: memoryTimeline.rows(),
       threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])), workerThreads: threads?.remote?.statistics(),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
@@ -158,7 +161,10 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   }
 
   // Also samples asynchronous host waits, when no CPU slice is completing.
-  const heartbeat = setInterval(() => { if (!firstFault) report(snapshot()); }, 5000);
+  const heartbeat = setInterval(() => {
+    memoryTimeline.sample(performance.now() - started, performance.memory?.usedJSHeapSize);
+    if (!firstFault) report(snapshot());
+  }, 5000);
   try {
     milestone('Read executable', {path: label(ipa.executablePath)});
     signal?.throwIfAborted();

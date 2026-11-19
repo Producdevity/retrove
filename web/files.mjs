@@ -26,7 +26,11 @@ export function fileImports(cpu, ipa, heap, errno, log,
   const blocks = new BundleBlocks(delta => gauges.add(Gauge.FileCacheBytes, delta));
   async function readAsset(asset, offset, pointer, count) {
     const blob = await (asset.blob ??= ipa.assetBlob(asset.path));
-    return blocks.read(asset.path, blob, offset, count, (done, bytes) => cpu.write(pointer + done, bytes));
+    const source = asset.source ??= {size: blob.size, slice(start, end) {
+      gauges.add(Gauge.BundleReads, 1); gauges.add(Gauge.BundleReadBytes, end - start);
+      return blob.slice(start, end);
+    }};
+    return blocks.read(asset.path, source, offset, count, (done, bytes) => cpu.write(pointer + done, bytes));
   }
   let next = 3, tmpnameBuffer;
   const bundleDirectory = '/' + ipa.bundlePath;
