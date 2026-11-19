@@ -33,13 +33,24 @@ test("overlapping moves copy backward", () => {
 test("the heap maps pages on growth and reuses coalesced free blocks", () => {
   const cpu = memory(),
     heap = new Heap(cpu);
-  const first = heap.alloc(16),
-    second = heap.alloc(16),
-    third = heap.alloc(16);
+  const first = heap.alloc(512),
+    second = heap.alloc(512),
+    third = heap.alloc(512);
   expect(cpu.maps).toEqual([[0x10000000, 4096, 3]]);
   heap.free(first);
   heap.free(second);
-  expect(heap.alloc(32)).toBe(first);
+  expect(heap.alloc(1024)).toBe(first);
   expect(heap.live.size).toBe(2);
   expect(() => heap.free(third + 4)).toThrow("Invalid guest free");
+});
+
+test("the heap hands freed small blocks back to allocations of the same size", () => {
+  const heap = new Heap(memory());
+  const first = heap.alloc(24),
+    second = heap.alloc(24);
+  heap.free(first);
+  heap.free(second);
+  expect(heap.alloc(20)).toBe(second);
+  expect(heap.alloc(32)).toBe(first);
+  expect(heap.alloc(64, 64) % 64).toBe(0);
 });

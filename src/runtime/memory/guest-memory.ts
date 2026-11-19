@@ -3,6 +3,8 @@ const PAGE = 4096;
 const HEAP_BASE: number = GuestLayout.HeapBase;
 const HEAP_LIMIT: number = GuestLayout.HeapLimit;
 const HEAP_ALIGNMENT = 16;
+/** Freed blocks up to this size wait in per-size stacks; the game frees and reallocates them constantly. */
+const SMALL_BLOCK_LIMIT = 256;
 const STRING_CHUNK = 256;
 const STRING_LIMIT = 0x100000;
 const COPY_CHUNK = 65536;
@@ -101,6 +103,7 @@ export class Heap {
   #next = HEAP_BASE;
   #mapped = HEAP_BASE;
   readonly #free: FreeBlock[] = [];
+  readonly #small = new Map<number, number[]>();
   readonly #cpu: MappableMemory;
 
   constructor(cpu: MappableMemory) {
@@ -114,6 +117,11 @@ export class Heap {
   alloc(bytes: number, alignment = HEAP_ALIGNMENT): number {
     if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > HEAP_LIMIT - HEAP_BASE) return 0;
     const size = Math.ceil(Math.max(1, bytes) / HEAP_ALIGNMENT) * HEAP_ALIGNMENT;
+    const reused = alignment <= HEAP_ALIGNMENT ? this.#small.get(size)?.pop() : undefined;
+    if (reused !== undefined) {
+      this.live.set(reused, size);
+      return reused;
+    }
     const align = (pointer: number) => Math.ceil(pointer / alignment) * alignment;
     const index = this.#free.findIndex(
       (block) => align(block.address) + size <= block.address + block.size,
@@ -131,7 +139,10 @@ export class Heap {
     const size = this.live.get(address);
     if (size === undefined) throw new Error(`Invalid guest free at 0x${address.toString(HEX)}`);
     this.live.delete(address);
-    this.#addFree(address, size);
+    if (size > SMALL_BLOCK_LIMIT) return this.#addFree(address, size);
+    const stack = this.#small.get(size);
+    if (stack) stack.push(address);
+    else this.#small.set(size, [address]);
   }
 
   zero(bytes: number): number {
