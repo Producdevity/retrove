@@ -1,5 +1,6 @@
 import { alphaRejection, textureExpression, type TextureStage } from "./texture-environment";
 import { COMBINE_MODE } from "./texture-combine";
+import { fogShader, type FogDraw } from "./fog";
 /** Attribute slots: texture units follow colour, then the normal, then OES point sizes. */
 export const Attribute = { Position: 0, Color: 1, TextureStart: 2, PointSize: 5 } as const;
 export interface FixedDrawState {
@@ -13,6 +14,7 @@ export interface FixedDrawState {
   readonly pointSizeArray: boolean;
   /** Points drawn with GL_POINT_SPRITE_OES enabled. */
   readonly pointSprite: boolean;
+  readonly fog: FogDraw;
 }
 /** Whether a stage samples at gl_PointCoord instead of its texture coordinates. */
 function replacesCoordinates(state: FixedDrawState, stage: TextureStage): boolean {
@@ -22,6 +24,7 @@ export function programKey(state: FixedDrawState): string {
   return JSON.stringify([
     state.alphaFunction,
     state.pointSizeArray,
+    state.fog.mode,
     ...state.textures.map((stage) =>
       stage.enabled
         ? [
@@ -36,7 +39,10 @@ export function programKey(state: FixedDrawState): string {
 }
 export function shaderSource(state: FixedDrawState): { vertex: string; fragment: string } {
   const active = state.textures.flatMap((stage, unit) => (stage.enabled ? [{ stage, unit }] : []));
-  const varying = active.map(({ unit }) => `varying vec4 vTexture${unit};`).join("\n");
+  const varying =
+    active.map(({ unit }) => `varying vec4 vTexture${unit};`).join("\n") +
+    fogShader(state.fog.mode).declarations;
+  const fog = fogShader(state.fog.mode);
   const vertex = `
 attribute vec4 aPosition;
 attribute vec4 aColor;
@@ -51,6 +57,7 @@ void main() {
  gl_Position = uProjection * uModelView * aPosition;
  gl_PointSize = ${state.pointSizeArray ? "aPointSize" : "uPointSize"};
  vColor = clamp(aColor, 0.0, 1.0);
+ ${fog.vertex}
  ${active.map(({ unit }) => `vTexture${unit} = uTextureMatrix${unit} * aTexture${unit};`).join("\n")}
 }`;
   const fragment = `
@@ -59,11 +66,13 @@ varying vec4 vColor;
 uniform float uAlphaReference;
 ${varying}
 ${active.map(({ unit }) => `uniform sampler2D uTexture${unit}; uniform vec4 uEnvironment${unit};`).join("\n")}
+${fog.fragment}
 void main() {
  vec4 color = clamp(vColor, 0.0, 1.0);
  ${active
    .map(({ stage, unit }) => textureExpression(stage, unit, replacesCoordinates(state, stage)))
    .join("\n")}
+ ${state.fog.mode ? "color.rgb = mix(uFogColor.rgb, color.rgb, fogFactor());" : ""}
  if (${alphaRejection(state.alphaFunction)}) discard;
  gl_FragColor = color;
 }`;

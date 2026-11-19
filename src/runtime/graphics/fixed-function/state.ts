@@ -3,6 +3,8 @@ import { AlphaFunction, TextureFormat, TextureMode } from "./texture-environment
 import { defaultCombine } from "./texture-combine";
 import type { Vector4 } from "./matrix";
 import { Attribute, type FixedDrawState } from "./shader";
+import { Fog } from "./fog";
+import { GL } from "./host";
 export interface ArrayPointer {
   size: number;
   type: number;
@@ -16,6 +18,7 @@ export class FixedState {
   readonly arrays = new Map<number, ArrayPointer>();
   readonly enabledArrays = new Set<number>();
   readonly capabilities = new Set<number>();
+  readonly fog = new Fog();
   readonly textures = Array.from({ length: FIXED_TEXTURE_UNITS }, () => ({
     enabled: false,
     handle: 0,
@@ -57,6 +60,13 @@ export class FixedState {
       pointSize: this.pointSize,
       pointSizeArray: this.enabledArrays.has(Attribute.PointSize),
       pointSprite: points.drawing && this.capabilities.has(points.sprite),
+      fog: {
+        mode: this.capabilities.has(GL.Fog) ? this.fog.mode : 0,
+        density: this.fog.density,
+        start: this.fog.start,
+        end: this.fog.end,
+        color: this.fog.color,
+      },
     };
   }
 }

@@ -6,6 +6,7 @@ import { installMatrices } from "./matrix-bindings";
 import { installArrays, prepareArrays } from "./array-bindings";
 import { installTextures } from "./texture-bindings";
 import { installQueries } from "./queries";
+import { installFog } from "./fog";
 import { AlphaFunction } from "./texture-environment";
 const HEX_RADIX = 16;
 const DrawArguments = { DrawArrays: 3, DrawElements: 4 } as const;
@@ -36,6 +37,17 @@ const OES_ALIASES = [
   "RenderbufferStorage",
   "GenerateMipmap",
 ] as const;
+function installBindings(
+  bridge: GraphicsBridge,
+  current: () => FixedState,
+  formats: Map<number, number>,
+): void {
+  installMatrices(bridge, current);
+  installArrays(bridge, current);
+  installTextures(bridge, current, formats);
+  installQueries(bridge, current);
+  installFog(bridge, () => current().fog);
+}
 export function installFixedFunction(host: FixedHost): () => void {
   const bridge = new GraphicsBridge(host),
     states = new Map<number, FixedState>(),
@@ -50,10 +62,7 @@ export function installFixedFunction(host: FixedHost): () => void {
     }
     return state;
   };
-  installMatrices(bridge, current);
-  installArrays(bridge, current);
-  installTextures(bridge, current, formats);
-  installQueries(bridge, current);
+  installBindings(bridge, current, formats);
   for (const [name, enabled] of [
     ["Enable", true],
     ["Disable", false],
@@ -66,7 +75,7 @@ export function installFixedFunction(host: FixedHost): () => void {
         return undefined;
       }
       if (FIXED_CAPABILITIES.has(cap)) {
-        if (enabled && (cap === GL.Lighting || cap === GL.Fog))
+        if (enabled && cap === GL.Lighting)
           throw new Error(`Unsupported ES 1 rendering capability 0x${cap.toString(HEX_RADIX)}.`);
         if (enabled) state.capabilities.add(cap);
         else state.capabilities.delete(cap);
