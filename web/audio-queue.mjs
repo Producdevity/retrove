@@ -3,7 +3,10 @@ import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 import {tag} from './audio-file.mjs';
 const view=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);
 const LPCM=tag('lpcm'),IMA=tag('ima4');
-const invalid=-66682,codec=-66673;
+const invalid=-66682,codec=-66673,invalidBuffer=-66687,bufferInQueue=-66679;
+// kAudioQueueParam_Volume, the only AudioQueue parameter output queues honor here.
+const VOLUME=1;
+const floatBits=new DataView(new ArrayBuffer(4));
 function format(b){
   const d=view(b),f={rate:d.getFloat64(0,true)};
   for(const [i,key] of ['id','flags','packetBytes','packetFrames','frameBytes','channels','bits'].entries())f[key]=d.getUint32(8+4*i,true);
@@ -43,7 +46,7 @@ export function audioQueues(cpu,heap,callGuest,context){
   const recycled=async(q,item)=>{q.active.delete(item.p);if(q.callback)await callGuest(q.callback,[q.user,q.id,item.p]);};
   function discard(q){
     for(const node of q.nodes){node.onended=null;node.stop();node.disconnect();}
-    q.nodes.clear();q.items=[];q.ended=[];q.active.clear();q.time=0;
+    q.nodes.clear();q.scheduled.clear();q.items=[];q.ended=[];q.active.clear();q.time=0;
   }
   function startNode(q,item,ctx){
     const channels=q.f.channels, buf=ctx.createBuffer(channels,item.samples.length/channels,q.f.rate);
@@ -51,9 +54,11 @@ export function audioQueues(cpu,heap,callGuest,context){
       const channel=buf.getChannelData(c);
       for(let i=0;i<channel.length;i++)channel[i]=item.samples[i*channels+c];
     }
-    const source=ctx.createBufferSource(); source.buffer=buf; source.connect(ctx.destination);
-    source.onended=()=>{source.disconnect();q.nodes.delete(source);q.ended.push(item);};
-    q.nodes.add(source);const when=Math.max(q.time,ctx.currentTime+.003);source.start(when);q.time=when+buf.duration;
+    const source=ctx.createBufferSource(); source.buffer=buf;
+    if(!q.output||q.output.context!==ctx){q.output=ctx.createGain();q.output.connect(ctx.destination);}
+    q.output.gain.value=q.volume;source.connect(q.output);
+    source.onended=()=>{source.disconnect();q.nodes.delete(source);q.scheduled.delete(source);q.ended.push(item);};
+    q.nodes.add(source);q.scheduled.set(source,item);const when=Math.max(q.time,ctx.currentTime+.003);source.start(when);q.time=when+buf.duration;
   }
   const funcs={
     _AudioQueueNewOutput:a=>{
@@ -61,7 +66,7 @@ export function audioQueues(cpu,heap,callGuest,context){
       write32(cpu,out,0);const f=format(cpu.read(a(0),40));
       if(!valid(f)||(!pcm(f)&&!(f.id===IMA&&f.packetFrames===64&&f.packetBytes===34*f.channels)))return codec;
       const id=++serial;queues.set(id,{id,f,ima:f.id===IMA?new IMA4Decoder(f.channels):null,callback:a(1),user:a(2),buffers:new Map(),nodes:new Set(),items:[],ended:[],
-        active:new Set(),started:false,stopping:false,time:0});write32(cpu,out,id);return 0;
+        active:new Set(),scheduled:new Map(),volume:1,started:false,stopping:false,time:0});write32(cpu,out,id);return 0;
     },
     _AudioQueueAllocateBuffer:a=>allocate(a,false),
     _AudioQueueAllocateBufferWithPacketDescriptions:a=>allocate(a,true),
@@ -89,6 +94,21 @@ export function audioQueues(cpu,heap,callGuest,context){
       q.started=true;q.stopping=false;return 0;},
     _AudioQueueStop:a=>{const q=queues.get(a(0));if(!q)return invalid;
       if(a(1)){discard(q);q.started=false;}else {q.stopping=true;if(!q.active.size)q.started=false;}return 0;},
+    _AudioQueuePause:a=>{const q=queues.get(a(0));if(!q)return invalid;
+      // Web Audio sources cannot pause, so scheduled buffers return to the queue and replay on start.
+      const pending=[...q.scheduled.values()];
+      for(const node of q.nodes){node.onended=null;node.stop();node.disconnect();}
+      q.nodes.clear();q.scheduled.clear();q.items.unshift(...pending);q.time=0;q.started=false;return 0;},
+    _AudioQueueSetParameter:a=>{const q=queues.get(a(0));if(!q)return invalid;
+      if(a(1)!==VOLUME)return invalid;
+      floatBits.setUint32(0,a(2),true);const volume=floatBits.getFloat32(0,true);
+      if(!Number.isFinite(volume))return invalid;
+      q.volume=Math.max(0,Math.min(1,volume));if(q.output)q.output.gain.value=q.volume;return 0;},
+    _AudioQueueGetParameter:a=>{const q=queues.get(a(0));if(!q)return invalid;if(a(1)!==VOLUME)return invalid;
+      if(a(2)){floatBits.setFloat32(0,q.volume,true);write32(cpu,a(2),floatBits.getUint32(0,true));}return 0;},
+    _AudioQueueFreeBuffer:a=>{const q=queues.get(a(0)),p=a(1);if(!q)return invalid;if(!q.buffers.has(p))return invalidBuffer;
+      if(q.active.has(p))return bufferInQueue;
+      q.buffers.delete(p);heap.free(p);return 0;},
     _AudioQueueFlush:a=>queues.has(a(0))?0:invalid, // The supported packet decoders have no internal delay.
     _AudioQueueOfflineRender:async a=>{
       const q=queues.get(a(0)),p=a(2),b=q?.buffers.get(p),frames=a(3);
@@ -111,7 +131,7 @@ export function audioQueues(cpu,heap,callGuest,context){
       dispose(q);return 0;
     }
   };
-  function dispose(q){queues.delete(q.id);discard(q);for(const p of q.buffers.keys())heap.free(p);q.buffers.clear();}
+  function dispose(q){queues.delete(q.id);discard(q);q.output?.disconnect();for(const p of q.buffers.keys())heap.free(p);q.buffers.clear();}
   async function pump(){
     if(servicing)return;servicing=true;
     try{for(const q of queues.values()){

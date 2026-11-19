@@ -113,6 +113,8 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
   const sessionSpecs = new Map([
     ['hwsr',['rate','Float64',8]],['iobd',['duration','Float32',4]],['acat',['category','Uint32',4]],
     ['cmix',['mix','Uint32',4]],['duck',['duck','Uint32',4]],['aiav',[null,'Uint32',4]],['chic',[null,'Uint32',4]],
+    // A browser tab never shares the session with another app's audio.
+    ['othr',[null,'Uint32',4]],
   ].map(([key,spec])=>[fourcc(key),spec]));
   function sessionProperty(a,write) {
     if (!session.ready) return fourcc('!ini');

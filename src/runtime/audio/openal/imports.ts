@@ -1,5 +1,6 @@
 import { AL, ALError, OpenALError } from "./constants";
 import { bufferImports } from "./buffers";
+import { AL_ENUM_VALUES } from "./enum-names";
 import { deviceImports } from "./devices";
 import { sourceImports } from "./sources";
 import { listenerImports } from "./listener";
@@ -46,6 +47,12 @@ export function openAL(host: OpenALHost) {
     }
   });
   funcs._alIsExtensionPresent = () => 0;
+  funcs._alGetEnumValue = runtime.bind((args) => {
+    const pointer = args(0);
+    const value = pointer ? AL_ENUM_VALUES.get(host.text(pointer)) : undefined;
+    if (value === undefined) runtime.context.error ||= ALError.InvalidValue;
+    return value ?? 0;
+  });
   for (const name of ["_alGetProcAddress", "_alcGetProcAddress"])
     funcs[name] = (args) => {
       const pointer = args(name === "_alGetProcAddress" ? 0 : 1);
