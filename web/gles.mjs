@@ -163,8 +163,9 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
         objects.remove(number);
         memory[kind]?.drop(number);
         if (kind === 'Buffer') {
+          releaseMapping(bufferData.get(number));
           bufferData.delete(number);
-          if (mapped.has(number)) { heap.free(mapped.get(number)); mapped.delete(number); }
+          mapped.delete(number);
           if (array === number) array = 0;
           if (elements === number) elements = 0;
         }
@@ -187,8 +188,12 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     gl().bufferData(a(0),bytes ?? a(1),a(3));
     const name = a(0)===ARRAY_BUFFER ? array : elements;
     if (name) {
-      if (mapped.has(name)) {heap.free(mapped.get(name)); mapped.delete(name);}
-      bufferData.set(name,{size:a(1),bytes});
+      const previous = bufferData.get(name);
+      // A same-sized respecification keeps the guest block that MapBufferOES hands out.
+      const block = previous?.size === a(1) ? previous.block : releaseMapping(previous);
+      if (block) block.current = false;
+      mapped.delete(name);
+      bufferData.set(name,{size:a(1),bytes,block});
       memory.Buffer.set(name, 0, a(1));
       memory.Buffer.set(name, JS_COPY, bytes ? a(1) : 0);
     }
@@ -200,6 +205,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     if (backing && a(1)+bytes.length<=backing.size) {
       backing.bytes ??= new Uint8Array(backing.size);
       backing.bytes.set(bytes,a(1));
+      if (backing.block) backing.block.current = false;
     }
   });
   bind('GetError',() => { const code = errors.take(() => gl().getError(), performance.now()); flagErrors(0); return code; });
@@ -208,18 +214,28 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     if (a(1)!==0x88b9) { setError(0x0500); return 0; } // GL_WRITE_ONLY_OES
     const name=boundBuffer(a(0)), backing=bufferData.get(name);
     if (!name || !backing || mapped.has(name)) {setError(0x0502); return 0;}
-    const pointer=heap.alloc(backing.size);
-    if (!pointer) {setError(0x0505); return 0;}
-    cpu.write(pointer,backing.bytes ?? new Uint8Array(backing.size));
+    // Each buffer keeps one guest block across maps; it is rewritten only when the buffer changed since the last unmap.
+    if (!backing.block) {
+      const pointer=heap.alloc(backing.size);
+      if (!pointer) {setError(0x0505); return 0;}
+      backing.block={pointer,current:false};
+    }
+    const {pointer}=backing.block;
+    if (!backing.block.current) cpu.write(pointer,backing.bytes ?? new Uint8Array(backing.size));
     mapped.set(name,pointer);
     return pointer;
   });
+  function releaseMapping(backing) {
+    if (backing?.block) heap.free(backing.block.pointer);
+    return undefined;
+  }
   bind('UnmapBufferOES',a => {
     const name=boundBuffer(a(0)), pointer=mapped.get(name), backing=bufferData.get(name);
     if (!pointer || !backing) {setError(0x0502); return 0;}
     const bytes=sourceBuffer(pointer,backing.size);
     gl().bufferSubData(a(0),0,bytes); backing.bytes=bytes;
-    mapped.delete(name); heap.free(pointer);
+    backing.block.current=true;
+    mapped.delete(name);
     return 1;
   });
   bind('GetBufferPointervOES',a => {

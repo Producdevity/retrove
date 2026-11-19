@@ -60,6 +60,29 @@ test('OES mapped buffers preserve untouched bytes and upload ARM guest writes',(
   assert.equal(call('GetError'),0x0502); assert.equal(call('GetError'),0);
 });
 
+test('OES mapped buffers reuse their guest block and refresh it after the buffer changes',()=>{
+  const {cpu,call}=setup({createBuffer:()=>({}),bindBuffer(){},bufferData(){},bufferSubData(){},getError:()=>0});
+  call('GenBuffers',1,400);
+  const name=new DataView(cpu.read(400,4).buffer).getUint32(0,true), target=0x8892;
+  call('BindBuffer',target,name);
+  cpu.write(512,Uint8Array.of(1,2,3,4));
+  call('BufferData',target,4,512,0x88e4);
+  const pointer=call('MapBufferOES',target,0x88b9);
+  cpu.write(pointer,Uint8Array.of(9));
+  call('UnmapBufferOES',target);
+  assert.equal(call('MapBufferOES',target,0x88b9),pointer);
+  assert.deepEqual(cpu.read(pointer,4),Uint8Array.of(9,2,3,4));
+  call('UnmapBufferOES',target);
+  cpu.write(512,Uint8Array.of(5));
+  call('BufferSubData',target,1,1,512);
+  assert.equal(call('MapBufferOES',target,0x88b9),pointer);
+  assert.deepEqual(cpu.read(pointer,4),Uint8Array.of(9,5,3,4));
+  call('UnmapBufferOES',target);
+  call('BufferData',target,4,0,0x88e4);
+  assert.equal(call('MapBufferOES',target,0x88b9),pointer);
+  assert.deepEqual(cpu.read(pointer,4),Uint8Array.of(0,0,0,0));
+});
+
 test('BioShock derivative directive precedes pixel shader declarations while retaining #version',()=>{
   const header='/* build */\r\n#version 100\r\n', precision='precision mediump float;\r\n';
   const block=['#define USE_DERIVATIVES 0','#ifdef GL_OES_standard_derivatives','\t#extension GL_OES_standard_derivatives : enable','\t#undef USE_DERIVATIVES','\t#define USE_DERIVATIVES 1','#endif',''].join('\r\n');
