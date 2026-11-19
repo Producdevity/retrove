@@ -28,6 +28,18 @@ export function codeRangeAt(executable: Executable, pc: number): FunctionRange |
   return { start: pc, end };
 }
 
+/**
+ * Code bytes translated at once for a very large function (executables without function starts
+ * can yield whole-section "functions"); larger functions are translated in windows from each entry.
+ */
+export const DEMAND_WINDOW_BYTES = 0x4000;
+
+function windowAt(range: FunctionRange, pc: number): FunctionRange {
+  const address = pc & ~THUMB_BIT;
+  if (range.end - (range.start & ~THUMB_BIT) <= DEMAND_WINDOW_BYTES) return range;
+  return { start: pc, end: Math.min(range.end, address + DEMAND_WINDOW_BYTES) };
+}
+
 export interface Demand {
   /** The executable function (or code run) to install; undefined for a page outside it. */
   readonly range: FunctionRange | undefined;
@@ -45,8 +57,10 @@ export function demandAt(
   profile: ProfileRecorder,
   foreign: PageEntries,
 ): Demand | undefined {
-  const range = executable && codeRangeAt(executable, pc);
-  if (range) {
+  const known = executable && codeRangeAt(executable, pc);
+  if (known) {
+    const range = windowAt(known, pc);
+    if (range !== known) return { range, function: range, entries: [pc], pages: [] };
     if (pc !== range.start) profile.addEntry(range.start, pc);
     const entries = [...profile.entriesOf([range]), pc];
     return { range, function: range, entries, pages: [] };

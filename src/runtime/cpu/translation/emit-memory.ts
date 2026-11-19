@@ -97,7 +97,7 @@ export function emitPair(e: Emitter, pc: number, i: InstructionOf<"pair">): void
     i.rn === Register.PC ||
     i.rt === Register.PC ||
     i.rt2 === Register.PC ||
-    i.rt === i.rt2 ||
+    (i.load && i.rt === i.rt2) ||
     (i.writeback && (i.rn === i.rt || i.rn === i.rt2))
   )
     return emitUnsupported(e, pc);

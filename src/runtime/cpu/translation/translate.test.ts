@@ -64,6 +64,11 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
 }
 
 describe("translate", () => {
+  test("thumb strd may store the same register twice", async () => {
+    // strd r0, r0, [r1]; ldr r0, [r1, #4]; bx lr
+    const words = [0x0000e9c1, 0x47706848];
+    expect((await run(words, true, 0x1234, 0x8000)).r0).toBe(0x1234);
+  });
   test.each([
     // vmov d0, r0, r0; vmov d1, r1, r1; vcgt.u32 d0, d0, d1; vmov r0, r1, d0
     ["vcgt.u32", [0xec400b10, 0xec411b11, 0xf3200301, 0xec510b10], 0xffffffff, 3, 0xffffffff],

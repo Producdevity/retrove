@@ -30,7 +30,8 @@ export class TranslatedTier {
   readonly statistics: TierStatistics = emptyStatistics();
   /** Guest PCs that must stay on the interpreter (host traps). */
   excluded: (pc: number) => boolean = () => false;
-  #layout: StateLayout;
+  /** State block, tables and index addresses that translated code and the runner use. */
+  layout: StateLayout;
   readonly #foreign: ForeignPages;
   readonly #labels: LabelAreas;
   readonly #jobs: TierJobs;
@@ -43,7 +44,7 @@ export class TranslatedTier {
   readonly #budget: CodeBudget;
   readonly #index = new FunctionIndex(
     () => this.pages.view,
-    () => this.#layout.index,
+    () => this.layout.index,
   );
   /** Profiled functions whose replay job is built but not installed yet. */
   readonly #planned = new Set<number>();
@@ -72,7 +73,7 @@ export class TranslatedTier {
       foreign = arena + region.foreign;
     this.#labels = new LabelAreas(arena, region);
     this.#jobs = new TierJobs(
-      () => this.#layout,
+      () => this.layout,
       () => this.#executable,
     );
     this.#modules = new ModuleInstaller({
@@ -85,14 +86,15 @@ export class TranslatedTier {
       translator: this.#translator,
     });
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
-    this.#layout = {
-      ...stateLayout(arena + region.state, this.pages, { base: 0, start: 0, end: 0 }),
+    this.layout = {
+      ...stateLayout(arena + region.state, this.pages, {
+        base: arena + region.index,
+        start: 0,
+        end: 0,
+      }),
       foreign: { base: foreign, slots: FOREIGN_SLOTS },
     };
     this.statistics.translator = this.#translator.kind;
-  }
-  get layout(): StateLayout {
-    return this.#layout;
   }
   #discover(): void {
     this.#discovered = true;
@@ -100,8 +102,8 @@ export class TranslatedTier {
     if (!executable || executable.codeEnd - executable.codeStart > MaxCodeBytes) return;
     this.#executable = executable;
     const base = this.pages.arena + this.pages.region.index;
-    this.#layout = {
-      ...this.#layout,
+    this.layout = {
+      ...this.layout,
       index: { base, start: executable.codeStart, end: executable.codeEnd },
     };
     for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))

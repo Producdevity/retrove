@@ -140,7 +140,6 @@ function executableAt(reader: ExecutableReader, header: number): Executable | un
           text,
         )
       : distinctStarts(callTargets(reader.read(text.start, text.end - text.start), text.start));
-  if (!list.length) return undefined;
   const ranges: FunctionRange[] = list.map((start, index) => ({
     start,
     end: (list[index + 1] ?? text.end) & ~THUMB_BIT,

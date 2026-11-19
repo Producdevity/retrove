@@ -98,7 +98,10 @@ export function emitFunction(e: Emitter): EmittedFunction {
     e.itStart = itStart;
     emitInstruction(e, address, instruction, current);
   }
-  tail(e, () => c.i32(e.mode(e.range.end)));
+  // A range may end inside a 32-bit Thumb instruction; execution falls through after it.
+  const last = e.decoded.at(-1),
+    end = last ? last.address + last.size : e.range.end;
+  tail(e, () => c.i32(e.mode(end)));
   c.end();
   c.end();
   emitEpilogue(e);

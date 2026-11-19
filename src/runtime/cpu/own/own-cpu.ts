@@ -37,6 +37,17 @@ export class GuestCodeError extends Error {
     super(`Guest CPU cannot run the instruction at 0x${pc.toString(HEX)}.`);
   }
 }
+const FETCH_BYTES = 4;
+/** An instruction fetch from unmapped memory, reported like the interpreter's memory faults. */
+export class GuestFetchFault extends Error {
+  readonly faultAccess = "unmapped instruction fetch";
+  readonly faultSize = FETCH_BYTES;
+  readonly faultAddress: number;
+  constructor(readonly pc: number) {
+    super(`Guest CPU fault at 0x${pc.toString(HEX)}: Invalid instruction fetch (unmapped)`);
+    this.faultAddress = (pc & ~1) >>> 0;
+  }
+}
 
 /**
  * A guest CPU with no interpreter underneath: every instruction runs as translated Wasm, code is
@@ -178,6 +189,7 @@ export class OwnCpu {
       }
       if (until && (pc & ~1) === (until & ~1)) return { reason: "until", pc };
       if (!tier.entry(pc) || tries > 0) {
+        if (tier.pages.word(pc & ~(FETCH_BYTES - 1)) === undefined) throw new GuestFetchFault(pc);
         if (tries >= RETRIES || !tier.translateNow(pc)) throw new GuestCodeError(pc);
       }
       const result = runTranslated(tier, state, pc, until, budget);

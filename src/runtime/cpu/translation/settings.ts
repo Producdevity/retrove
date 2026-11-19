@@ -35,11 +35,11 @@ export function translationAheadEnabled(): boolean {
   }
 }
 const CPU_KEY = "retrove.cpu";
-/** Runs guests on translated code alone, without Unicorn, when a tester opts in (`retrove.cpu=own`). */
+/** Guests run on translated code alone unless a tester picks Unicorn (`retrove.cpu=unicorn`). */
 export function ownCpuEnabled(): boolean {
   try {
-    return globalThis.localStorage?.getItem(CPU_KEY) === "own";
+    return globalThis.localStorage?.getItem(CPU_KEY) !== "unicorn";
   } catch {
-    return false;
+    return true;
   }
 }
