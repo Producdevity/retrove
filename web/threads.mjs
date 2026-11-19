@@ -18,14 +18,18 @@ export function threadImports(cpu, heap, returnAddress) {
   gauges.read(Gauge.GuestThreads, () => 1 + [...workers.values()].filter(t => !t.done).length);
   // Priorities are recorded for the guest to read back; the cooperative scheduler does not use them.
   const schedules = new Map();
+  // Darwin's PTHREAD_KEYS_MAX; each thread mirrors its values in a guest table for the ARM getter.
+  const TLS_KEYS = 512, EAGAIN = 35;
   function threadPointer(id) {
-    // The first visible word contains pthread_self. A private word directly
-    // before it holds the SJLJ context chain, outside the guest TLS slots.
-    const base = heap.zero(16);
-    if (!base) return 0;
+    // The first visible word contains pthread_self and the next one its TLS table. A private word
+    // directly before it holds the SJLJ context chain, outside the guest TLS slots.
+    const base = heap.zero(16), keys = base && heap.zero(TLS_KEYS * 4);
+    if (!keys) { if (base) heap.free(base); return 0; }
     write32(cpu, base + 8, id);
+    write32(cpu, base + 12, keys);
     return base + 8;
   }
+  const keyTable = t => read32(cpu, t.pointer + 4);
   const main = {id: MAIN, tls: new Map(), stackBottom: GuestLayout.StackBottom, pointer: threadPointer(MAIN)};
   if (!main.pointer) throw Error('Guest heap exhausted initializing the main thread');
   cpu.threadPointer = main.pointer;
@@ -46,19 +50,25 @@ export function threadImports(cpu, heap, returnAddress) {
     0xee1d0f70, // mrc p15, 0, r0, c13, c0, 3
     0xe5900000, // ldr r0, [r0]
     0xe12fff1e, // bx lr
+    0xee1d1f70, // mrc p15, 0, r1, c13, c0, 3
+    0xe3500c02, // cmp r0, #512
+    0xe5911004, // ldr r1, [r1, #4]
+    0x37910100, // ldrlo r0, [r1, r0, lsl #2]
+    0x23a00000, // movhs r0, #0
+    0xe12fff1e, // bx lr
   ];
   const view = new DataView(new ArrayBuffer(instructions.length * 4));
   instructions.forEach((op, i) => view.setUint32(i * 4, op, true));
   cpu.write(code, new Uint8Array(view.buffer));
   cpu.protect(code, PAGE, 5);
   const nativeFunctions = new Map([['__Unwind_SjLj_Register', code],
-    ['__Unwind_SjLj_Unregister', code + 20], ['_pthread_self', code + 36]]);
+    ['__Unwind_SjLj_Unregister', code + 20], ['_pthread_self', code + 36], ['_pthread_getspecific', code + 48]]);
   const exitHandlers = [];
   let current = main, nextId = 2, nextKey = 1, nextSemaphore = 1;
   function release(t) {
     if (t.state) cpu.freeState(t.state);
     if (t.stack) heap.free(t.stack);
-    if (t.pointer) heap.free(t.pointer - 8);
+    if (t.pointer) { heap.free(keyTable(t)); heap.free(t.pointer - 8); }
     t.pointer = 0;
     t.state = null; t.stack = 0;
   }
@@ -160,15 +170,15 @@ export function threadImports(cpu, heap, returnAddress) {
         reap(t); return 0;
       });
     },
-    _pthread_key_create: a => { const key = nextKey++; tlsKeys.set(key,a(1)); write32(cpu,a(0),key); return 0; },
+    _pthread_key_create: a => { if (nextKey >= TLS_KEYS) return EAGAIN; const key = nextKey++; tlsKeys.set(key,a(1)); write32(cpu,a(0),key); return 0; },
     _pthread_key_delete: a => {
       if (!tlsKeys.delete(a(0))) return 22;
-      for (const t of [main,...workers.values()]) t.tls.delete(a(0));
+      for (const t of [main,...workers.values()]) { t.tls.delete(a(0)); if (t.pointer) write32(cpu, keyTable(t) + a(0) * 4, 0); }
       return 0;
     },
     _pthread_setspecific: a => {
       if (!tlsKeys.has(a(0))) return 22;
-      current.tls.set(a(0),a(1)); return 0;
+      current.tls.set(a(0),a(1)); write32(cpu, keyTable(current) + a(0) * 4, a(1)); return 0;
     },
     _pthread_getspecific: a => current.tls.get(a(0)) || 0,
     _pthread_mutexattr_init: a => { mutexAttrs.set(a(0),0); return 0; },
@@ -254,7 +264,7 @@ export function threadImports(cpu, heap, returnAddress) {
                   const pending = [...t.tls].filter(([key,value]) => value && tlsKeys.get(key));
                   if (!pending.length) break;
                   for (const [key,value] of pending) {
-                    t.tls.delete(key);
+                    t.tls.delete(key); write32(cpu, keyTable(t) + key * 4, 0);
                     await nested(tlsKeys.get(key),[value]);
                   }
                 }

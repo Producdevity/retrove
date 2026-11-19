@@ -219,7 +219,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     cpu.write(GATES, gateCode);
     cpu.map(STACK_TOP - STACK_SIZE, STACK_SIZE, 3);
     cpu.trapRange(GATES, RETURN - 1, (_, at) => { pending = at; });
-    const nativeLibc = guestLibc(cpu,heap,{memcpy:hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy),divide:hostGate({name:"___umodsi3",library:"libSystem"},funcs.___umodsi3)});
+    const nativeLibc = guestLibc(cpu,heap,{memcpy:hostGate({name:"_memcpy",library:"libSystem"},funcs._memcpy),memset:hostGate({name:"_memset",library:"libSystem"},funcs._memset),divide:hostGate({name:"___umodsi3",library:"libSystem"},funcs.___umodsi3)});
     const nativeVFP=vfpBuiltins(cpu,heap);
     const nativeMutexes = guestMutexFunctions(cpu,heap,{budget:cpu.budget,
       lock:hostGate({name:"_pthread_mutex_lock",library:"libSystem"},funcs._pthread_mutex_lock),

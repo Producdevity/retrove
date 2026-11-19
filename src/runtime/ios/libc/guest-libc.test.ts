@@ -12,7 +12,11 @@ async function fixture() {
   cpu.map(destination, 8192);
   cpu.map(fallback, 4096);
   cpu.write(fallback, Uint8Array.of(0xf0, 0, 0xf0, 0xe7));
-  const helpers = guestLibc(cpu, { alloc: () => base }, { memcpy: fallback, divide: fallback });
+  const helpers = guestLibc(
+    cpu,
+    { alloc: () => base },
+    { memcpy: fallback, memset: fallback, divide: fallback },
+  );
   function call(symbol: string, ...args: number[]): number {
     const address = helpers.get(symbol);
     if (address === undefined) throw new Error("Missing test helper.");
@@ -57,16 +61,28 @@ test("ARM helpers preserve Darwin character and wide-string semantics", async ()
 test("small ARM copies preserve guards and large copies use the host fallback", async () => {
   const { cpu, call, destination, source, fallback, helpers, returnTo } = await fixture();
   try {
-    for (const size of [0, 1, 3, 4, 63, 64]) {
+    for (const [size, offset] of [
+      [0, 1],
+      [1, 1],
+      [3, 1],
+      [4, 1],
+      [63, 1],
+      [64, 1],
+      [4, 4],
+      [7, 4],
+      [1024, 4],
+    ] as const) {
       cpu.write(
         source,
-        Uint8Array.from({ length: 128 }, (_, index) => index),
+        Uint8Array.from({ length: 2048 }, (_, index) => index),
       );
-      cpu.write(destination, new Uint8Array(128).fill(0xaa));
-      expect(call("_memcpy", destination + 1, source + 1, size)).toBe(destination + 1);
-      expect(cpu.read(destination + 1, size)).toEqual(cpu.read(source + 1, size));
-      expect(cpu.read(destination, 1)[0]).toBe(0xaa);
-      expect(cpu.read(destination + 1 + size, 1)[0]).toBe(0xaa);
+      cpu.write(destination, new Uint8Array(2048).fill(0xaa));
+      expect(call("_memcpy", destination + offset, source + offset, size)).toBe(
+        destination + offset,
+      );
+      expect(cpu.read(destination + offset, size)).toEqual(cpu.read(source + offset, size));
+      expect(cpu.read(destination + offset - 1, 1)[0]).toBe(0xaa);
+      expect(cpu.read(destination + offset + size, 1)[0]).toBe(0xaa);
     }
     let called = false;
     cpu.trap(fallback, () => {
@@ -76,14 +92,14 @@ test("small ARM copies preserve guards and large copies use the host fallback", 
     if (address === undefined) throw new Error("Missing memcpy helper.");
     cpu.setReg(0, destination);
     cpu.setReg(1, source);
-    cpu.setReg(2, 65);
+    cpu.setReg(2, 1025);
     cpu.setReg(14, returnTo);
     expect(cpu.run(address, { until: returnTo }).reason).toBe("trap");
     expect(called).toBe(true);
     expect([cpu.getReg(0), cpu.getReg(1), cpu.getReg(2), cpu.getReg(14)]).toEqual([
       destination,
       source,
-      65,
+      1025,
       returnTo,
     ]);
   } finally {
@@ -163,6 +179,37 @@ test("ARM strcmp compares unsigned bytes without reading beyond a terminator", a
       }
     cpu.write(source + 4095, Uint8Array.of(0));
     expect(call("_strcmp", source + 4095, source + 4095)).toBe(0);
+  } finally {
+    cpu.close();
+  }
+});
+
+test("ARM fills, compares and atomic adds match the host", async () => {
+  const { cpu, call, destination, source } = await fixture();
+  try {
+    for (const [size, offset] of [
+      [0, 1],
+      [1, 3],
+      [5, 1],
+      [64, 4],
+      [1001, 2],
+    ] as const) {
+      cpu.write(destination, new Uint8Array(1100).fill(0xaa));
+      expect(call("_memset", destination + offset, 0x1c5, size)).toBe(destination + offset);
+      expect(cpu.read(destination + offset, size)).toEqual(new Uint8Array(size).fill(0xc5));
+      expect(cpu.read(destination + offset + size, 1)[0]).toBe(0xaa);
+      call("_bzero", destination + offset, size);
+      expect(cpu.read(destination + offset, size)).toEqual(new Uint8Array(size));
+    }
+    cpu.write(source, Uint8Array.of(1, 2, 3, 200));
+    cpu.write(destination, Uint8Array.of(1, 2, 3, 100));
+    expect(call("_memcmp", destination, source, 3)).toBe(0);
+    expect(call("_memcmp", destination, source, 0)).toBe(0);
+    expect(call("_memcmp", destination, source, 4) | 0).toBeLessThan(0);
+    expect(call("_memcmp", source, destination, 4) | 0).toBeGreaterThan(0);
+    cpu.write(destination, new Uint8Array(new Uint32Array([0xfffffffe]).buffer));
+    expect(call("_OSAtomicAdd32Barrier", 3, destination)).toBe(1);
+    expect(cpu.read(destination, 4)).toEqual(Uint8Array.of(1, 0, 0, 0));
   } finally {
     cpu.close();
   }

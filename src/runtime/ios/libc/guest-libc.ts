@@ -11,12 +11,17 @@ interface GuestHeap {
 export function guestLibc(
   cpu: GuestMemory,
   heap: GuestHeap,
-  fallbacks: { readonly memcpy: number; readonly divide: number },
+  fallbacks: { readonly memcpy: number; readonly memset: number; readonly divide: number },
 ): ReadonlyMap<string, number> {
   const code = Uint8Array.from(atob(artifact.code), (character) => character.charCodeAt(0));
   new DataView(code.buffer).setUint32(
     artifact.symbols.retrove_memcpy_fallback,
     fallbacks.memcpy,
+    true,
+  );
+  new DataView(code.buffer).setUint32(
+    artifact.symbols.retrove_memset_fallback,
+    fallbacks.memset,
     true,
   );
   new DataView(code.buffer).setUint32(
@@ -40,5 +45,9 @@ export function guestLibc(
     ["___divsi3", base + artifact.symbols.retrove_div],
     ["___divmodsi4", base + artifact.symbols.retrove_divmod],
     ["_strcmp", base + artifact.symbols.retrove_strcmp],
+    ["_memset", base + artifact.symbols.retrove_memset],
+    ["_bzero", base + artifact.symbols.retrove_bzero],
+    ["_memcmp", base + artifact.symbols.retrove_memcmp],
+    ["_OSAtomicAdd32Barrier", base + artifact.symbols.retrove_atomic_add],
   ]);
 }
