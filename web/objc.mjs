@@ -76,6 +76,9 @@ import {fileManager} from './foundation-files.mjs';
 import {foundation} from './foundation.mjs';
 import { touchUIKit } from './touch.mjs';
 import {moviePlayers} from './movie.mjs';
+import {bundleFunctions} from '../src/runtime/ios/foundation/cf-bundle.ts';
+import {LocaleSymbols} from '../src/runtime/ios/foundation/locale-components.ts';
+import {installMovieViewControllers} from '../src/runtime/ios/media/movie-view-controller.ts';
 import { eaglDrawable } from './drawable.mjs';
 import { read32, readString, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
 
@@ -658,6 +661,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     ownedURL:async address=>retain(await send(names.get('NSURL'),'URLWithString:',[string(address)])),urlString:async url=>text(await send(url,'absoluteString')),
     error:(domain,code)=>retain(fileObjects.error(code,domain))},runLoopSources);
   Object.assign(cf.funcs,network.functions);
+  Object.assign(cf.funcs,bundleFunctions({version:ipa.info.CFBundleVersion,mainBundle:()=>send(names.get('NSBundle'),'mainBundle'),readBytes:(p,n)=>cpu.read(p,n),
+    fileURL:async(path,directory)=>retain(await send(names.get('NSURL'),'fileURLWithPath:isDirectory:',[string(path),Number(directory)]))}));
   installCookieStorage({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write,send,array:values=>autorelease(input.array([...values])),items:input.items,
     urlHost:async url=>{const value=url?await send(url,'host'):0;return value?text(value).toLowerCase():'';}});
   installBackgroundTasks({method,state:()=>lifecycle.state,copyBlock:block=>dispatchService.copy(block),releaseBlock:block=>dispatchService.release(block)});
@@ -684,6 +689,8 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   method('UIApplication',false,'applicationIconBadgeNumber',()=>badge);
   const movies = moviePlayers({hostClass, method, names, alloc, destroy, retain, release: releaseFromHost,
     string, text, send, ipa, mediaHost, needsMovieResume, diagnostic});
+  installMovieViewControllers({...serviceHost,selector,classNamed:name=>{const p=names.get(name);if(!p)throw Error('Unknown class '+name);return p;},
+    deallocController:self=>lookup(names.get('UIViewController'),'dealloc')(self)});
   hostClass('AVAudioSession', 'NSObject');
   let avSession;
   method('AVAudioSession', true, 'sharedInstance', () => avSession ??= alloc(names.get('AVAudioSession')));
@@ -838,6 +845,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   exportedStringNames.set('_NSXMLParserErrorDomain',XML_ERROR_DOMAIN);
   for(const [symbol,value] of Object.entries({...ExceptionSymbols,...AdSymbols,...LocationSymbols,...UniformTypeSymbols}))exportedStringNames.set(symbol,value);
   for(const [symbol,value] of Object.entries(SecuritySymbols))exportedStringNames.set(symbol,value);
+  for(const [symbol,value] of Object.entries(LocaleSymbols))exportedStringNames.set(symbol,value);
   for(const [symbol,value] of Object.entries(CFNetworkStrings))exportedStringNames.set(symbol,value);
   for(const [name,value] of Object.entries(BundleKey))exportedStringNames.set('_kCFBundle'+name+'Key',value);
   for (const name of ['UIApplicationWillResignActiveNotification', 'UIApplicationDidBecomeActiveNotification', 'UIApplicationDidEnterBackgroundNotification',

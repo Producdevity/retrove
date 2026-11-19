@@ -18,6 +18,11 @@ export class WebViews {
     host.method(CLASS, false, "setScalesPageToFit:", (self, args) => {
       this.get(self).scalesPageToFit = Boolean(args(0));
     });
+    // Each load replaces the page in place, so a web view never has back or forward history.
+    for (const direction of ["Back", "Forward"]) {
+      host.method(CLASS, false, "canGo" + direction, () => 0);
+      host.method(CLASS, false, "go" + direction, () => undefined);
+    }
   }
   private get(self: number): Presentation {
     let value = this.values.get(self);

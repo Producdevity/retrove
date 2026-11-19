@@ -9,6 +9,7 @@ const asWait = poll => {
   return value === undefined ? {wait: poll} : value;
 };
 
+const MS_PER_SECOND = 1000, NS_PER_MS = 1e6;
 export function threadImports(cpu, heap, returnAddress) {
   const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value)});
@@ -205,6 +206,11 @@ export function threadImports(cpu, heap, returnAddress) {
       return asWait(() => { if (!s.alive) return 37; if (s.value) { s.value--; return 0; } });
     },
     _usleep: a => { const at = performance.now() + a(0)/1000; return asWait(() => performance.now()>=at ? 0 : undefined); },
+    _nanosleep: a => {
+      const at = performance.now() + read32(cpu, a(0)) * MS_PER_SECOND + read32(cpu, a(0) + 4) / NS_PER_MS;
+      if (a(1)) { write32(cpu, a(1), 0); write32(cpu, a(1) + 4, 0); }
+      return asWait(() => performance.now() >= at ? 0 : undefined);
+    },
     _sleep: a => { const at = performance.now() + a(0)*1000; return asWait(() => performance.now()>=at ? 0 : undefined); }
   };
 

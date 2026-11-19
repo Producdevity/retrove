@@ -9,6 +9,10 @@ export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
   const i64 = (a, i) => BigInt.asIntN(64,u64(a,i));
   function f32(a,i) { bits.setUint32(0,a(i),true); return bits.getFloat32(0,true); }
   function f64(a,i) { bits.setBigUint64(0,u64(a,i),true); return bits.getFloat64(0,true); }
+  function decimal(pointer) {
+    const match=/^\s*[+-]?[0-9]+/.exec(new TextDecoder().decode(readCStringBytes(cpu,pointer)));
+    return match ? Number(BigInt.asUintN(32,BigInt(match[0].trim()))) : 0;
+  }
   function word(n) { bits.setFloat32(0,n,true); return bits.getUint32(0,true); }
   function wide(n) { bits.setFloat64(0,n,true); return bits.getBigUint64(0,true); }
   function writeDouble(at,n) {
@@ -65,10 +69,9 @@ export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
     },
     ___floatdidf: a=>wide(Number(i64(a,0))), ___floatundidf: a=>wide(Number(u64(a,0))),
     ___floatdisf: a=>intFloat(i64(a,0)), ___floatundisf: a=>intFloat(u64(a,0)),
-    _atoi: a => {
-      const match=/^\s*[+-]?[0-9]+/.exec(new TextDecoder().decode(readCStringBytes(cpu,a(0))));
-      return match ? Number(BigInt.asUintN(32,BigInt(match[0].trim()))) : 0;
-    },
+    _atoi: a => decimal(a(0)),
+    // long is 32 bits on ARMv6, so atol shares atoi's result.
+    _atol: a => decimal(a(0)),
   };
   // Nonrepresentable integer conversions saturate at the compiler-rt boundary.
   for(const [name,readInput,signed] of [['___fixdfdi',f64,true],['___fixsfdi',f32,true],

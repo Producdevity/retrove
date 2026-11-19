@@ -32,6 +32,7 @@ import {installUrlPaths,installStringPaths} from '../src/runtime/ios/foundation/
 import {formatDarwin} from './format.mjs';
 import {readString} from '../src/runtime/memory/guest-memory.ts';
 
+import {localeComponent} from '../src/runtime/ios/foundation/locale-components.ts';
 export function foundation({cpu, heap, hostClass, method, names, alloc, destroy, autorelease, retain, release,
   read, write, string, text, utf8, send, lookup, selector, array, items, threads, sys, ipa, isKind, getDispatch, callBlock, dataFrom,getRunLoop,makeString,hostGate,returnType,getCFEntries,webViews,diagnostic=()=>{}}) {
   const dicts = new Map(), numbers = new Map();
@@ -175,6 +176,10 @@ export function foundation({cpu, heap, hostClass, method, names, alloc, destroy,
   method('NSLocale',false,'initWithLocaleIdentifier:',(self,a)=>{if(a(0))localeIds.set(self,text(a(0)));return self;});
   method('NSLocale',true,'localeWithLocaleIdentifier:',(cls,a)=>{const self=alloc(cls);if(a(0))localeIds.set(self,text(a(0)));return autorelease(self);});
   for(const name of ['systemLocale','autoupdatingCurrentLocale'])method('NSLocale',true,name,singleton('NSLocale'));
+  method('NSLocale',false,'objectForKey:',(self,a)=>{
+    const value=a(0)?localeComponent(localeIds.get(self)??languages()[0].replaceAll('-','_'),text(a(0))):undefined;
+    return value===undefined?0:string(value);
+  });
   function unbox(ptr) {
     if (!ptr || isKind(ptr,'NSNull')) return null;
     if (isKind(ptr,'NSString')) return text(ptr);

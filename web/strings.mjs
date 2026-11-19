@@ -254,6 +254,8 @@ export function stringImports(cpu, errno) {
     },
     _strncmp: a => compare(a, 1, a(2), false),
     _strcasecmp: a => compare(a, 1, undefined, true),
+    _strncasecmp: a => compare(a, 1, a(2), true),
+    _strncat: a => copy(a(0), a(1), 1, a(2), true),
     _strcoll: a => compare(a, 1, undefined, false),
     _strrchr: a => findChar(a(0), a(1) & 255, 1, true),
     _strcspn: a => scan(a(0), 1, members(a(1), 1)).n,
