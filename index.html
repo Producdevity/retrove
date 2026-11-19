@@ -196,6 +196,19 @@
               >
             </fieldset>
           </div>
+          <h2 class="section-title">Emulation</h2>
+          <div class="group">
+            <fieldset id="cpu-method" class="segmented pair">
+              <legend class="visually-hidden">CPU</legend>
+              <span class="thumb" aria-hidden="true"></span>
+              <label><input type="radio" name="cpu-method" value="own" />Translated</label>
+              <label><input type="radio" name="cpu-method" value="unicorn" />Interpreter</label>
+            </fieldset>
+            <div class="row">
+              <span>Memory limit</span><span id="memory-limit" class="value"></span>
+            </div>
+          </div>
+          <p id="cpu-method-note" class="group-footer"></p>
           <h2 class="section-title">Storage</h2>
           <section id="manage-storage" class="group storage" aria-labelledby="storage">
             <div class="storage-summary">

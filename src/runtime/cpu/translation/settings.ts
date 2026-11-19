@@ -43,3 +43,8 @@ export function ownCpuEnabled(): boolean {
     return true;
   }
 }
+/** Records the tester's choice; the next launch uses it. */
+export function setOwnCpuEnabled(enabled: boolean): void {
+  if (enabled) globalThis.localStorage?.removeItem(CPU_KEY);
+  else globalThis.localStorage?.setItem(CPU_KEY, "unicorn");
+}

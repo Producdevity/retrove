@@ -11,6 +11,7 @@ type Saved = { readonly translated: SavedState; readonly threadPointer: number }
 export function ownCpuObject(budget: ExecutionBudget, options: OwnCpuOptions) {
   const own = new OwnCpu(budget, options);
   const cpu = {
+    method: "translated",
     get budget() {
       return own.budget;
     },

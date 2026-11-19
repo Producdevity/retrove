@@ -73,6 +73,12 @@
 .segmented.compact label {
   min-height: 28px;
 }
+.segmented.pair {
+  --count: 2;
+}
+.segmented.pair label {
+  min-height: 44px;
+}
 
 /* Storage, laid out like the system storage settings. */
 .storage-summary {
