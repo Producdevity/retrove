@@ -6,6 +6,8 @@ const ROOTS = [
   "src/runtime/ios/libc/guest-libc",
   "src/runtime/ios/threads/guest-mutex",
   "src/runtime/ios/compiler-rt/vfp",
+  "src/runtime/graphics/guest-bindings",
+  "src/runtime/ios/profiles/bioshock/guest-hooks",
 ];
 const HEX_RADIX = 16;
 const JSON_INDENT = 2;

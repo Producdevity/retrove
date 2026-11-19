@@ -1,0 +1,12 @@
+{
+  "code": "IitA4pIgQuIBAFLjYPCfhVjAn+UCMZznAQBT4R7/LwFM8J/lRMCf5QgwnOUAAFPhHv8vATzwn+XhLQDjAgBQ4TTwnxUkwJ/lCDCc5SE7Q+LAMEPiDwBT4xzwn4UDwYzgDDCc5QEAU+Ee/y8BCPCf5QAAAAAAAAAAAAAAAAAAAAA=",
+  "symbols": {
+    "retrove_bind_buffer": 0,
+    "retrove_active_texture": 36,
+    "retrove_bind_texture": 56,
+    "retrove_bindings_shadow": 112,
+    "retrove_bind_buffer_host": 116,
+    "retrove_active_texture_host": 120,
+    "retrove_bind_texture_host": 124
+  }
+}

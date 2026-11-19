@@ -2,6 +2,8 @@ import {installFixedFunction} from "../src/runtime/graphics/fixed-function/impor
 import {GraphicsObjects} from '../src/runtime/graphics/objects.ts';
 import {GLErrorState} from '../src/runtime/graphics/driver-errors.ts';
 import { read32, readString, write32 } from '../src/runtime/memory/guest-memory.ts';
+import {BINDING_SHADOW_BYTES, BindingShadow} from '../src/runtime/graphics/guest-bindings.ts';
+import {RenderingAPI} from '../src/runtime/graphics/fixed-function/host.ts';
 import { decodePVRTC } from '../src/runtime/graphics/pvrtc.ts';
 import {GpuMemory, TEXEL_BYTES, textureBinding, texturePart} from '../src/runtime/graphics/gpu-memory.ts';
 import {Gauge} from '../src/runtime/diagnostics/gauges.ts';
@@ -19,7 +21,7 @@ const encoder = new TextEncoder();
 function values(arg, count) { return Array.from({ length: count }, (_, i) => arg(i)); }
 function signed(value) { return value | 0; }
 
-export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{},onErrorFlag=()=>{}} = {}) {
+export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{},onErrorFlag=()=>{},onBindingShadow=()=>{}} = {}) {
   const api = {};
   const objects = new GraphicsObjects();
   const strings = new Map();
@@ -34,6 +36,11 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   const errorFlag = heap.zero?.(4) ?? 0;
   const flagErrors = value => { if (errorFlag) write32(cpu, errorFlag, value); };
   if (errorFlag) { flagErrors(1); onErrorFlag(errorFlag); }
+  const shadowAddress = heap.zero?.(BINDING_SHADOW_BYTES) ?? 0;
+  const shadow = shadowAddress ? new BindingShadow(shadowAddress, (pointer, value) => write32(cpu, pointer, value)) : undefined;
+  if (shadow) onBindingShadow(shadowAddress);
+  // Fixed-function state follows each EAGL context, so only OpenGL ES 2 bindings may be skipped.
+  const shadowed = update => { if (shadow) currentAPI() === RenderingAPI.OpenGLES2 ? update(shadow) : shadow.forget(); };
   const setError = code => { errors.record(code); flagErrors(1); };
   const flagDriverCheck = () => { if (errors.driverDue(performance.now())) flagErrors(1); };
   const scratch = new DataView(new ArrayBuffer(4));
@@ -78,7 +85,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     if (lengthPointer) write32(cpu,lengthPointer,n);
   }
   const simple = {
-    ActiveTexture:1, BlendEquation:1, BlendEquationSeparate:2, BlendFunc:2,
+    BlendEquation:1, BlendEquationSeparate:2, BlendFunc:2,
     BlendFuncSeparate:4, Clear:1, ClearStencil:1, ColorMask:4, CullFace:1, DepthFunc:1,
     DepthMask:1, Disable:1, Enable:1, Finish:0, Flush:0, FrontFace:1,
     GenerateMipmap:1, Hint:2, Scissor:4, StencilFunc:3, StencilFuncSeparate:4,
@@ -93,6 +100,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     ['ClearColor','clearColor',4], ['ClearDepthf','clearDepth',1], ['DepthRangef','depthRange',2],
     ['BlendColor','blendColor',4], ['LineWidth','lineWidth',1], ['PolygonOffset','polygonOffset',2],
   ]) bind(name,a => gl()[method](...values(a,n).map(f)));
+  bind('ActiveTexture', a => { gl().activeTexture(a(0)); shadowed(s => s.activeTexture(a(0))); });
   bind('SampleCoverage', a => gl().sampleCoverage(f(a(0)),!!a(1)));
   bind('TexParameterf', a => gl().texParameterf(a(0),a(1),f(a(2))));
   bind('PixelStorei', a => {
@@ -161,13 +169,16 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
           if (elements === number) elements = 0;
         }
       }
+      if (kind === 'Buffer' || kind === 'Texture') shadow?.forget();
     });
     bind('Bind' + kind, a => {
       gl()['bind'+kind](a(0),obj(a(1)));
       if (kind === 'Buffer') {
         if (a(0) === ARRAY_BUFFER) array = a(1);
         if (a(0) === ELEMENT_ARRAY_BUFFER) elements = a(1);
+        shadowed(s => s.buffer(a(0), a(1)));
       }
+      if (kind === 'Texture') shadowed(s => s.texture(a(0), a(1)));
     });
     bind('Is' + kind, a => Number(objects.is(a(0),kind) && gl()['is'+kind](obj(a(0)))));
   }
