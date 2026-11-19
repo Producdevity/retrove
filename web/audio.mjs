@@ -1,6 +1,7 @@
 import { read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 import {AudioMetrics} from '../src/runtime/diagnostics/audio-metrics.ts';
 import {OutputLead, StreamResampler} from '../src/runtime/audio/stream-output.ts';
+import {preloadStreamWorklet,WorkletStream} from '../src/runtime/audio/worklet-stream.ts';
 
 const fourcc = s => [...s].reduce((n,ch) => n*256 + ch.charCodeAt(0),0);
 const RIOC = fourcc('rioc'), LPCM = fourcc('lpcm');
@@ -58,6 +59,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
     unit.started = false;
     for (const node of unit.sources) { node.onended=null; node.stop(); node.disconnect(); }
     unit.sources.clear();
+    unit.stream?.close(); unit.stream=null;
   }
   function release(unit) {
     stopSources(unit);
@@ -153,7 +155,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       if (a(0)!==RIOC || !a(1)) return invalid;
       const raw=defaultStream(), id=next++;
       units.set(id,{raw,format:parseStream(raw),maximum:4096,callback:0,ref:0,work:0,
-        frames:0,samples:0,peak:0,underruns:0,started:false,time:0,frame:0,lead:new OutputLead(),resampler:null,settled:0,sources:new Set()});
+        frames:0,samples:0,peak:0,underruns:0,started:false,time:0,frame:0,lead:new OutputLead(),resampler:null,settled:0,sources:new Set(),stream:null});
       write32(cpu,a(1),id); return 0;
     },
     _AudioUnitSetProperty: a => property(a,true),
@@ -163,6 +165,7 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       if (!u.callback) return -10876;
       context ??= getAudioContext?.();
       if (!context || context.state==='closed') return -10875;
+      preloadStreamWorklet(context);
       const wanted=Math.min(u.maximum, Math.round(session.duration*u.format.rate));
       let frames=64;
       while(frames<wanted && frames*2<=u.maximum) frames*=2;
@@ -251,6 +254,13 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
       unit.resampler=Object.assign(new StreamResampler(rate,outputRate,channels),{channels,rate});
     const resampled=unit.resampler.process(planar), count=resampled[0]?.length??0;
     if(!count)return;
+    if(unit.stream?.channels!==channels){unit.stream?.close();unit.stream=WorkletStream.open(context,channels);}
+    if(unit.stream){
+      // Buffers still scheduled by the fallback path play first; silence keeps the stream behind them.
+      const pending=Math.max(0,unit.frame-Math.ceil(context.currentTime*outputRate));
+      if(pending)unit.stream.push(Array.from({length:channels},()=>new Float32Array(pending)));
+      unit.frame=0;unit.stream.push(resampled);return;
+    }
     const buffer=context.createBuffer(channels,count,outputRate);
     resampled.forEach((data,c)=>buffer.copyToChannel(data,c));
     const earliest=Math.ceil((context.currentTime+0.005)*outputRate);
@@ -272,7 +282,10 @@ export function audioImports(cpu,heap,callGuest,getAudioContext) {
         // Cap callback count if guest rendering takes longer than real time.
         const now=context.currentTime;
         unit.lead.settle(unit.settled?now-unit.settled:0); unit.settled=now;
-        for (let i=0; i<12 && unit.started && unit.time<now+unit.lead.target; i++) await render(unit);
+        const dry=unit.stream?.takeUnderruns()??0;
+        if(dry&&unit.started){unit.underruns++;unit.lead.underrun();}
+        const behind=()=>unit.stream ? unit.stream.queuedSeconds<unit.lead.target : unit.time<now+unit.lead.target;
+        for (let i=0; i<12 && unit.started && behind(); i++) await render(unit);
       }
     } finally { rendering=false; }
   }
