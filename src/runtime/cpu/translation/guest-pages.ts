@@ -1,22 +1,23 @@
 import { GUEST_SPAN_MASK, GuestLayout } from "../../memory/guest-layout";
-import { PageBits, PageBytes } from "./layout";
+import { arenaRegion, MaxCodeBytes, PageBits, PageBytes, type ArenaRegion } from "./layout";
 
 const PAGE_OFFSET_MASK = PageBytes - 1;
-/** Memarg offsets past a masked address (multi-word transfers) land in this tail of the arena. */
-export const ARENA_SLACK = 0x1_0000;
 export interface HostHeap {
   readonly HEAPU8: Uint8Array;
   _malloc(bytes: number): number;
   _free(address: number): void;
 }
 /**
- * Guest memory is one flat arena in the Unicorn heap: guest address A lives at `arena + A`, so
+ * Guest memory is one flat arena in the Unicorn heap, followed by the translator's state and
+ * tables at fixed offsets (see `arenaRegion`): guest address A lives at `arena + A`, so
  * Unicorn (uc_mem_map_ptr) and translated code share the same bytes and translated code needs no
  * page table. Pages outside mapped regions are readable zeros to translated code; Unicorn still
  * faults on them.
  */
 export class GuestPages {
   readonly arena: number;
+  /** Offsets from `arena` of the translator's state, tables and label areas. */
+  readonly region: ArenaRegion;
   readonly #heap: HostHeap;
   readonly #memory: WebAssembly.Memory;
   readonly #allocation: number;
@@ -25,11 +26,17 @@ export class GuestPages {
   readonly #regions = new Map<number, number>();
   #view: DataView | undefined;
   #bytes: Uint8Array | undefined;
-  constructor(heap: HostHeap, memory: WebAssembly.Memory, span: number = GuestLayout.Span) {
+  constructor(
+    heap: HostHeap,
+    memory: WebAssembly.Memory,
+    span: number = GuestLayout.Span,
+    maxCode = MaxCodeBytes,
+  ) {
     this.#heap = heap;
     this.#memory = memory;
     this.#span = span;
-    this.#allocation = heap._malloc(span + ARENA_SLACK + PageBytes);
+    this.region = arenaRegion(span, maxCode);
+    this.#allocation = heap._malloc(this.region.bytes + PageBytes);
     if (!this.#allocation) throw new Error("Unable to reserve guest memory.");
     this.arena = Math.ceil(this.#allocation / PageBytes) * PageBytes;
     this.#mapped = new Uint8Array(span / PageBytes);

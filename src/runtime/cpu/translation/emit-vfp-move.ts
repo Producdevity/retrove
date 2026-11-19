@@ -5,6 +5,7 @@ import { emitUnsupported } from "./emit-state";
 import type { Emitter } from "./emitter";
 import { AccessBytes, Register, type InstructionOf } from "./instruction";
 import { Op } from "./wasm-opcodes";
+import { relative } from "./layout";
 
 const Status = { Flags: 0x0fffffff, N: 31, Z: 30, C: 29, V: 28 } as const;
 
@@ -76,7 +77,7 @@ export function emitStatusMove(e: Emitter, i: InstructionOf<"vmrs">): void {
     c.get(fp.n).set(core.n).get(fp.z).set(core.z).get(fp.c).set(core.c).get(fp.v).set(core.v);
     return;
   }
-  c.i32(e.L.fpscr).memory(Op.I32Load).i32(Status.Flags).op(Op.I32And);
+  c.arena().memory(Op.I32Load, relative(e.L, e.L.fpscr)).i32(Status.Flags).op(Op.I32And);
   c.get(fp.n).i32(Status.N).op(Op.I32Shl).op(Op.I32Or).get(fp.z).i32(Status.Z).op(Op.I32Shl);
   c.op(Op.I32Or).get(fp.c).i32(Status.C).op(Op.I32Shl).op(Op.I32Or);
   c.get(fp.v).i32(Status.V).op(Op.I32Shl).op(Op.I32Or).set(e.register(i.rt));

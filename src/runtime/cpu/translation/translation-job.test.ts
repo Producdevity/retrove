@@ -12,28 +12,28 @@ describe("translation jobs", () => {
     expect(memory.word(0x1000)).toBe(0x09090001);
     expect(memory.word(0x1004)).toBe(7);
   });
-  it("allocates a label table per function and translates without live memory", () => {
-    const sizes: number[] = [];
+  it("asks for a label table per function and translates without live memory", () => {
+    const asked: number[] = [];
     const job = buildJob({
       functions: [{ start: 0x2000, end: 0x2008 }],
       entries: [],
       pages: [],
       layout: stateLayout(
         0x10000,
-        { arena: 0x20000, mask: 0xffff },
+        { arena: 0, mask: 0xffff },
         { base: 0x30000, start: 0x2000, end: 0x3000 },
       ),
       stopPC: 1,
       code: { start: 0x2000, end: 0x3000 },
       cacheKey: undefined,
-      allocate: (bytes) => {
-        sizes.push(bytes);
+      labelAddress: (range) => {
+        asked.push(range.start);
         return 0x40000;
       },
     });
-    expect(sizes).toEqual([16]);
+    expect(asked).toEqual([0x2000]);
     expect(job.labels.get(0x2000)).toBe(0x40000);
-    expect(Object.keys(job)).not.toContain("allocate");
+    expect(Object.keys(job)).not.toContain("labelAddress");
     // mov r0, #1 ; bx lr
     const code = new Map([
       [0x2000, 0xe3a00001],

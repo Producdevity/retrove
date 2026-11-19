@@ -1,6 +1,7 @@
 import { Word } from "./emit-constants";
 import type { Emitter } from "./emitter";
 import { Register } from "./instruction";
+import { relative } from "./layout";
 import { Op } from "./wasm-opcodes";
 
 const LogEntry = { PreviousWord: 4, PC: 8, Bytes: 12 } as const;
@@ -21,17 +22,17 @@ export function reg(e: Emitter, n: number, pc: number): void {
   else e.c.get(e.register(n));
 }
 
-/** Masks the guest address on the stack into the arena's span; accesses then add the arena base (see `guest`). */
+/** Turns the guest address on the stack into a host address: masked into the span, plus the arena base. */
 export function host(e: Emitter): void {
   const { c, L } = e,
     address = e.hostTemp,
     [, , , , , , , debug] = e.t;
   if (e.input.debug) {
     c.tee(address).set(debug);
-    c.i32(L.debugAddress).get(debug).memory(Op.I32Store);
-    c.i32(L.debugPC).i32(e.mode(e.debugPC)).memory(Op.I32Store).get(debug);
+    c.arena().get(debug).memory(Op.I32Store, relative(L, L.debugAddress));
+    c.arena().i32(e.mode(e.debugPC)).memory(Op.I32Store, relative(L, L.debugPC)).get(debug);
   }
-  c.i32(L.mask).op(Op.I32And);
+  c.i32(L.mask).op(Op.I32And).arena().op(Op.I32Add);
 }
 
 /** Host address of guest word `start + offset`; each word is translated on its own since transfers may cross pages. */
@@ -46,23 +47,22 @@ export function guest(e: Emitter, opcode: number, offset = 0): void {
   const { c, L, log } = e;
   if (log && LoggedStores.has(opcode)) {
     c.set(log.value).set(log.host);
-    c.i32(L.logCursor).memory(Op.I32Load).tee(log.at).i32(L.logLimit).memory(Op.I32Load);
+    c.arena().memory(Op.I32Load, relative(L, L.logCursor)).tee(log.at);
+    c.arena().memory(Op.I32Load, relative(L, L.logLimit));
     c.op(Op.I32LtU).open(Op.If, "log");
-    c.get(log.at)
-      .get(log.host)
-      .i32(L.arena + offset)
-      .op(Op.I32Add)
-      .memory(Op.I32Store);
-    c.get(log.at)
-      .get(log.host)
-      .memory(Op.I32Load, L.arena + offset);
+    c.get(log.at).get(log.host).i32(offset).op(Op.I32Add).memory(Op.I32Store);
+    c.get(log.at).get(log.host).memory(Op.I32Load, offset);
     c.memory(Op.I32Store, LogEntry.PreviousWord);
     c.get(log.at).i32(e.mode(e.debugPC)).memory(Op.I32Store, LogEntry.PC);
-    c.i32(L.logCursor).get(log.at).i32(LogEntry.Bytes).op(Op.I32Add).memory(Op.I32Store);
+    c.arena()
+      .get(log.at)
+      .i32(LogEntry.Bytes)
+      .op(Op.I32Add)
+      .memory(Op.I32Store, relative(L, L.logCursor));
     c.end();
     c.get(log.host).get(log.value);
   }
-  c.memory(opcode, L.arena + offset);
+  c.memory(opcode, offset);
 }
 
 /** Pushes whether ARM condition `cond` (0-13) holds. */

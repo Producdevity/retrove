@@ -4,7 +4,11 @@ import type { TierStatistics } from "./tier-statistics";
 /** Compiles a translated module; the browser compiles asynchronous instantiation off the main thread. */
 export async function instantiateTranslation(
   translation: Translation,
-  imports: { readonly memory: WebAssembly.Memory; readonly table: WebAssembly.Table },
+  imports: {
+    readonly memory: WebAssembly.Memory;
+    readonly table: WebAssembly.Table;
+    readonly arena: WebAssembly.Global;
+  },
   statistics: TierStatistics,
 ): Promise<WebAssembly.Exports> {
   const compiled = performance.now();
@@ -19,6 +23,8 @@ export function installTranslation(
   heap: Uint8Array,
   exports: WebAssembly.Exports,
   translation: Translation,
+  /** Label addresses in a translation are relative to the arena base. */
+  arena: number,
 ): number[] {
   const first = table.grow(translation.functions.length);
   return translation.functions.map((translated, offset) => {
@@ -29,7 +35,7 @@ export function installTranslation(
     const labels = translated.labels;
     heap.set(
       new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength),
-      translated.labelAddress,
+      arena + translated.labelAddress,
     );
     return first + offset;
   });

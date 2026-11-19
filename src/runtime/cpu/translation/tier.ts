@@ -1,4 +1,4 @@
-import { PageBytes, StateBytes, stateLayout, type StateLayout } from "./layout";
+import { MaxCodeBytes, PageBytes, relativeLayout, stateLayout, type StateLayout } from "./layout";
 import type { FunctionRange, Translation } from "./translate";
 import { buildJob, runJob, type CodeSnapshot, type TranslationJob } from "./translation-job";
 import { Translator } from "./translator";
@@ -13,7 +13,8 @@ import { CodeBudget } from "./code-budget";
 import { FunctionIndex } from "./function-index";
 import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches } from "./translation-profile";
-import { Alignment, Batch, Coalesce, PROFILE_SAVE_MS, Replay, STOP_PC } from "./tier-options";
+import { Batch, Coalesce, PROFILE_SAVE_MS, Replay, STOP_PC } from "./tier-options";
+import { LabelAreas } from "./label-areas";
 import type { TierModule, TierOptions } from "./tier-options";
 
 export type { TierModule, TierOptions } from "./tier-options";
@@ -28,10 +29,10 @@ export class TranslatedTier {
   /** Guest PCs that must stay on the interpreter (host traps). */
   excluded: (pc: number) => boolean = () => false;
   #layout: StateLayout;
-  readonly #module: TierModule;
   readonly #memory: WebAssembly.Memory;
   readonly #foreign: ForeignPages;
-  readonly #allocations: number[] = [];
+  readonly #labels: LabelAreas;
+  readonly #arena: WebAssembly.Global;
   readonly #translated = new Set<number>();
   readonly #queued = new Set<number>();
   readonly #hot = new HotFunctions();
@@ -56,31 +57,24 @@ export class TranslatedTier {
     runJob(job, (address) => this.pages.word(address)),
   );
   constructor(module: TierModule, options: TierOptions = {}) {
-    this.#module = module;
     this.#options = options;
     this.#profile = new ProfileRecorder(options.profile);
     this.#memory = module.getTciMemory();
-    this.#budget = new CodeBudget((pointer) => module._free(pointer));
-    const state = this.#allocate(StateBytes, Alignment.State);
+    this.#budget = new CodeBudget();
     this.pages = new GuestPages(module, this.#memory);
-    const foreign = this.#allocate(ForeignPages.bytes, Alignment.Index);
+    const { arena, region } = this.pages,
+      foreign = arena + region.foreign;
+    this.#labels = new LabelAreas(arena, region);
+    this.#arena = new WebAssembly.Global({ value: "i32", mutable: false }, arena);
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.#layout = {
-      ...stateLayout(state, this.pages, { base: 0, start: 0, end: 0 }),
+      ...stateLayout(arena + region.state, this.pages, { base: 0, start: 0, end: 0 }),
       foreign: { base: foreign, slots: FOREIGN_SLOTS },
     };
     this.statistics.translator = this.#translator.kind;
   }
   get layout(): StateLayout {
     return this.#layout;
-  }
-  #allocate(bytes: number, alignment: number, owner = this.#allocations): number {
-    const raw = this.#module._malloc(bytes + alignment);
-    if (!raw) throw new Error("Unable to allocate translated-code memory.");
-    owner.push(raw);
-    const aligned = Math.ceil(raw / alignment) * alignment;
-    this.#module.HEAPU8.fill(0, aligned, aligned + bytes);
-    return aligned;
   }
   #discover(): void {
     this.#discovered = true;
@@ -91,10 +85,9 @@ export class TranslatedTier {
         return this.pages.read(address, bytes) ? bytes : new Uint8Array(0);
       },
     });
-    if (!executable) return;
+    if (!executable || executable.codeEnd - executable.codeStart > MaxCodeBytes) return;
     this.#executable = executable;
-    const span = executable.codeEnd - executable.codeStart;
-    const base = this.#allocate(FunctionIndex.bytes(span), Alignment.Index);
+    const base = this.pages.arena + this.pages.region.index;
     this.#layout = {
       ...this.#layout,
       index: { base, start: executable.codeStart, end: executable.codeEnd },
@@ -176,13 +169,17 @@ export class TranslatedTier {
       functions,
       entries,
       pages,
-      layout: this.#layout,
+      layout: relativeLayout(this.#layout),
       stopPC: STOP_PC,
       code:
         executable && !pages.length
           ? { start: executable.codeStart, end: executable.codeEnd }
           : undefined,
-      allocate: (bytes) => this.#allocate(bytes, Alignment.Index, this.#budget.labels),
+      labelAddress: (range) =>
+        this.#labels.address(
+          range,
+          executable && { start: executable.codeStart, end: executable.codeEnd },
+        ) - this.pages.arena,
       cacheKey,
     });
   }
@@ -197,14 +194,20 @@ export class TranslatedTier {
     this.statistics.unsupported += translation.statistics.unsupported;
     const exports = await instantiateTranslation(
       translation,
-      { memory: this.#memory, table: this.table },
+      { memory: this.#memory, table: this.table, arena: this.#arena },
       this.statistics,
     );
     if (this.#closed || epoch !== this.#epoch) return undefined;
     this.#budget.add(translation.wasm.length);
     return {
       translation,
-      slots: installTranslation(this.table, this.pages.bytes, exports, translation),
+      slots: installTranslation(
+        this.table,
+        this.pages.bytes,
+        exports,
+        translation,
+        this.pages.arena,
+      ),
     };
   }
   async #foreignBatch(): Promise<void> {
@@ -227,6 +230,7 @@ export class TranslatedTier {
     this.#replay.length = 0;
     this.#planned.clear();
     this.#foreign.clear();
+    this.#labels.reset();
     this.#foreignQueue.clear();
     for (let slot = 0; slot < this.table.length; slot++) this.table.set(slot, null);
     this.#budget.release();
@@ -299,7 +303,5 @@ export class TranslatedTier {
     this.#translator.close();
     this.pages.close();
     this.#budget.release();
-    for (const allocation of this.#allocations) this.#module._free(allocation);
-    this.#allocations.length = 0;
   }
 }

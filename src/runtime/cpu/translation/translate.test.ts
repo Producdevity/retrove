@@ -8,7 +8,7 @@ const Code = 0x1000;
 const LabelBase = 0x420000;
 const layout = stateLayout(
   0x1000,
-  { arena: 0x10000, mask: 0xffff },
+  { arena: 0, mask: 0xffff },
   { base: 0x410000, start: Code, end: Code + 0x100 },
 );
 
@@ -39,7 +39,9 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
   const translation = translateWords(words, thumb);
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
-  const { instance } = await WebAssembly.instantiate(translation.wasm, { env: { memory, table } });
+  const { instance } = await WebAssembly.instantiate(translation.wasm, {
+    env: { memory, table, arena: new WebAssembly.Global({ value: "i32", mutable: false }, 0) },
+  });
   const view = new DataView(memory.buffer);
   const [entry] = translation.functions;
   if (!entry) throw new Error("No function");

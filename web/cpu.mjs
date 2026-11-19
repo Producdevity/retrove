@@ -1,6 +1,5 @@
 import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
-import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import createUnicorn from './vendor/unicorn-arm.mjs';
 import {UnicornRegisters} from '../src/runtime/cpu/unicorn/registers.ts';
 import {UnicornContexts} from '../src/runtime/cpu/unicorn/contexts.ts';
@@ -110,8 +109,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   registerTransfer.write(uc.ARM_REG_FPSCR, fpscr | (1 << 24) | (1 << 25));
   registerTransfer.write(uc.ARM_REG_CPSR, 0x10);
 
-  // The guest arena is reserved up front but only pages the guest has used take memory.
-  gauges.read(Gauge.WasmMemoryBytes, () => uc.getTciMemory().buffer.byteLength - (tier ? GuestLayout.Span - mappedPeak : 0));
+  // The arena and translator tables are reserved up front; only pages that were used take memory.
+  gauges.read(Gauge.WasmMemoryBytes, () => uc.getTciMemory().buffer.byteLength - (tier ? tier.pages.region.bytes - mappedPeak : 0));
   gauges.read(Gauge.GuestMappedBytes, () => mappedBytes);
   gauges.read(Gauge.GuestMappedPeak, () => mappedPeak);
   gauges.read(Gauge.GuestCpuMs, () => executedMilliseconds);

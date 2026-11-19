@@ -3,8 +3,6 @@ import { translate } from "./translate";
 import type { FunctionRange, Translation } from "./translation-types";
 
 const WORD_BYTES = 4;
-const LABEL_BYTES_PER_HALFWORD = 2;
-const THUMB_BIT = 1;
 /** A copy of guest bytes starting at a guest address. */
 export interface CodeSnapshot {
   readonly start: number;
@@ -87,16 +85,14 @@ export function runJob(
   });
   return { translation, elapsedMs: performance.now() - began, cached: false };
 }
-/** Builds a job, allocating one label table (an i32 per halfword) for each function. */
+/** Builds a job with the label table address (an i32 per halfword) of each function. */
 export function buildJob(
-  input: Omit<TranslationJob, "labels"> & { readonly allocate: (bytes: number) => number },
+  input: Omit<TranslationJob, "labels"> & {
+    readonly labelAddress: (range: FunctionRange) => number;
+  },
 ): TranslationJob {
   const labels = new Map<number, number>();
-  for (const range of input.functions)
-    labels.set(
-      range.start,
-      input.allocate(LABEL_BYTES_PER_HALFWORD * (range.end - (range.start & ~THUMB_BIT))),
-    );
-  const { allocate: _allocate, ...job } = input;
+  for (const range of input.functions) labels.set(range.start, input.labelAddress(range));
+  const { labelAddress: _labelAddress, ...job } = input;
   return { ...job, labels };
 }

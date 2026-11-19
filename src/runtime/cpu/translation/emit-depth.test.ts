@@ -6,7 +6,7 @@ import { translate } from "./translate";
 const Code = 0x1000;
 const layout = stateLayout(
   0x1000,
-  { arena: 0x10000, mask: 0xffff },
+  { arena: 0, mask: 0xffff },
   { base: 0x410000, start: Code, end: Code + 0x100 },
 );
 // A: add r0, r0, #1; b B    B: add r0, r0, #1; b A
@@ -31,7 +31,9 @@ test("jumps between translated functions unwind at the call depth limit", async 
   });
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
-  const { instance } = await WebAssembly.instantiate(translation.wasm, { env: { memory, table } });
+  const { instance } = await WebAssembly.instantiate(translation.wasm, {
+    env: { memory, table, arena: new WebAssembly.Global({ value: "i32", mutable: false }, 0) },
+  });
   for (const translated of translation.functions)
     new Uint8Array(memory.buffer).set(
       new Uint8Array(translated.labels.buffer),

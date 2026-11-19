@@ -1,13 +1,13 @@
 import { ClearThumb, ForeignProbes, FunctionType, LabelSlotShift } from "./emit-constants";
 import { EntryParameter } from "./emitter";
-import { PageBits, StopState, type StateLayout } from "./layout";
+import { PageBits, relative, StopState, type StateLayout } from "./layout";
 import { Code } from "./wasm-code";
 import { BlockType, Op, Type } from "./wasm-opcodes";
 
 const Foreign = { ArmAlignment: 3, SlotShift: 3, TargetOffset: 4 } as const;
 
 /** Probes the open-addressed foreign code table for word-aligned (ARM) PCs outside the executable. */
-function emitForeign(c: Code, foreign: NonNullable<StateLayout["foreign"]>): void {
+function emitForeign(c: Code, L: StateLayout, foreign: NonNullable<StateLayout["foreign"]>): void {
   const page = c.local(Type.I32),
     slot = c.local(Type.I32);
   c.get(EntryParameter).i32(Foreign.ArmAlignment).op(Op.I32And).op(Op.I32Eqz);
@@ -20,10 +20,13 @@ function emitForeign(c: Code, foreign: NonNullable<StateLayout["foreign"]>): voi
       .i32(foreign.slots - 1)
       .op(Op.I32And);
     c.i32(Foreign.SlotShift).op(Op.I32Shl).set(slot);
-    c.get(slot).memory(Op.I32Load, foreign.base).get(page).op(Op.I32Eq).op(Op.If, BlockType.Empty);
+    c.get(slot).arena().op(Op.I32Add).memory(Op.I32Load, relative(L, foreign.base));
+    c.get(page).op(Op.I32Eq).op(Op.If, BlockType.Empty);
     c.get(EntryParameter)
       .get(slot)
-      .memory(Op.I32Load, foreign.base + Foreign.TargetOffset);
+      .arena()
+      .op(Op.I32Add)
+      .memory(Op.I32Load, relative(L, foreign.base) + Foreign.TargetOffset);
     c.i32(1).op(Op.I32Sub).callIndirect(FunctionType).op(Op.Return).op(Op.End);
   }
   c.op(Op.End);
@@ -37,12 +40,13 @@ export function emitDispatch(L: StateLayout): Code {
   c.i32(L.index.end - L.index.start)
     .op(Op.I32LtU)
     .op(Op.If, BlockType.Empty);
-  c.get(entry).i32(LabelSlotShift).op(Op.I32Shl).memory(Op.I32Load, L.index.base).tee(entry);
+  c.get(entry).i32(LabelSlotShift).op(Op.I32Shl).arena().op(Op.I32Add);
+  c.memory(Op.I32Load, relative(L, L.index.base)).tee(entry);
   c.op(Op.If, BlockType.Empty).get(EntryParameter).get(entry).i32(1).op(Op.I32Sub);
   c.callIndirect(FunctionType).op(Op.Return).op(Op.End);
   c.op(Op.End);
-  if (L.foreign) emitForeign(c, L.foreign);
-  c.i32(L.stopped).i32(StopState.Exit).memory(Op.I32Store);
-  c.i32(L.exitPC).get(EntryParameter).memory(Op.I32Store).get(EntryParameter);
+  if (L.foreign) emitForeign(c, L, L.foreign);
+  c.arena().i32(StopState.Exit).memory(Op.I32Store, relative(L, L.stopped));
+  c.arena().get(EntryParameter).memory(Op.I32Store, relative(L, L.exitPC)).get(EntryParameter);
   return c;
 }

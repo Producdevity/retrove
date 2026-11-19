@@ -7,13 +7,10 @@ import { Gauge, gauges, type Gauges } from "../../diagnostics/gauges";
  */
 export const CODE_BUDGET_BYTES = 67_108_864;
 
-/** Tracks the translated code and label tables that a flush releases together. */
+/** Tracks the live translated code that a flush releases. */
 export class CodeBudget {
-  /** Raw allocations of label tables, freed when their modules are dropped. */
-  readonly labels: number[] = [];
   #live = 0;
   constructor(
-    private readonly free: (pointer: number) => void,
     private readonly limit = CODE_BUDGET_BYTES,
     private readonly gauge: Gauges = gauges,
   ) {}
@@ -25,7 +22,6 @@ export class CodeBudget {
     return this.#live > this.limit;
   }
   release(): void {
-    for (const pointer of this.labels.splice(0)) this.free(pointer);
     this.gauge.add(Gauge.TranslatedCodeBytes, -this.#live);
     this.#live = 0;
   }

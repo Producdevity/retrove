@@ -1,6 +1,7 @@
 import { ClearThumb, DispatchIndex, LabelSlotShift } from "./emit-constants";
 import { nestedCall } from "./emit-depth";
 import { exit, loadAll, storeAll, tail } from "./emit-state";
+import { relative } from "./layout";
 import type { Emitter } from "./emitter";
 import { Register } from "./instruction";
 import { BlockType, Op } from "./wasm-opcodes";
@@ -31,9 +32,9 @@ export function labelAt(e: Emitter, offset: number): void {
     .get(offset)
     .i32(LabelSlotShift)
     .op(Op.I32Shl)
-    .i32(e.labelAddress)
+    .arena()
     .op(Op.I32Add)
-    .memory(Op.I32Load);
+    .memory(Op.I32Load, relative(e.L, e.labelAddress));
 }
 
 /** Jumps to a PC computed into local `target`; `kind` selects local dispatch or leaving the function. */
@@ -93,7 +94,8 @@ export function callTo(e: Emitter, pc: number, target: (() => void) | number): v
       () => c.call(index),
     );
   } else nestedCall(e, target, () => c.call(DispatchIndex));
-  c.tee(result).i32(ret).op(Op.I32Ne).i32(e.L.stopped).memory(Op.I32Load).op(Op.I32Or);
+  c.tee(result).i32(ret).op(Op.I32Ne).arena().memory(Op.I32Load, relative(e.L, e.L.stopped));
+  c.op(Op.I32Or);
   c.op(Op.If, BlockType.Empty).get(result).op(Op.Return).op(Op.End);
   loadAll(e);
 }

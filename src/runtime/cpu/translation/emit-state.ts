@@ -1,6 +1,6 @@
 import { ExitKind, ReloadIndex, SpillIndex, Word } from "./emit-constants";
 import type { Emitter, FlagLocals } from "./emitter";
-import { StopState } from "./layout";
+import { relative, StopState } from "./layout";
 import { Op } from "./wasm-opcodes";
 
 const flagOrder = (flags: FlagLocals) => [flags.n, flags.z, flags.c, flags.v];
@@ -17,8 +17,8 @@ export function loadAll(e: Emitter): void {
   c.call(ReloadIndex);
   for (const local of stateLocals(e).reverse()) c.set(local);
   for (const [lane, local] of e.lanes)
-    c.i32(L.vfp + Word.Bytes * lane)
-      .memory(Op.I32Load)
+    c.arena()
+      .memory(Op.I32Load, relative(L, L.vfp) + Word.Bytes * lane)
       .set(local);
 }
 
@@ -28,9 +28,9 @@ export function storeAll(e: Emitter): void {
   for (const local of stateLocals(e)) c.get(local);
   c.call(SpillIndex);
   for (const [lane, local] of e.lanes)
-    c.i32(L.vfp + Word.Bytes * lane)
+    c.arena()
       .get(local)
-      .memory(Op.I32Store);
+      .memory(Op.I32Store, relative(L, L.vfp) + Word.Bytes * lane);
 }
 
 /** Leaves through the shared epilogue, which stores the registers once. */
@@ -49,10 +49,11 @@ export const fail = (e: Emitter, target: () => void): void => leave(e, ExitKind.
 export function emitBudget(e: Emitter, pc: number): void {
   const { c, L } = e,
     [counter] = e.t;
-  c.i32(L.budget).i32(L.budget).memory(Op.I32Load).i32(1).op(Op.I32Sub).tee(counter);
-  c.memory(Op.I32Store);
+  const budget = relative(L, L.budget);
+  c.arena().arena().memory(Op.I32Load, budget).i32(1).op(Op.I32Sub).tee(counter);
+  c.memory(Op.I32Store, budget);
   c.get(counter).i32(0).op(Op.I32LtS).open(Op.If, "budget");
-  c.i32(L.stopped).i32(StopState.Budget).memory(Op.I32Store);
+  c.arena().i32(StopState.Budget).memory(Op.I32Store, relative(L, L.stopped));
   exit(e, () => c.i32(pc));
   c.end();
 }
@@ -62,10 +63,11 @@ export function emitStop(e: Emitter): void {
   const { c, L } = e,
     stop = e.input.stopPC,
     [counter] = e.t;
-  c.i32(L.stopCount).i32(L.stopCount).memory(Op.I32Load).i32(1).op(Op.I32Sub).tee(counter);
-  c.memory(Op.I32Store);
+  const count = relative(L, L.stopCount);
+  c.arena().arena().memory(Op.I32Load, count).i32(1).op(Op.I32Sub).tee(counter);
+  c.memory(Op.I32Store, count);
   c.get(counter).op(Op.I32Eqz).open(Op.If, "stop");
-  c.i32(L.stopped).i32(StopState.Stopped).memory(Op.I32Store);
+  c.arena().i32(StopState.Stopped).memory(Op.I32Store, relative(L, L.stopped));
   exit(e, () => c.i32(stop));
   c.end();
 }

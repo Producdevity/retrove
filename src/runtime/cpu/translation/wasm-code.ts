@@ -1,6 +1,9 @@
 import { Bytes } from "./wasm-bytes";
 import { BlockType, Op, SaturatingPrefix, type ValueType } from "./wasm-opcodes";
 
+/** Translated modules import the arena base as their only global. */
+export const ArenaGlobal = 0;
+
 const FloatBytes = { Single: 4, Double: 8 } as const;
 
 /** Structured code builder. Labels are resolved by name against the open control stack. */
@@ -69,6 +72,12 @@ export class Code {
 
   saturating(opcode: number): this {
     this.body.byte(SaturatingPrefix).unsigned(opcode);
+    return this;
+  }
+
+  /** Pushes the host address of guest address 0, imported as global 0 (`env.arena`). */
+  arena(): this {
+    this.body.byte(Op.GlobalGet).unsigned(ArenaGlobal);
     return this;
   }
 

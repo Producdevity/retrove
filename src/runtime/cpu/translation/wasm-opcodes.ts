@@ -21,6 +21,7 @@ export const Op = {
   LocalGet: 0x20,
   LocalSet: 0x21,
   LocalTee: 0x22,
+  GlobalGet: 0x23,
   I32Load: 0x28,
   I64Load: 0x29,
   F32Load: 0x2a,

@@ -28,7 +28,7 @@ function heap() {
 describe("guest pages", () => {
   it("maps into one arena, reads across pages, refuses unmapped pages and zeroes released ones", () => {
     const { memory, module, freed } = heap();
-    const pages = new GuestPages(module, memory, 0x40000);
+    const pages = new GuestPages(module, memory, 0x40000, 0x1000);
     pages.map(0x10000, 0x2000);
     expect(pages.word(0x10000)).toBe(0);
     expect(pages.write(0x10ffe, new Uint8Array([1, 2, 3, 4]))).toBe(true);

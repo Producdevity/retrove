@@ -12,7 +12,9 @@ const Section = {
   Element: 9,
   Code: 10,
 } as const;
-const ExternalKind = { Function: 0, Table: 1, Memory: 2 } as const;
+const ExternalKind = { Function: 0, Table: 1, Memory: 2, Global: 3 } as const;
+const I32 = 0x7f;
+const Immutable = 0x00;
 const FunctionReference = 0x70;
 const FunctionForm = 0x60;
 const NoMaximum = 0x00;
@@ -28,7 +30,7 @@ export interface ModuleFunction {
   readonly exportName?: string;
 }
 
-/** Module importing `env.memory` and `env.table`, with the given functions and exports. */
+/** Module importing `env.memory`, `env.table` and the immutable i32 `env.arena`, with the given functions and exports. */
 export function module(options: {
   readonly types: readonly FunctionType[];
   readonly functions: readonly ModuleFunction[];
@@ -49,7 +51,8 @@ export function module(options: {
     .name("env")
     .name("table")
     .byte(ExternalKind.Table, FunctionReference, NoMaximum);
-  section(Section.Import, new Bytes().vector([memory.unsigned(0), table.unsigned(0)]));
+  const arena = new Bytes().name("env").name("arena").byte(ExternalKind.Global, I32, Immutable);
+  section(Section.Import, new Bytes().vector([memory.unsigned(0), table.unsigned(0), arena]));
   const declarations = options.functions.map((entry) => new Bytes().unsigned(entry.type));
   section(Section.Function, new Bytes().vector(declarations));
   const exports = options.functions.flatMap((entry, index) =>
