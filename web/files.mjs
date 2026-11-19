@@ -105,6 +105,9 @@ export function fileImports(cpu, ipa, heap, errno, log,
       if (part === "..") parts.pop();
       else if (part && part !== ".") parts.push(part);
     }
+    // The folder holding the .app is the app's home, so `<bundle>/../Documents` is Documents.
+    const container = ipa.bundlePath.slice(0, ipa.bundlePath.lastIndexOf("/"));
+    if (container && parts[0] === container && roots.has(parts[1])) parts.shift();
     const path = parts.join("/");
     if (!path || roots.has(parts[0])) return {home: path};
     if (path === ipa.bundlePath || path.startsWith(ipa.bundlePath + "/")) return {bundle: path};

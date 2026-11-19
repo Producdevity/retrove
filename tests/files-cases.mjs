@@ -32,6 +32,12 @@ export async function writeSave(namespace, storage) {
   same(await call("_open", missing, 0x202), -1); same(errno(), 2);
   same(await call("_open", bad, 0x202), -1); same(errno(), 13);
   same(await call("_open", heap.string("/Payload/Test.app/wrong"), 0x202), -1); same(errno(), 30);
+  // The app's home holds both the bundle and Documents, as on iOS.
+  const sibling = await call("_open", heap.string("/Payload/Test.app//../Documents/sibling"), 0xA02);
+  same(sibling >= 0, true);
+  same(await call("_access", heap.string("/Documents/sibling"), 0), 0);
+  same(await call("_close", sibling), 0);
+  same(await call("_unlink", heap.string("/Documents/sibling")), 0);
   const old = await call("_open", target, 0xA02);
   const fd = await call("_open", temporary, 0xA02);
   same(await call("_open", temporary, 0xA02), -1); same(errno(), 17);
