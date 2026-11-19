@@ -30,8 +30,11 @@ export function calendarImports(cpu,heap,errno,threadID) {
     return pack(read32(cpu,a(0))|0,out,local);
   }
   const doubles=new DataView(new ArrayBuffer(8));
+  // clock() is process CPU time, which a busy game spends almost entirely running: wall time
+  // matches iOS. Guest CPU time alone ran games that time with clock() at half speed or worse.
+  const started=performance.now(), CLOCKS_PER_MILLISECOND=1000;
   return {
-    _clock:()=>Math.floor(cpu.executedMilliseconds*1000)>>>0,
+    _clock:()=>Math.floor((performance.now()-started)*CLOCKS_PER_MILLISECOND)>>>0,
     _difftime:a=>{doubles.setFloat64(0,(a(0)|0)-(a(1)|0),true);return doubles.getBigUint64(0,true);},
     _gmtime:a=>convert(a,false,false), _localtime:a=>convert(a,true,false), _localtime_r:a=>convert(a,true,true),
     _mktime:a=>{
