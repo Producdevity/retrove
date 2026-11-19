@@ -3,7 +3,7 @@ import { initializeAppearance } from "../ui/appearance";
 import { element } from "../ui/dom";
 import { syntheticModule } from "./wasm-module";
 
-const STORAGE_KEY = "retrove.device-probe";
+const STORAGE_KEY = "retrove.device-probe.v2";
 const WASM_PAGE = 65_536;
 const MEBIBYTE = 1_048_576;
 const STEP_MB = 64;
@@ -81,6 +81,20 @@ function show(state: ProbeState): void {
   output.textContent = JSON.stringify({ ...state, environment: environment() }, null, INDENT);
 }
 
+/** iOS compresses idle pages, so only incompressible bytes show the real limit. */
+const RANDOM_CHUNK = 65_536;
+const RANDOM_BLOCK = MEBIBYTE;
+const randomBlock = (() => {
+  const block = new Uint8Array(RANDOM_BLOCK);
+  for (let at = 0; at < block.length; at += RANDOM_CHUNK)
+    crypto.getRandomValues(block.subarray(at, at + RANDOM_CHUNK));
+  return block;
+})();
+function fillIncompressible(memory: WebAssembly.Memory, start: number, length: number): void {
+  const view = new Uint8Array(memory.buffer, start, length);
+  for (let at = 0; at < length; at += RANDOM_BLOCK)
+    view.set(randomBlock.subarray(0, Math.min(RANDOM_BLOCK, length - at)), at);
+}
 /** Grows one memory in steps, touching every new page when `touch`, until growth fails. */
 async function grow(state: ProbeState, touch: boolean): Promise<void> {
   const memory = new WebAssembly.Memory({ initial: 1 });
@@ -93,7 +107,7 @@ async function grow(state: ProbeState, touch: boolean): Promise<void> {
     } catch {
       break;
     }
-    if (touch) new Uint8Array(memory.buffer, pages * WASM_PAGE, STEP_PAGES * WASM_PAGE).fill(1);
+    if (touch) fillIncompressible(memory, pages * WASM_PAGE, STEP_PAGES * WASM_PAGE);
     if (touch) state.touchMB = state.attemptMB;
     else state.reserveMB = state.attemptMB;
     save(state);
