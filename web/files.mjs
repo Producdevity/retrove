@@ -2,6 +2,7 @@ import {DIRENT_BYTES, direntBytes, statBytes, virtualInode} from '../src/runtime
 import { readCStringBytes, readString, write32 } from "../src/runtime/memory/guest-memory.ts";
 import { SaveStorage } from "../src/runtime/storage/save-storage.ts";
 import {Gauge, gauges} from "../src/runtime/diagnostics/gauges.ts";
+import { BundleBlocks } from "../src/runtime/storage/bundle-blocks.ts";
 
 const E = { PERM: 1, NOENT: 2, IO: 5, BADF: 9, NOMEM: 12, ACCESS: 13, FAULT: 14, EXIST: 17,
   NOTDIR: 20, ISDIR: 21, INVAL: 22, FBIG: 27, NOSPC: 28, SPIPE: 29, ROFS: 30, RANGE: 34,
@@ -17,44 +18,15 @@ function parent(path) { return path.slice(0, path.lastIndexOf("/")); }
 const CHUNK = 64 * 1024;
 // Bundle files from this size are read through a stored blob instead of being inflated on every open.
 const RANDOM_ACCESS_BYTES = 256 * 1024;
-// Games read packages in small pieces; each blob read is an asynchronous disk round trip.
-const READ_AHEAD_BYTES = 256 * 1024, READ_AHEAD_WINDOWS = 32;
-// Reads at least one window long bypass the cache, in chunks that bound the temporary copy.
-const DIRECT_READ_BYTES = 1024 * 1024;
 
 export function fileImports(cpu, ipa, heap, errno, log,
   storage = new SaveStorage(ipa.info?.CFBundleIdentifier || ipa.bundlePath), diagnostic, missingAsset, data) {
   const fds = new Map(), streams = new Map(), directoryStreams = new Map();
-  const largeAssets = new Map(), readAhead = new Map();
-  function dropWindow(asset, kept) {
-    const window = readAhead.get(asset);
-    if (window && window !== kept) gauges.add(Gauge.FileCacheBytes, -window.bytes.length);
-    readAhead.delete(asset);
-  }
+  const largeAssets = new Map();
+  const blocks = new BundleBlocks(delta => gauges.add(Gauge.FileCacheBytes, delta));
   async function readAsset(asset, offset, pointer, count) {
     const blob = await (asset.blob ??= ipa.assetBlob(asset.path));
-    count = Math.max(0, Math.min(blob.size - offset, count));
-    for (let done = 0; done < count;) {
-      const at = offset + done;
-      let window = readAhead.get(asset);
-      if (!window || at < window.start || at >= window.start + window.bytes.length) {
-        if (count - done >= READ_AHEAD_BYTES) {
-          const length = Math.min(count - done, DIRECT_READ_BYTES);
-          cpu.write(pointer + done, new Uint8Array(await blob.slice(at, at + length).arrayBuffer()));
-          done += length;
-          continue;
-        }
-        const length = Math.min(blob.size - at, READ_AHEAD_BYTES);
-        window = {start: at, bytes: new Uint8Array(await blob.slice(at, at + length).arrayBuffer())};
-        gauges.add(Gauge.FileCacheBytes, window.bytes.length);
-      }
-      dropWindow(asset, window); readAhead.set(asset, window);
-      if (readAhead.size > READ_AHEAD_WINDOWS) dropWindow(readAhead.keys().next().value);
-      const from = at - window.start, take = Math.min(count - done, window.bytes.length - from);
-      cpu.write(pointer + done, window.bytes.subarray(from, from + take));
-      done += take;
-    }
-    return count;
+    return blocks.read(asset.path, blob, offset, count, (done, bytes) => cpu.write(pointer + done, bytes));
   }
   let next = 3, tmpnameBuffer;
   const bundleDirectory = '/' + ipa.bundlePath;
@@ -290,7 +262,7 @@ export function fileImports(cpu, ipa, heap, errno, log,
     if (fd < 3 && !fds.has(fd) && !closedStandard.has(fd)) { closedStandard.add(fd); return 0; }
     const file = fdFor(fd);
     if (file.device) await file.device.close();
-    if (file.asset && --file.asset.references === 0) { largeAssets.delete(file.bundle); dropWindow(file.asset); }
+    if (file.asset && --file.asset.references === 0) { largeAssets.delete(file.bundle); }
     if (file.data) gauges.add(Gauge.FileCacheBytes, -file.data.length);
     if (file.inode !== undefined) {
       await run("readwrite", async ({ inodes, chunks }) => {
