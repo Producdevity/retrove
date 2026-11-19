@@ -150,3 +150,30 @@ export function emitWidenAdd(e: Emitter, i: InstructionOf<"vaddw">): void {
     setLane(e, at(i.d, k));
   }
 }
+
+const WIDE_HIGH_SHIFT = 32n;
+
+/** Pushes the 64-bit element in lanes `low` and `low + 1`. */
+function wideElement(e: Emitter, low: number): void {
+  getLane(e, low + 1);
+  e.c.op(Op.I64ExtendI32U).i64(WIDE_HIGH_SHIFT).op(Op.I64Shl);
+  getLane(e, low);
+  e.c.op(Op.I64ExtendI32U).op(Op.I64Or);
+}
+
+export function emitWideArithmetic(e: Emitter, i: InstructionOf<"viarith64">): void {
+  const { c } = e,
+    [value] = e.x,
+    n = vectorLanes(i.n, i.q),
+    m = vectorLanes(i.m, i.q),
+    d = vectorLanes(i.d, i.q);
+  for (let k = 0; k < d.length; k += PER_WORD) {
+    wideElement(e, n[k] ?? 0);
+    wideElement(e, m[k] ?? 0);
+    c.op(i.sub ? Op.I64Sub : Op.I64Add).set(value);
+    c.get(value).op(Op.I32WrapI64);
+    setLane(e, d[k] ?? 0);
+    c.get(value).i64(WIDE_HIGH_SHIFT).op(Op.I64ShrU).op(Op.I32WrapI64);
+    setLane(e, (d[k] ?? 0) + 1);
+  }
+}

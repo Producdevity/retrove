@@ -93,6 +93,44 @@ describe("translate", () => {
     ],
     // vmov d0, r0, r0; vcvt.s32.f32 d0, d0, #16; vmov r0, r1, d0
     ["vcvt.s32.f32 #16", [0xec400b10, 0xf2b00f10, 0xec510b10], 0x3fc00000, 0, 0x18000],
+    // vmov d1, r0, r0; vmov d2, r1, r1; vadd.i16 d0, d1, d2; vmov r0, r1, d0
+    ["vadd.i16", [0xec400b11, 0xec411b12, 0xf2110802, 0xec510b10], 0xffff0001, 0x10001, 2],
+    // vmov d0, r0, r0; vmov d1, r0, r0; vmov d2, r1, r1; vmla.i16 d0, d1, d2; vmov r0, r1, d0
+    [
+      "vmla.i16",
+      [0xec400b10, 0xec400b11, 0xec411b12, 0xf2110902, 0xec510b10],
+      0x30002,
+      0x50004,
+      0x12000a,
+    ],
+    // vmov d1, r0, r0; vshr.u16 d0, d1, #1; vmov r0, r1, d0
+    ["vshr.u16", [0xec400b11, 0xf39f0011, 0xec510b10], 0x80000002, 0, 0x40000001],
+    // vmov d1, r0, r0; vshl.i16 d0, d1, #1; vmov r0, r1, d0
+    ["vshl.i16", [0xec400b11, 0xf2910511, 0xec510b10], 0x80010001, 0, 0x20002],
+    // vmov d0, r1, r1; vmov d1, r0, r0; vsra.s32 d0, d1, #16; vmov r0, r1, d0
+    ["vsra.s32", [0xec411b10, 0xec400b11, 0xf2b00111, 0xec510b10], 0xfffe0000, 10, 8],
+    // vmov d1, r0, r1; vshl.i64 d0, d1, #32; vmov r1, r0, d0
+    ["vshl.i64", [0xec410b11, 0xf2a00591, 0xec501b10], 0x1234, 0, 0x1234],
+    // vmov d1, r0, r1; vmov d2, r1, r1; vshl.u64 d0, d1, d2 (by -4); vmov r0, r1, d0
+    ["vshl.u64", [0xec410b11, 0xec411b12, 0xf3320401, 0xec510b10], 0x100, 0xfc, 0xc0000010],
+    // vmov d2, r0, r1; vmov d3, r0, r1; vshrn.i32 d0, q1, #16; vmov r0, r1, d0
+    [
+      "vshrn.i32",
+      [0xec410b12, 0xec410b13, 0xf2900812, 0xec510b10],
+      0x12345678,
+      0xaabbccdd,
+      0xaabb1234,
+    ],
+    // vmov d0, r0, r0; vst1.16 {d0[1]}, [r1]; vld1.16 {d1[0]}, [r1]; vmov r0, r1, d1
+    [
+      "vld1/vst1.16 lane",
+      [0xec400b10, 0xf481044f, 0xf4a1140f, 0xec510b11],
+      0x12345678,
+      0x8000,
+      0x1234,
+    ],
+    // vmov d1, r0, r1; vmov d2, r1, r0; vsub.i64 d0, d1, d2; vmov r0, r1, d0
+    ["vsub.i64", [0xec410b11, 0xec401b12, 0xf3310802, 0xec510b10], 0, 1, 0xffffffff],
     // vmov d2, r0, r1; vmov d3, r0, r1; vmov d4, r0, r1; vaddw.u16 q0, q1, d4; vmov r0, r1, d0
     [
       "vaddw.u16",

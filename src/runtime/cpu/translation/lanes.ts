@@ -66,6 +66,9 @@ function simdLanes(i: Instruction): number[] {
     case "vfloat":
     case "vicompare":
     case "viorder":
+    case "viarith64":
+    case "velem":
+    case "vshlreg64":
     case "vshlreg":
     case "vstep":
     case "vfcmp":
@@ -81,6 +84,7 @@ function simdLanes(i: Instruction): number[] {
     case "vshli":
     case "vizero":
     case "vcvtfixed":
+    case "veshift":
     case "vrev64":
     case "vestimate":
       return [...q(i.d, i.q), ...q(i.m, i.q)];
@@ -91,7 +95,10 @@ function simdLanes(i: Instruction): number[] {
       return [...d(i.d), ...d(i.n), ...d(i.m)];
     case "vmovn":
     case "vqmovn":
+    case "vshrn":
       return [...d(i.d), ...q(i.m, true)];
+    case "vlane16":
+      return d(i.d);
     case "vdupcore":
     case "vmovi":
       return q(i.d, i.q);

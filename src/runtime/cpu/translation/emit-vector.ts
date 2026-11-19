@@ -1,6 +1,14 @@
 import {
+  emitElementArithmetic,
+  emitElementShift,
+  emitHalfLane,
+  emitShiftNarrow,
+  emitWideShiftRegister,
+} from "./emit-simd-elements";
+import {
   emitFixedConvert,
   emitWidenAdd,
+  emitWideArithmetic,
   emitZeroCompare,
   emitIntegerOrder,
   emitSaturatingNarrow,
@@ -160,6 +168,18 @@ function emitSimd(e: Emitter, pc: number, i: Instruction): void {
       return emitFixedConvert(e, i);
     case "vaddw":
       return emitWidenAdd(e, i);
+    case "viarith64":
+      return emitWideArithmetic(e, i);
+    case "velem":
+      return emitElementArithmetic(e, i);
+    case "veshift":
+      return emitElementShift(e, i);
+    case "vshlreg64":
+      return emitWideShiftRegister(e, i);
+    case "vshrn":
+      return emitShiftNarrow(e, i);
+    case "vlane16":
+      return emitHalfLane(e, pc, i);
     default:
       return emitUnsupported(e, pc);
   }

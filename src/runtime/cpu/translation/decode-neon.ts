@@ -21,6 +21,8 @@ const Field = {
   Size: { shift: 6, width: 2 },
 } as const;
 const Element = { Word: 0b10, AllLanes: 0b1100, OneLane: 0b1000, LaneIndex: 7, Count: 5 } as const;
+/** One 16-bit lane: type 0b0100, lane index in bits 7:6. */
+const HalfLane = { Type: 0b0100, Index: { shift: 6, width: 2 } } as const;
 const MultipleCounts: Partial<Record<number, number>> = {
   0b0111: 1,
   0b1010: 2,
@@ -104,6 +106,8 @@ function decodeElementLane(w: number, d: number): Instruction {
     const count = bit(w, Element.Count) + 1;
     return { cond, kind: "vlane", load, d, index: 0, all: true, count, rn, rm };
   }
+  if (type === HalfLane.Type)
+    return { cond, kind: "vlane16", load, d, index: field(w, HalfLane.Index), rn, rm };
   if (type === Element.OneLane && !flag(w, ArmBit.Q)) {
     const index = bit(w, Element.LaneIndex);
     return { cond, kind: "vlane", load, d, index, all: false, count: 1, rn, rm };

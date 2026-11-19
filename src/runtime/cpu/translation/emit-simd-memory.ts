@@ -13,7 +13,7 @@ const SpacedStride = 2;
 const QuadSecond = 2;
 
 /** Post-indexing: Rm = SP adds the transfer size, Rm = PC leaves Rn alone, otherwise Rn += Rm. */
-function postIndex(
+export function postIndex(
   e: Emitter,
   pc: number,
   base: number,

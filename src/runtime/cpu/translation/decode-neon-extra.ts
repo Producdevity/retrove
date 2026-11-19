@@ -16,6 +16,8 @@ const Encoding = {
   ZeroCompare: 0xf3b10000,
   FixedMask: 0xfe800e90,
   Fixed: 0xf2800e10,
+  WideArithmeticMask: 0xfe800f10,
+  WideArithmetic: 0xf2000800,
   WidenAddMask: 0xfe800d50,
   WidenAdd: 0xf2800100,
 } as const;
@@ -23,6 +25,7 @@ const ZERO_COMPARES = ["gt", "ge", "eq", "le", "lt"] as const;
 const NARROW_BYTES = [AccessBytes.Byte, AccessBytes.Half] as const;
 const Bit = { FixedToFloat: 8, Subtract: 9, Wide: 21 } as const;
 const HALF_SIZE = 0b01;
+const DOUBLE_SIZE = 0b11;
 const LANE_BITS = 64;
 const Field = {
   Size: { shift: 20, width: 2 },
@@ -44,6 +47,11 @@ export function decodeSimdExtra(
   { d, n, m, q }: SimdRegisters,
   u: boolean,
 ): Instruction | undefined {
+  if (
+    masked(w, Encoding.WideArithmeticMask) === Encoding.WideArithmetic &&
+    field(w, Field.Size) === DOUBLE_SIZE
+  )
+    return { cond, kind: "viarith64", sub: u, q, d, n, m };
   if (masked(w, Encoding.OrderMask) === Encoding.Order && field(w, Field.Size) === WORD_SIZE)
     return { cond, kind: "viorder", ge: flag(w, GE_BIT), unsigned: u, q, d, n, m };
   if (masked(w, Encoding.NotMask) === Encoding.Not) return { cond, kind: "vmvn", q, d, m };

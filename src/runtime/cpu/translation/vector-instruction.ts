@@ -4,6 +4,8 @@ export type VfpAccumulate = "mla" | "mls" | "nmla" | "nmls";
 import type { TransferSize } from "./instruction";
 
 export type LaneBytes = TransferSize;
+export const ElementSize = { Byte: 8, Half: 16, Word: 32, Double: 64 } as const;
+export type ElementBits = (typeof ElementSize)[keyof typeof ElementSize];
 
 type Unary = { readonly q: boolean; readonly d: number; readonly m: number };
 type Binary = Unary & { readonly n: number };
@@ -182,6 +184,42 @@ type SimdInstruction =
       readonly unsigned: boolean;
       readonly fraction: number;
     })
+  /** Integer VADD/VSUB/VMUL/VMLA/VMLS on `bits`-wide elements. */
+  | (Binary & {
+      readonly kind: "velem";
+      readonly op: "add" | "sub" | "mul" | "mla" | "mls";
+      readonly bits: ElementBits;
+    })
+  /** VSHL/VSHR/VSRA by an immediate on `bits`-wide elements. */
+  | (Unary & {
+      readonly kind: "veshift";
+      readonly op: "shl" | "shr" | "sra";
+      readonly unsigned: boolean;
+      readonly bits: ElementBits;
+      readonly amount: number;
+    })
+  /** VSHRN/VRSHRN: elements of Qm shifted right and narrowed to `bits`-wide elements of Dd. */
+  | {
+      readonly kind: "vshrn";
+      readonly round: boolean;
+      readonly bits: ElementBits;
+      readonly amount: number;
+      readonly d: number;
+      readonly m: number;
+    }
+  /** VLD1/VST1 of one 16-bit lane. */
+  | {
+      readonly kind: "vlane16";
+      readonly load: boolean;
+      readonly d: number;
+      readonly index: number;
+      readonly rn: number;
+      readonly rm: number;
+    }
+  /** VSHL (register) on 64-bit elements: each element of m shifted by the low byte of n. */
+  | (Binary & { readonly kind: "vshlreg64"; readonly unsigned: boolean })
+  /** VADD/VSUB on 64-bit lanes. */
+  | (Binary & { readonly kind: "viarith64"; readonly sub: boolean })
   /** VADDW/VSUBW: 32-bit lanes of Qn plus or minus the extended 16-bit elements of Dm. */
   | {
       readonly kind: "vaddw";
