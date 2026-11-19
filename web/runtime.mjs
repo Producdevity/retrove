@@ -82,6 +82,10 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), cpuMethod: cpu ? cpu.method ?? (cpu.translation ? 'interpreter with translation' : 'interpreter') : undefined, mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
+      // Retrove's own memory accounting in MB; reports from phones that iOS closed for memory need it.
+      memoryMB: Object.fromEntries([Gauge.GuestMappedBytes, Gauge.GuestMappedPeak, Gauge.WasmMemoryBytes, Gauge.TranslatedCodeBytes,
+        Gauge.GpuTextureBytes, Gauge.GpuBufferBytes, Gauge.GpuRenderbufferBytes, Gauge.FileCacheBytes]
+        .map(gauge => [gauge, Math.round(gauges.value(gauge) / 1e6)])),
       threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
