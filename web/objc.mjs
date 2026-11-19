@@ -64,6 +64,7 @@ import {installNumberFormatter} from "../src/runtime/ios/foundation/number-forma
 import {installRemoteNotifications} from "../src/runtime/ios/uikit/application/remote-notifications.ts";
 import {installStatusBar} from "../src/runtime/ios/uikit/application/status-bar.ts";
 import {DISPLAY_INTERVAL_MS, nextDisplayRefresh, workerSliceMs} from "../src/runtime/ios/uikit/application/display-refresh.ts";
+import {PresentPacing} from "../src/runtime/graphics/present-pacing.ts";
 import {installPorts,RunLoopMode} from '../src/runtime/ios/foundation/ports.ts';
 import {installScanners} from '../src/runtime/ios/foundation/scanner-host.ts';
 import {appProfile} from '../src/runtime/ios/profiles/app-manifest.ts';
@@ -466,13 +467,20 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     const format=properties?await send(properties,'objectForKey:',[string('EAGLDrawablePropertyColorFormat')]):0;
     return drawable.allocate(target, layer, format?text(format):'RGBA8');
   });
-  method('EAGLContext', false, 'presentRenderbuffer:', (self, a) => {
+  const present = (self, target) => {
     const started = performance.now();
     let result = 0;
     try {
-      if (currentContext() === self) result = drawable.present(a(0));
+      if (currentContext() === self) result = drawable.present(target);
       return result;
     } finally { onPresent(result, performance.now() - started); }
+  };
+  // A second present within one display refresh waits for the next one, as on iOS; other guest
+  // threads keep running meanwhile.
+  method('EAGLContext', false, 'presentRenderbuffer:', (self, a) => {
+    const target = a(0);
+    if (pacing.take(performance.now())) return present(self, target);
+    return {wait: () => pacing.take(performance.now()) ? present(self, target) : undefined};
   });
   const contexts = new Map(), contextAPIs = new Map();
   const initContext = (self, a) => {
@@ -508,6 +516,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   hostClass('NSRunLoop', 'NSObject');
   let application = 0, delegate = 0, idleDisabled = false;
   const runLoops = new Map();
+  const pacing = new PresentPacing();
   const displays = new Map();
   // The emulated iOS 7 device has a 60 Hz screen. Modern browsers can
   // deliver RAF at 120 Hz or skip an update when a guest frame runs long.
@@ -1003,7 +1012,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       await send(center,'postNotificationName:object:userInfo:',[string(notification),avSession??=alloc(names.get('AVAudioSession')),info]);
     },
     async fileURLPath(url) { return await send(url, 'isFileURL') ? text(await send(url, 'path')) : null; },
-    close() { lifecycle.close(); accelerometer.close(); movies.close(); audioPlayers.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
+    close() { pacing.close(); lifecycle.close(); accelerometer.close(); movies.close(); audioPlayers.close(); input.close(); }, inputSnapshot:()=>input.snapshot(),
     get lastSelector() {
     const latest=lastDispatch.get(threadId());if(!latest)return;
     const {cls:lastClass,method:lastMethod}=latest;
