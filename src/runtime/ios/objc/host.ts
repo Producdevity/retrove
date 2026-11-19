@@ -21,7 +21,7 @@ export interface FoundationHost {
   string(value: string): number;
   write(address: number, value: number): void;
 }
-export const Argument = { First: 0, Second: 1, Third: 2 } as const;
+export const Argument = { First: 0, Second: 1, Third: 2, Fourth: 3 } as const;
 export const FoundationClass = {
   Object: "NSObject",
   CharacterSet: "NSCharacterSet",
