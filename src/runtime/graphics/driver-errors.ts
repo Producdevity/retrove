@@ -11,6 +11,11 @@ export class GLErrorState {
     if (this.#pending === NO_ERROR) this.#pending = code;
   }
 
+  /** Whether the next glGetError should sample the driver. */
+  driverDue(now: number): boolean {
+    return now - this.#lastDriverQuery >= DRIVER_QUERY_INTERVAL_MS;
+  }
+
   take(queryDriver: () => number, now: number): number {
     const code = this.#pending;
     this.#pending = NO_ERROR;

@@ -19,7 +19,7 @@ const encoder = new TextEncoder();
 function values(arg, count) { return Array.from({ length: count }, (_, i) => arg(i)); }
 function signed(value) { return value | 0; }
 
-export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{}} = {}) {
+export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2,currentContext=()=>0,onClose=()=>{},onErrorFlag=()=>{}} = {}) {
   const api = {};
   const objects = new GraphicsObjects();
   const strings = new Map();
@@ -30,7 +30,12 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   const bufferData = new Map();
   const mapped = new Map();
   const errors = new GLErrorState();
-  const setError = code => errors.record(code);
+  // Nonzero while glGetError must ask the host: an error is pending or a driver check is due.
+  const errorFlag = heap.zero(4);
+  const flagErrors = value => { if (errorFlag) write32(cpu, errorFlag, value); };
+  if (errorFlag) { flagErrors(1); onErrorFlag(errorFlag); }
+  const setError = code => { errors.record(code); flagErrors(1); };
+  const flagDriverCheck = () => { if (errors.driverDue(performance.now())) flagErrors(1); };
   const scratch = new DataView(new ArrayBuffer(4));
   let nextLocation = 0, array = 0, elements = 0;
   let indexStaging, context;
@@ -186,7 +191,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
       backing.bytes.set(bytes,a(1));
     }
   });
-  bind('GetError',() => errors.take(() => gl().getError(), performance.now()));
+  bind('GetError',() => { const code = errors.take(() => gl().getError(), performance.now()); flagErrors(0); return code; });
   function boundBuffer(target) { return target===ARRAY_BUFFER ? array : target===ELEMENT_ARRAY_BUFFER ? elements : 0; }
   bind('MapBufferOES',a => {
     if (a(1)!==0x88b9) { setError(0x0500); return 0; } // GL_WRITE_ONLY_OES
@@ -332,10 +337,12 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
     gl().bindBuffer(ARRAY_BUFFER,obj(array));
   }
   bind('DrawArrays',a => {
+    flagDriverCheck();
     if (clientArrays.size && a(2)) stageAttributes(signed(a(1))+signed(a(2))-1);
     gl().drawArrays(a(0),signed(a(1)),signed(a(2)));
   });
   bind('DrawElements',a => {
+    flagDriverCheck();
     const [mode,count,type,pointer] = values(a,4);
     const width = type === 0x1401 ? 1 : type === 0x1403 ? 2 : type === 0x1405 && (gl().blitFramebuffer || gl().getExtension('OES_element_index_uint')) ? 4 : 0;
     if (!width) throw new Error('Unsupported GLES index type 0x'+type.toString(16));

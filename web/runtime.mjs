@@ -4,6 +4,7 @@ import {WebAudioOutput} from "../src/runtime/audio/openal/output.ts";
 import {guestMutexFunctions} from '../src/runtime/ios/threads/guest-mutex.ts';
 import {ExecutionBudget} from '../src/runtime/cpu/execution-budget.ts';
 import {guestLibc} from '../src/runtime/ios/libc/guest-libc.ts';
+import {guestErrorCheck} from '../src/runtime/graphics/guest-error-check.ts';
 import {ExecutionMetrics, ExecutionMetricLimit} from '../src/runtime/diagnostics/execution-metrics.ts';
 import {ImportMetrics} from '../src/runtime/diagnostics/import-metrics.ts';
 import {FrameMetrics} from '../src/runtime/diagnostics/frame-metrics.ts';
@@ -46,7 +47,7 @@ const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', '
 export async function runGuest(ipa, {audioContext = () => null, graphics = () => { throw Error('WebGL unavailable'); },
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
-  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, image;
+  let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, glErrorFlag = 0, image;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
@@ -194,7 +195,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const dispatch = dispatchImports(cpu, heap, threads, nested, objc, hostGate);
     objc.setDispatch(dispatch);
     const funcs = Object.assign(Object.create(null), sys.funcs, cxx.funcs, objc.funcs, threads.funcs,
-      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), guestSqlite(cpu,heap,sys,nested,diagnostic), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;}}));
+      dispatch.funcs, cg.funcs, audio.funcs, al.funcs, queues.funcs, sounds.funcs, fileAudio, commonCrypto(cpu, heap), compressionImports(cpu, heap, signal), guestSqlite(cpu,heap,sys,nested,diagnostic), glesImports(cpu,heap,graphics,diagnostic,{currentAPI:objc.graphicsAPI,currentContext:objc.graphicsContext,onClose:close=>{closeGraphics=close;},onErrorFlag:address=>{glErrorFlag=address;}}));
     funcs._longjmp=jumps.longjmp;
     funcs.dyld_stub_binder=()=>{
       const sp=cpu.getReg(13),offset=read32(cpu,sp+4),binding=load.lazyTargets.get(offset);
@@ -224,9 +225,10 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const nativeMutexes = guestMutexFunctions(cpu,heap,{budget:cpu.budget,
       lock:hostGate({name:"_pthread_mutex_lock",library:"libSystem"},funcs._pthread_mutex_lock),
       unlock:hostGate({name:"_pthread_mutex_unlock",library:"libSystem"},funcs._pthread_mutex_unlock)});
+    const glErrorCheck = glErrorFlag && funcs._glGetError ? guestErrorCheck(cpu, heap, glErrorFlag, hostGate({name:'_glGetError',library:'OpenGLES'}, funcs._glGetError)) : 0;
     const load = loadMachO(image, memory, b => {
       const data = nativeLibc.get(b.name) ?? nativeVFP.get(b.name) ?? nativeMutexes.get(b.name) ?? threads.nativeFunctions?.get(b.name) ?? sys.data.get(b.name) ?? cxx.data.get(b.name)
-        ?? objc.resolveData(b.name) ?? dispatch.data.get(b.name) ?? cg.data.get(b.name);
+        ?? objc.resolveData(b.name) ?? dispatch.data.get(b.name) ?? cg.data.get(b.name) ?? (b.name === '_glGetError' && glErrorCheck || undefined);
       if (data != null) return data;
       const fn = funcs[b.name];
       if (!fn && b.weak) return null;
