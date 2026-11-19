@@ -28,8 +28,7 @@ interface Transform {
   addresses(): readonly number[] | undefined;
 }
 export function readWord(cpu: GuestCPU, address: number): number {
-  const bytes = cpu.read(address, Abi.WordBytes);
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true);
+  return cpu.read32(address);
 }
 function words(...values: number[]): Uint8Array {
   const bytes = new Uint8Array(values.length * Abi.WordBytes),

@@ -63,7 +63,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     await new Promise(resolve => setTimeout(resolve, 0));
     yieldMilliseconds += performance.now() - before;
   }
-  const recent = [], active = [], deferred = new Map();
+  const recent = [], active = [], deferred = new Map(), lastCall = {gate: 0, lr: 0, thread: 0};
   const missingAssets = [], missingAssetSet = new Set(), recentMissingAssets = [];
   let missingAssetRequests = 0;
 
@@ -243,7 +243,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
       return hostGate(b, fn);
     });
-    prepared.install?.({cpu, heap, gate:(name,fn)=>hostGate({name,library:"Retrove"},fn)});
+    // Host kernels replace hot guest routines for the interpreter; translated code runs the
+    // originals faster than a round trip that copies their buffers (BioShock: 21 to 30 FPS).
+    if (cpu.method !== 'translated') prepared.install?.({cpu, heap, gate:(name,fn)=>hostGate({name,library:"Retrove"},fn)});
     const startup = prepareStartup(memory, STACK_TOP, '/' + ipa.executablePath);
     const baseSP = startup.rawStack - 32;
     const unsupported = [...new Set([...stubs.values()].filter(s => !s.fn).map(s => s.binding.name).concat([...deferred.keys()]))].sort();
@@ -335,11 +337,12 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       const gate = pending, host = stubs.get(gate);
       if (!host) throw Error('Invalid import gate ' + hex(gate));
       const lr = cpu.getReg(14);
-      const lastSymbol = label(host.binding.name);
+      const lastSymbol = host.symbol ??= label(host.binding.name);
       const thread=threads.funcs._pthread_self();
-      const record = lastSymbol + ' ← ' + hex(lr) + ' (thread ' + thread + ')';
-      if (recent.at(-1) !== record) {
-        recent.push(record);
+      // Formatted only when the call site changes: imports run hundreds of thousands of times a second.
+      if (gate !== lastCall.gate || lr !== lastCall.lr || thread !== lastCall.thread) {
+        Object.assign(lastCall, {gate, lr, thread});
+        recent.push(lastSymbol + ' ← ' + hex(lr) + ' (thread ' + thread + ')');
         if (recent.length > 12) recent.shift();
       }
       if (!host.fn) throw Error('Missing import ' + lastSymbol + ' from ' + (host.binding.library || 'flat namespace') + ' (guest LR ' + hex(lr) + ')');

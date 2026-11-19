@@ -24,8 +24,8 @@ export class GuestPages {
   readonly #span: number;
   readonly #mapped: Uint8Array;
   readonly #regions = new Map<number, number>();
-  #view: DataView | undefined;
-  #bytes: Uint8Array | undefined;
+  #view: DataView;
+  #bytes: Uint8Array;
   constructor(
     heap: HostHeap,
     memory: WebAssembly.Memory,
@@ -40,6 +40,14 @@ export class GuestPages {
     if (!this.#allocation) throw new Error("Unable to reserve guest memory.");
     this.arena = Math.ceil(this.#allocation / PageBytes) * PageBytes;
     this.#mapped = new Uint8Array(span / PageBytes);
+    this.#bytes = new Uint8Array(memory.buffer);
+    this.#view = new DataView(memory.buffer);
+  }
+  /** Growing the memory detaches its buffer, which empties the cached views; `buffer` itself is slow to read. */
+  #current(): void {
+    if (this.#bytes.length) return;
+    this.#bytes = new Uint8Array(this.#memory.buffer);
+    this.#view = new DataView(this.#memory.buffer);
   }
   /** Mask translated code applies to guest addresses; the span is a power of two. */
   get mask(): number {
@@ -59,12 +67,11 @@ export class GuestPages {
     };
   }
   get view(): DataView {
-    if (this.#view?.buffer !== this.#memory.buffer) this.#view = new DataView(this.#memory.buffer);
+    this.#current();
     return this.#view;
   }
   get bytes(): Uint8Array {
-    if (this.#bytes?.buffer !== this.#memory.buffer)
-      this.#bytes = new Uint8Array(this.#memory.buffer);
+    this.#current();
     return this.#bytes;
   }
   get regions(): Iterable<number> {
