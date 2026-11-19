@@ -5,12 +5,19 @@ const WORD_BYTES = 4;
  * glGetError as ARM code: returns GL_NO_ERROR from a guest flag word without leaving translated
  * code, and jumps to the host gate only when an error is pending or a driver check is due.
  */
+const Arm = {
+  LoadFlagAddress: 0xe59f000c, // ldr r0, [pc, #12]
+  LoadFlag: 0xe5900000, // ldr r0, [r0]
+  CompareZero: 0xe3500000, // cmp r0, #0
+  ReturnIfZero: 0x012fff1e, // bxeq lr: GL_NO_ERROR
+  JumpToGate: 0xe59ff000, // ldr pc, [pc, #0]
+} as const;
 const CODE = [
-  0xe59f000c, // ldr r0, [pc, #12]   flag address
-  0xe5900000, // ldr r0, [r0]
-  0xe3500000, // cmp r0, #0
-  0x012fff1e, // bxeq lr             GL_NO_ERROR
-  0xe59ff000, // ldr pc, [pc, #0]    host gate
+  Arm.LoadFlagAddress,
+  Arm.LoadFlag,
+  Arm.CompareZero,
+  Arm.ReturnIfZero,
+  Arm.JumpToGate,
 ] as const;
 
 interface GuestMemory {

@@ -31,7 +31,7 @@ export function glesImports(cpu, heap, getContext, diagnostic, {currentAPI=()=>2
   const mapped = new Map();
   const errors = new GLErrorState();
   // Nonzero while glGetError must ask the host: an error is pending or a driver check is due.
-  const errorFlag = heap.zero(4);
+  const errorFlag = heap.zero?.(4) ?? 0;
   const flagErrors = value => { if (errorFlag) write32(cpu, errorFlag, value); };
   if (errorFlag) { flagErrors(1); onErrorFlag(errorFlag); }
   const setError = code => { errors.record(code); flagErrors(1); };
