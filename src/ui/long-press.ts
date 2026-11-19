@@ -39,6 +39,14 @@ export function onLongPress(target: HTMLElement, held: () => void): void {
   });
   for (const type of ["pointerup", "pointercancel", "pointerleave"])
     target.addEventListener(type, release);
+  // The finger that opened something by holding keeps moving; it must not pan the page behind it.
+  target.addEventListener(
+    "touchmove",
+    (event) => {
+      if (swallow) event.preventDefault();
+    },
+    { passive: false },
+  );
   target.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     const alreadyHeld = swallow;

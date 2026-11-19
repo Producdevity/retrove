@@ -131,7 +131,8 @@ element("back", HTMLAnchorElement).addEventListener("click", (event) => {
   void (async () => {
     await session?.stop();
     report.store();
-    location.assign("/");
+    // Replacing keeps the player out of history, so iOS has no page to swipe back or forward to.
+    location.replace("/");
   })().catch((error) => {
     fail(error);
     report.show();

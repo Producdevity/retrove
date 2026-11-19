@@ -14,6 +14,10 @@ dialog {
   -webkit-backdrop-filter: var(--glass-filter-thick);
   backdrop-filter: var(--glass-filter-thick);
   box-shadow: var(--glass-shadow-deep);
+  overscroll-behavior: contain;
+}
+html:has(dialog[open]) {
+  overflow: hidden;
 }
 dialog::backdrop {
   background: var(--scrim);
