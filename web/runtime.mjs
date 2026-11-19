@@ -75,7 +75,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       } catch { /* The last successful CPU reads are still useful. */ }
     }
     // Put fault context before variable-length lists so it survives a shortened mobile export.
-    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
+    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};

@@ -74,7 +74,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   }
   let pending = null;
   let closed = false;
-  let mappedBytes = 0, mappedPeak = 0, executedMilliseconds = 0;
+  let mappedBytes = 0, mappedPeak = 0, executedMilliseconds = 0, interpretedMilliseconds = 0;
   let failedWasm = false;
   const states = new UnicornContexts({
     allocate: () => engine.context_alloc(),
@@ -125,6 +125,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
     get translation() { return tier?.statistics; },
     get mappedBytes() { return mappedBytes; },
     get executedMilliseconds() { return executedMilliseconds; },
+    /** Part of executedMilliseconds spent in Unicorn rather than translated code. */
+    get interpretedMilliseconds() { return interpretedMilliseconds; },
     // Darwin ARM code reads its thread pointer from TPIDRURO. Unicorn includes
     // this register when saving and restoring a cooperative thread context.
     set threadPointer(address) { registerTransfer.write(uc.ARM_REG_C13_C0_3, address); bridge?.setThreadPointer(address); },
@@ -248,7 +250,9 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
           engine.emu_start(pc, until, 0, 1);
         }
         blocks?.start(count, until);
-        engine.emu_start(pc, until, 0, blocks ? 0 : count);
+        const interpreted = performance.now();
+        try { engine.emu_start(pc, until, 0, blocks ? 0 : count); }
+        finally { interpretedMilliseconds += performance.now() - interpreted; }
       } catch (err) {
         const translated = !!bridge?.translated;
         failedWasm = err instanceof WebAssembly.RuntimeError && !translated;
