@@ -4,6 +4,7 @@ import {MoviePlayback,MovieNotification,MovieUserInfo,MOVIE_OFFSCREEN_EVENT} fro
 const finished = MovieNotification.PlaybackFinished;
 const reasonKey = MovieUserInfo.FinishReason;
 const floatBits = new DataView(new ArrayBuffer(8));
+const MOVIE_CONTROL_MODE_HIDDEN = 2, MOVIE_CONTROL_STYLE_FULLSCREEN = 2;
 
 export function moviePlayers({hostClass, method, names, alloc, destroy, retain, release, string, text, send,
   ipa, mediaHost, diagnostic, needsMovieResume = () => {}}) {
@@ -103,10 +104,8 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
   });
   method(cls, false, 'pause', self => { const s = state(self); s.wantsPlay = false; s.playback?.pause(); });
   method(cls, false, 'stop', self => reset(state(self)));
-  method(cls, false, 'playbackState', self => {
-    const v = state(self).video;
-    return !v || v.ended ? 0 : v.paused ? 2 : 1;
-  });
+  const playbackState = s => !s.video || s.video.ended ? 0 : s.video.paused ? 2 : 1;
+  method(cls, false, 'playbackState', self => playbackState(state(self)));
   method(cls, false, 'loadState', self => state(self).loading.state);
   method(cls, false, 'isPreparedToPlay', self => Number(state(self).prepared && (state(self).loading.state & MovieLoadState.Playable)!==0));
   for (const [getter, setter, field] of [
@@ -123,6 +122,11 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
       if (field === 'scaling') s.video.style.objectFit = ['none','contain','cover','fill'][s.scaling] ?? 'contain';
     });
   }
+  // iOS 3.1 MPMovieControlMode: only MPMovieControlModeHidden removes the playback controls.
+  method(cls, false, 'setMovieControlMode:', (self,a) => send(self, 'setControlStyle:', [a(0) === MOVIE_CONTROL_MODE_HIDDEN ? 0 : MOVIE_CONTROL_STYLE_FULLSCREEN]));
+  method(cls, false, 'movieControlMode', self => state(self).controls ? 0 : MOVIE_CONTROL_MODE_HIDDEN);
+  method(cls, false, 'useApplicationAudioSession', self => Number(state(self).appAudioSession ?? true));
+  method(cls, false, 'setUseApplicationAudioSession:', (self,a) => { state(self).appAudioSession = !!a(0); });
   method(cls, false, 'setFullscreen:animated:', (self,a) => { state(self).fullscreen = a(0); });
   method(cls, false, 'setCurrentPlaybackRate:', (self,a) => {
     const s = state(self);
@@ -165,6 +169,12 @@ export function moviePlayers({hostClass, method, names, alloc, destroy, retain, 
             if(players.get(self)!==s)break;
             const center=await send(names.get('NSNotificationCenter'),'defaultCenter');
             await send(center,'postNotificationName:object:userInfo:',[string(notification),self,0]);
+          }
+          const playing = playbackState(s);
+          if (players.get(self)===s && playing !== (s.lastState ?? 0)) {
+            s.lastState = playing;
+            const center=await send(names.get('NSNotificationCenter'),'defaultCenter');
+            await send(center,'postNotificationName:object:userInfo:',[string(MovieNotification.PlaybackStateChanged),self,0]);
           }
           if (players.get(self)!==s || s.reason === undefined || s.reported) continue;
           s.reported = true;
