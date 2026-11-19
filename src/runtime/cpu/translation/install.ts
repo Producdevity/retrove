@@ -4,15 +4,22 @@ import type { TierStatistics } from "./tier-statistics";
 export const i32Global = (value: number): WebAssembly.Global =>
   new WebAssembly.Global({ value: "i32", mutable: false }, value);
 
+/**
+ * Memory, table, arena and labels are shared by every guest thread's instance of a module;
+ * `state` holds the host address of the state block of the thread the instance runs.
+ */
+export type TranslationImports = Readonly<{
+  memory: WebAssembly.Memory;
+  table: WebAssembly.Table;
+  arena: WebAssembly.Global;
+  labels: WebAssembly.Global;
+  state: WebAssembly.Global;
+}>;
+
 /** Compiles a translated module; the browser compiles asynchronous instantiation off the main thread. */
 export async function instantiateTranslation(
   translation: Translation,
-  imports: {
-    readonly memory: WebAssembly.Memory;
-    readonly table: WebAssembly.Table;
-    readonly arena: WebAssembly.Global;
-    readonly labels: WebAssembly.Global;
-  },
+  imports: TranslationImports,
   statistics: TierStatistics,
 ): Promise<WebAssembly.Exports> {
   const compiled = performance.now();
@@ -24,7 +31,7 @@ export async function instantiateTranslation(
 /** Compiles and instantiates on the calling thread, for code that must run before a worker could answer. */
 export function instantiateTranslationNow(
   translation: Translation,
-  imports: Parameters<typeof instantiateTranslation>[1],
+  imports: TranslationImports,
   statistics: TierStatistics,
 ): WebAssembly.Exports {
   const compiled = performance.now();

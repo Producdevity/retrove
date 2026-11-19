@@ -6,7 +6,7 @@ import { emitBudget, emitStop, fail, loadAll, storeAll, tail } from "./emit-stat
 import { EntryParameter, type Emitter } from "./emitter";
 import { discover } from "./discover";
 import { lanesOf } from "./lanes";
-import { relative, StopState } from "./layout";
+import { StopState, stateOffset } from "./layout";
 import type { Code } from "./wasm-code";
 import { BlockType, Op, Type } from "./wasm-opcodes";
 
@@ -41,7 +41,7 @@ function emitEntry(e: Emitter): void {
   labelAt(e, offset);
   c.op(Op.Else).i32(NoLabel).op(Op.End);
   c.tee(e.label).i32(0).op(Op.I32LtS).open(Op.If, "entry");
-  c.arena().get(EntryParameter).memory(Op.I32Store, relative(e.L, e.L.missingLabel));
+  c.state().get(EntryParameter).memory(Op.I32Store, stateOffset(e.L, e.L.missingLabel));
   fail(e, () => c.get(EntryParameter));
   c.end();
 }
@@ -58,8 +58,8 @@ function emitEpilogue(e: Emitter): void {
   );
   c.op(Op.Return).op(Op.End);
   c.get(e.exitKind).i32(ExitKind.Fail).op(Op.I32Eq).op(Op.If, BlockType.Empty);
-  c.arena().i32(StopState.Exit).memory(Op.I32Store, relative(e.L, e.L.stopped));
-  c.arena().get(e.exitPC).memory(Op.I32Store, relative(e.L, e.L.exitPC)).op(Op.End);
+  c.state().i32(StopState.Exit).memory(Op.I32Store, stateOffset(e.L, e.L.stopped));
+  c.state().get(e.exitPC).memory(Op.I32Store, stateOffset(e.L, e.L.exitPC)).op(Op.End);
   c.get(e.exitPC);
 }
 

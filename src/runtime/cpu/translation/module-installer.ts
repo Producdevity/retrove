@@ -5,6 +5,7 @@ import {
   installTranslation,
   instantiateTranslation,
   instantiateTranslationNow,
+  type TranslationImports,
 } from "./install";
 import type { LabelAreas } from "./label-areas";
 import type { TierStatistics } from "./tier-statistics";
@@ -21,6 +22,8 @@ interface InstallerParts {
   readonly memory: WebAssembly.Memory;
   readonly table: WebAssembly.Table;
   readonly pages: GuestPages;
+  /** Host address of the state block that instances installed here run on. */
+  readonly state: number;
   readonly labels: LabelAreas;
   readonly budget: CodeBudget;
   readonly statistics: TierStatistics;
@@ -30,14 +33,17 @@ interface InstallerParts {
 /** Turns jobs into installed functions: translation, a label block, compilation and table slots. */
 export class ModuleInstaller {
   readonly #arena: WebAssembly.Global;
+  readonly #state: WebAssembly.Global;
   constructor(private readonly parts: InstallerParts) {
     this.#arena = i32Global(parts.pages.arena);
+    this.#state = i32Global(parts.state);
   }
-  #imports(translation: Translation) {
+  #imports(translation: Translation): { block: number; imports: TranslationImports } {
     const block = this.parts.labels.allocate(labelBlockBytes(translation));
     if (block === undefined) throw new Error("Translated label area is full.");
     const { memory, table } = this.parts;
-    return { block, imports: { memory, table, arena: this.#arena, labels: i32Global(block) } };
+    const labels = i32Global(block);
+    return { block, imports: { memory, table, arena: this.#arena, labels, state: this.#state } };
   }
   #install(translation: Translation, exports: WebAssembly.Exports, block: number): InstalledModule {
     const { table, pages, budget } = this.parts;

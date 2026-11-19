@@ -2,6 +2,7 @@ import { sha256 } from "./digest";
 import { runJob, type JobResult, type TranslationJob } from "./translation-job";
 import { TranslationStore, VERSION_SEPARATOR, type TranslationDatabase } from "./translation-store";
 import type { TranslatedFunction, Translation, TranslationStatistics } from "./translation-types";
+import { ModuleFormat } from "./wasm-module";
 
 const HALFWORD_BYTES = 2;
 const WORD_BYTES = 4;
@@ -19,6 +20,7 @@ type ReadWord = (address: number) => number | undefined;
 /** Everything besides guest bytes that decides a job's output. */
 function describe(job: TranslationJob): string {
   return JSON.stringify({
+    format: ModuleFormat,
     functions: job.functions,
     entries: job.entries,
     layout: job.layout,

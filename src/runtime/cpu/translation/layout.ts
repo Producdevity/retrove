@@ -1,4 +1,7 @@
-/** Translated-code state block. Guest address A is host byte `arena + (A & mask)`. */
+/**
+ * Translated-code state block of one guest thread, plus the shared arena, index and tables.
+ * Guest address A is host byte `arena + (A & mask)`.
+ */
 export interface StateLayout {
   readonly registers: number;
   readonly flags: number;
@@ -63,8 +66,8 @@ const EXTRA_LABEL_BYTES = 0x80_0000;
 const STATE_ALIGNMENT = 64;
 /**
  * Fixed offsets from the arena base of everything translated code addresses, so a module is
- * valid at any base: the guest span, the state block, the foreign table, the address index and
- * the area that per-module label blocks are allocated from.
+ * valid at any base: the guest span, the main thread's state block, the foreign table, the
+ * address index and the area that per-module label blocks are allocated from.
  */
 export function arenaRegion(span: number, maxCode = MaxCodeBytes) {
   const state = Math.ceil((span + ArenaSlack) / STATE_ALIGNMENT) * STATE_ALIGNMENT;
@@ -113,6 +116,11 @@ const ADDRESS_FIELDS = [
 ] as const satisfies readonly (keyof StateLayout)[];
 /** Offset from the arena base of an absolute host address in the layout. */
 export const relative = (L: StateLayout, address: number): number => address - L.arena;
+/**
+ * Offset of a state block field from the block's base (`registers`). Translated code adds it to
+ * the instance's imported `env.state`, so each guest thread's instance has its own block.
+ */
+export const stateOffset = (L: StateLayout, address: number): number => address - L.registers;
 export const PageBits = 12;
 export const PageBytes = 1 << PageBits;
 /** Unwind: the call depth limit was reached; the runner continues at the returned PC with an empty stack. */

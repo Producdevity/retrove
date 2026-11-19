@@ -80,6 +80,7 @@ export class TranslatedTier {
       memory,
       table: this.table,
       pages: this.pages,
+      state: this.pages.mainState,
       labels: this.#labels,
       budget: this.#budget,
       statistics: this.statistics,
@@ -87,7 +88,7 @@ export class TranslatedTier {
     });
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.layout = {
-      ...stateLayout(arena + region.state, this.pages, {
+      ...stateLayout(this.pages.mainState, this.pages, {
         base: arena + region.index,
         start: 0,
         end: 0,
@@ -101,11 +102,8 @@ export class TranslatedTier {
     const executable = discoverExecutable(this.pages.regions, this.pages.reader);
     if (!executable || executable.codeEnd - executable.codeStart > MaxCodeBytes) return;
     this.#executable = executable;
-    const base = this.pages.arena + this.pages.region.index;
-    this.layout = {
-      ...this.layout,
-      index: { base, start: executable.codeStart, end: executable.codeEnd },
-    };
+    const index = { ...this.layout.index, start: executable.codeStart, end: executable.codeEnd };
+    this.layout = { ...this.layout, index };
     for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))
       this.#translator.setCode(snapshot);
     const cache = this.#options.cache;

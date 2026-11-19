@@ -33,7 +33,13 @@ test("jumps between translated functions unwind at the call depth limit", async 
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
   const { instance } = await WebAssembly.instantiate(translation.wasm, {
-    env: { memory, table, arena: i32Global(0), labels: i32Global(0) },
+    env: {
+      memory,
+      table,
+      arena: i32Global(0),
+      labels: i32Global(0),
+      state: i32Global(layout.registers),
+    },
   });
   for (const translated of translation.functions)
     new Uint8Array(memory.buffer).set(

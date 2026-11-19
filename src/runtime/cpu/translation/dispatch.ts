@@ -1,6 +1,6 @@
 import { ClearThumb, ForeignProbes, FunctionType, LabelSlotShift } from "./emit-constants";
 import { EntryParameter } from "./emitter";
-import { PageBits, relative, StopState, type StateLayout } from "./layout";
+import { PageBits, relative, StopState, stateOffset, type StateLayout } from "./layout";
 import { Code } from "./wasm-code";
 import { BlockType, Op, Type } from "./wasm-opcodes";
 
@@ -46,7 +46,7 @@ export function emitDispatch(L: StateLayout): Code {
   c.callIndirect(FunctionType).op(Op.Return).op(Op.End);
   c.op(Op.End);
   if (L.foreign) emitForeign(c, L, L.foreign);
-  c.arena().i32(StopState.Exit).memory(Op.I32Store, relative(L, L.stopped));
-  c.arena().get(EntryParameter).memory(Op.I32Store, relative(L, L.exitPC)).get(EntryParameter);
+  c.state().i32(StopState.Exit).memory(Op.I32Store, stateOffset(L, L.stopped));
+  c.state().get(EntryParameter).memory(Op.I32Store, stateOffset(L, L.exitPC)).get(EntryParameter);
   return c;
 }

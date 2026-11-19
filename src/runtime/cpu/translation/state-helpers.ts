@@ -1,5 +1,5 @@
 import { Word } from "./emit-constants";
-import { relative, type StateLayout } from "./layout";
+import { stateOffset, type StateLayout } from "./layout";
 import { Code } from "./wasm-code";
 import { Op, Type, type ValueType } from "./wasm-opcodes";
 
@@ -24,13 +24,13 @@ export const stateTypes = (): readonly ValueType[] =>
 export function emitSpill(L: StateLayout): Code {
   const c = new Code(StateWords);
   addresses(L).forEach((address, index) =>
-    c.arena().get(index).memory(Op.I32Store, relative(L, address)),
+    c.state().get(index).memory(Op.I32Store, stateOffset(L, address)),
   );
   return c;
 }
 /** Returns the state block's words in spill order. */
 export function emitReload(L: StateLayout): Code {
   const c = new Code(0);
-  for (const address of addresses(L)) c.arena().memory(Op.I32Load, relative(L, address));
+  for (const address of addresses(L)) c.state().memory(Op.I32Load, stateOffset(L, address));
   return c;
 }

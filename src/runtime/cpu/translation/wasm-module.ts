@@ -30,7 +30,13 @@ export interface ModuleFunction {
   readonly exportName?: string;
 }
 
-/** Module importing `env.memory`, `env.table` and the immutable i32s `env.arena` and `env.labels`. */
+/**
+ * Version of the import list and of how emitted code addresses the state block. Cached modules
+ * from another version are translated again, never instantiated.
+ */
+export const ModuleFormat = 2;
+
+/** Module importing `env.memory`, `env.table` and the immutable i32s `env.arena`, `env.labels` and `env.state`. */
 export function module(options: {
   readonly types: readonly FunctionType[];
   readonly functions: readonly ModuleFunction[];
@@ -53,9 +59,10 @@ export function module(options: {
     .byte(ExternalKind.Table, FunctionReference, NoMaximum);
   const arena = new Bytes().name("env").name("arena").byte(ExternalKind.Global, I32, Immutable);
   const labels = new Bytes().name("env").name("labels").byte(ExternalKind.Global, I32, Immutable);
+  const state = new Bytes().name("env").name("state").byte(ExternalKind.Global, I32, Immutable);
   section(
     Section.Import,
-    new Bytes().vector([memory.unsigned(0), table.unsigned(0), arena, labels]),
+    new Bytes().vector([memory.unsigned(0), table.unsigned(0), arena, labels, state]),
   );
   const declarations = options.functions.map((entry) => new Bytes().unsigned(entry.type));
   section(Section.Function, new Bytes().vector(declarations));

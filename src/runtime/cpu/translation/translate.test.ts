@@ -41,7 +41,13 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
   const { instance } = await WebAssembly.instantiate(translation.wasm, {
-    env: { memory, table, arena: i32Global(0), labels: i32Global(0) },
+    env: {
+      memory,
+      table,
+      arena: i32Global(0),
+      labels: i32Global(0),
+      state: i32Global(layout.registers),
+    },
   });
   const view = new DataView(memory.buffer);
   const [entry] = translation.functions;

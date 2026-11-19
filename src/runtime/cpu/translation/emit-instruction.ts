@@ -22,7 +22,7 @@ import type { Emitter } from "./emitter";
 import { Condition, Register, type Instruction } from "./instruction";
 import { lanesOf } from "./lanes";
 import { Op } from "./wasm-opcodes";
-import { relative } from "./layout";
+import { stateOffset } from "./layout";
 
 const DestinationKinds = new Set<string>([
   "div",
@@ -96,7 +96,7 @@ function emitBody(e: Emitter, pc: number, i: Instruction, current: number): void
     case "clz":
       return emitClz(e, pc, i);
     case "tls":
-      c.arena().memory(Op.I32Load, relative(e.L, e.L.tls)).set(e.register(i.rd));
+      c.state().memory(Op.I32Load, stateOffset(e.L, e.L.tls)).set(e.register(i.rd));
       return;
     case "mem":
       return emitMemory(e, pc, i);

@@ -77,6 +77,10 @@ export class GuestPages {
   get regions(): Iterable<number> {
     return this.#regions.keys();
   }
+  /** Host address of the main thread's state block. */
+  get mainState(): number {
+    return this.arena + this.region.state;
+  }
   /**
    * Maps a region and returns its host address for Unicorn. The arena starts zeroed and unmap
    * zeroes what it releases, so mapping never touches (and commits) memory the guest has not used.

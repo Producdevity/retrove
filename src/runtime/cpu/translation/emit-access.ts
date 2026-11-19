@@ -1,7 +1,7 @@
 import { Word } from "./emit-constants";
 import type { Emitter } from "./emitter";
 import { Register } from "./instruction";
-import { relative } from "./layout";
+import { stateOffset } from "./layout";
 import { Op } from "./wasm-opcodes";
 
 const LogEntry = { PreviousWord: 4, PC: 8, Bytes: 12 } as const;
@@ -29,8 +29,8 @@ export function host(e: Emitter): void {
     [, , , , , , , debug] = e.t;
   if (e.input.debug) {
     c.tee(address).set(debug);
-    c.arena().get(debug).memory(Op.I32Store, relative(L, L.debugAddress));
-    c.arena().i32(e.mode(e.debugPC)).memory(Op.I32Store, relative(L, L.debugPC)).get(debug);
+    c.state().get(debug).memory(Op.I32Store, stateOffset(L, L.debugAddress));
+    c.state().i32(e.mode(e.debugPC)).memory(Op.I32Store, stateOffset(L, L.debugPC)).get(debug);
   }
   c.i32(L.mask).op(Op.I32And).arena().op(Op.I32Add);
 }
@@ -47,18 +47,18 @@ export function guest(e: Emitter, opcode: number, offset = 0): void {
   const { c, L, log } = e;
   if (log && LoggedStores.has(opcode)) {
     c.set(log.value).set(log.host);
-    c.arena().memory(Op.I32Load, relative(L, L.logCursor)).tee(log.at);
-    c.arena().memory(Op.I32Load, relative(L, L.logLimit));
+    c.state().memory(Op.I32Load, stateOffset(L, L.logCursor)).tee(log.at);
+    c.state().memory(Op.I32Load, stateOffset(L, L.logLimit));
     c.op(Op.I32LtU).open(Op.If, "log");
     c.get(log.at).get(log.host).i32(offset).op(Op.I32Add).memory(Op.I32Store);
     c.get(log.at).get(log.host).memory(Op.I32Load, offset);
     c.memory(Op.I32Store, LogEntry.PreviousWord);
     c.get(log.at).i32(e.mode(e.debugPC)).memory(Op.I32Store, LogEntry.PC);
-    c.arena()
+    c.state()
       .get(log.at)
       .i32(LogEntry.Bytes)
       .op(Op.I32Add)
-      .memory(Op.I32Store, relative(L, L.logCursor));
+      .memory(Op.I32Store, stateOffset(L, L.logCursor));
     c.end();
     c.get(log.host).get(log.value);
   }
