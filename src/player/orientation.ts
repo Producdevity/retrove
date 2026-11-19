@@ -11,10 +11,17 @@ function isOrientation(value: unknown): value is Orientation {
 }
 /**
  * Turns the player when the chosen orientation differs from how the screen is held, so a
- * game fills the screen with rotation lock on.
+ * game fills the screen with rotation lock on. Automatic follows a landscape app on an upright
+ * screen; a portrait app on a wide screen (a desktop) stays upright.
  */
-export function turnFor(choice: Orientation, screenIsPortrait: boolean): Turn {
-  if (choice === Orientation.Landscape && screenIsPortrait) return "90";
+export function turnFor(
+  choice: Orientation,
+  screenIsPortrait: boolean,
+  appIsLandscape = false,
+): Turn {
+  const landscape =
+    choice === Orientation.Landscape || (choice === Orientation.Auto && appIsLandscape);
+  if (landscape && screenIsPortrait) return "90";
   if (choice === Orientation.Portrait && !screenIsPortrait) return "-90";
   return "";
 }
@@ -35,11 +42,11 @@ function save(app: string, choice: Orientation): void {
 }
 
 /** The orientation menu: remembered per app, applied as a quarter turn of the whole page. */
-export function connectOrientation(app: string): void {
+export function connectOrientation(app: string, appIsLandscape: boolean): void {
   const menu = element("orientation-menu", HTMLElement);
   let choice = read(app);
   const apply = (): void => {
-    const turn = turnFor(choice, innerHeight >= innerWidth);
+    const turn = turnFor(choice, innerHeight >= innerWidth, appIsLandscape);
     if (turn) document.body.dataset["turn"] = turn;
     else delete document.body.dataset["turn"];
   };

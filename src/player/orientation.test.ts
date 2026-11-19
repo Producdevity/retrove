@@ -10,7 +10,9 @@ describe("turnFor", () => {
     expect(turnFor(Orientation.Portrait, false)).toBe("-90");
     expect(turnFor(Orientation.Portrait, true)).toBe("");
   });
-  it("never turns in automatic mode", () => {
+  it("follows a landscape app in automatic mode and leaves portrait apps upright", () => {
+    expect(turnFor(Orientation.Auto, true, true)).toBe("90");
+    expect(turnFor(Orientation.Auto, false, true)).toBe("");
     expect(turnFor(Orientation.Auto, true)).toBe("");
     expect(turnFor(Orientation.Auto, false)).toBe("");
   });

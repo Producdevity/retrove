@@ -77,7 +77,7 @@ export class SessionSheet {
     fact(facts, "Reached", detail.reached);
     fact(
       facts,
-      "Frame rate",
+      "Frame rate at close",
       detail.fps === undefined ? undefined : `${detail.fps.toFixed(1)} FPS`,
     );
     const timeline = element("session-timeline", HTMLOListElement);

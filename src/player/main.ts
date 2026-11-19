@@ -13,6 +13,9 @@ import { BootSequence } from "./boot/sequence";
 import { PlayerDisplay } from "./display";
 import { SessionReport } from "./report";
 import { connectOrientation } from "./orientation";
+import { appProfile } from "../runtime/ios/profiles/app-manifest";
+import { isLandscape } from "../runtime/ios/uikit/screen";
+
 import { PlayerSession } from "./session";
 import { DebugOverlay } from "./debug-overlay";
 
@@ -104,8 +107,8 @@ async function prepare(): Promise<void> {
   status.textContent = `Opening ${app.name}`;
   document.title = `${app.name} — Retrove`;
   report.start(app.name);
-  connectOrientation(id);
   const archive = await openIPA(await library.open(app), report.diagnostic);
+  connectOrientation(id, isLandscape(appProfile(archive.info).orientation));
   display.configure(archive.info);
   session = new PlayerSession(library, app, archive, display, report, {
     audio: (needed) => {
