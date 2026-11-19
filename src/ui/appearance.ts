@@ -15,6 +15,8 @@ function readPreference(): Preference {
 }
 function apply(preference: Preference): void {
   document.documentElement.dataset.theme = preference;
+  // The launch script paints a ground before the stylesheets; from here the theme's tokens do.
+  document.documentElement.style.removeProperty("background");
   const color = getComputedStyle(document.documentElement).backgroundColor;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
 }

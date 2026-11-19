@@ -3,7 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#eef0f5" />
+    <!-- Paints the chosen theme's ground before the stylesheets load, so a dark launch never flashes light. -->
+    <script>
+      (() => {
+        let preference = "system";
+        try {
+          preference = localStorage.getItem("retrove.appearance") ?? "system";
+        } catch {}
+        const root = document.documentElement;
+        if (preference === "light" || preference === "dark") root.dataset.theme = preference;
+        const dark =
+          preference === "dark" ||
+          (preference !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        root.style.background = dark ? "#000000" : "#eef0f5";
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", dark ? "#000000" : "#eef0f5");
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Retrove</title>
@@ -265,7 +284,8 @@
     </div>
     <div id="update-banner" class="update-banner glass thick" role="status" hidden>
       <span class="update-text"
-        ><strong>Update ready</strong><span>Restart to use the new version.</span></span
+        ><strong id="update-title">Update ready</strong
+        ><span id="update-detail">Restart to use the new version.</span></span
       ><button id="update-restart" class="button filled">Restart</button>
     </div>
     <dialog id="app-details" class="sheet">
