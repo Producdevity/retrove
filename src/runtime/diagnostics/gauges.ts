@@ -16,9 +16,7 @@ export const Gauge = {
   FileCacheBytes: "fileCacheBytes",
   GuestThreads: "guestThreads",
   WasmInstancesCompiled: "wasmInstancesCompiled",
-  WasmInstancesLive: "wasmInstancesLive",
   WasmBytesCompiled: "wasmBytesCompiled",
-  WasmBytesLive: "wasmBytesLive",
   BundleReads: "bundleReads",
   BundleReadBytes: "bundleReadBytes",
 } as const;

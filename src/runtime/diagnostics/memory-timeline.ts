@@ -26,8 +26,8 @@ export class MemoryTimeline {
       `t ${Math.round(elapsedMs / MILLISECONDS_PER_SECOND)}s guest ${mb(Gauge.GuestMappedBytes)}` +
         ` wasmMem ${mb(Gauge.WasmMemoryBytes)} code ${mb(Gauge.TranslatedCodeBytes)}` +
         ` tex ${mb(Gauge.GpuTextureBytes)} buf ${mb(Gauge.GpuBufferBytes)} rb ${mb(Gauge.GpuRenderbufferBytes)}` +
-        ` files ${mb(Gauge.FileCacheBytes)} | inst ${g.value(Gauge.WasmInstancesLive)}/${g.value(Gauge.WasmInstancesCompiled)}` +
-        ` wasm ${mb(Gauge.WasmBytesLive)}/${mb(Gauge.WasmBytesCompiled)} flushes ${g.value(Gauge.CodeFlushes)}` +
+        ` files ${mb(Gauge.FileCacheBytes)} | modules ${g.value(Gauge.WasmInstancesCompiled)}` +
+        ` compiled ${mb(Gauge.WasmBytesCompiled)} flushes ${g.value(Gauge.CodeFlushes)}` +
         ` | reads ${g.value(Gauge.BundleReads)} ${mb(Gauge.BundleReadBytes)}${heap}`,
     );
     const oldest = this.#recent.length > RECENT_ROWS ? this.#recent.shift() : undefined;
