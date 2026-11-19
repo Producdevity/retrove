@@ -4,6 +4,7 @@ import type { StateLayout } from "./layout";
 import type { FunctionRange, TranslationInput } from "./translation-types";
 import { Code } from "./wasm-code";
 import { Type } from "./wasm-opcodes";
+import { CachedRegisters } from "./state-helpers";
 
 /** Decoded instruction at a function address; `itStart` marks instructions inside an IT block. */
 export interface Decoded {
@@ -25,7 +26,7 @@ type Eight = readonly [number, number, number, number, number, number, number, n
 type Four = readonly [number, number, number, number];
 type Three = readonly [number, number, number];
 
-const Locals = { Registers: 15, LaneTemps: 8 } as const;
+const Locals = { Registers: CachedRegisters, LaneTemps: 8 } as const;
 /** The single Wasm parameter is the guest PC to enter at. */
 export const EntryParameter = 0;
 const Parameters = 1;

@@ -54,8 +54,13 @@ export const Lanes = {
 export const ExitKind = { Return: 0, Tail: 1, Fail: 2 } as const;
 
 export const FunctionType = 0;
+/** `(registers..., flags..., fp flags...) -> ()` and its inverse, shared by every call site in a module. */
+export const SpillType = 1;
+export const ReloadType = 2;
 export const DispatchIndex = 0;
-export const FirstTranslated = 1;
+export const SpillIndex = 1;
+export const ReloadIndex = 2;
+export const FirstTranslated = 3;
 /** Probes into the foreign code table before leaving to the interpreter. */
 export const ForeignProbes = 8;
 /** Clears the Thumb bit of a guest PC. */

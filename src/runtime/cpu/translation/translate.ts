@@ -2,7 +2,8 @@ import { WordBytes } from "./bits";
 import { decode } from "./decode-arm";
 import { discover, halfReader } from "./discover";
 import { emitDispatch } from "./dispatch";
-import { FirstTranslated, FunctionType } from "./emit-constants";
+import { FirstTranslated, FunctionType, ReloadType, SpillType } from "./emit-constants";
+import { emitReload, emitSpill, stateTypes } from "./state-helpers";
 import { emitFunction, type EmittedFunction } from "./emit-function";
 import { Emitter, type Decoded } from "./emitter";
 import { Condition, unsupported } from "./instruction";
@@ -95,7 +96,11 @@ export function translate(input: TranslationInput): Translation {
     const index = indexOf.get(address);
     return index === undefined ? undefined : FirstTranslated + index;
   };
-  const bodies: ModuleFunction[] = [{ type: FunctionType, code: emitDispatch(input.layout) }];
+  const bodies: ModuleFunction[] = [
+    { type: FunctionType, code: emitDispatch(input.layout) },
+    { type: SpillType, code: emitSpill(input.layout) },
+    { type: ReloadType, code: emitReload(input.layout) },
+  ];
   const translated: TranslatedFunction[] = [];
   const unsupportedExecutable: number[] = [];
   let instructions = 0,
@@ -113,7 +118,12 @@ export function translate(input: TranslationInput): Translation {
     unsupportedCount += result.unsupported;
     unsupportedExecutable.push(...result.unsupportedLeaders);
   }
-  const wasm = module({ types: [{ params: [Type.I32], results: [Type.I32] }], functions: bodies });
+  const types = [
+    { params: [Type.I32], results: [Type.I32] },
+    { params: stateTypes(), results: [] },
+    { params: [], results: stateTypes() },
+  ];
+  const wasm = module({ types, functions: bodies });
   return {
     wasm,
     functions: translated,

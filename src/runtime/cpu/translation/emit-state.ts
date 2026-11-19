@@ -1,31 +1,21 @@
-import { ExitKind, Word } from "./emit-constants";
+import { ExitKind, ReloadIndex, SpillIndex, Word } from "./emit-constants";
 import type { Emitter, FlagLocals } from "./emitter";
 import { StopState } from "./layout";
 import { Op } from "./wasm-opcodes";
 
 const flagOrder = (flags: FlagLocals) => [flags.n, flags.z, flags.c, flags.v];
 
+const stateLocals = (e: Emitter) => [
+  ...e.registers,
+  ...flagOrder(e.flags),
+  ...flagOrder(e.fpFlags),
+];
+
 /** Loads the cached guest registers, flags and used VFP lanes from the state block. */
 export function loadAll(e: Emitter): void {
   const { c, L } = e;
-  e.registers.forEach((local, index) =>
-    c
-      .i32(L.registers + Word.Bytes * index)
-      .memory(Op.I32Load)
-      .set(local),
-  );
-  flagOrder(e.flags).forEach((local, index) =>
-    c
-      .i32(L.flags + Word.Bytes * index)
-      .memory(Op.I32Load)
-      .set(local),
-  );
-  flagOrder(e.fpFlags).forEach((local, index) =>
-    c
-      .i32(L.fpFlags + Word.Bytes * index)
-      .memory(Op.I32Load)
-      .set(local),
-  );
+  c.call(ReloadIndex);
+  for (const local of stateLocals(e).reverse()) c.set(local);
   for (const [lane, local] of e.lanes)
     c.i32(L.vfp + Word.Bytes * lane)
       .memory(Op.I32Load)
@@ -35,24 +25,8 @@ export function loadAll(e: Emitter): void {
 /** Stores the cached guest state back; translated calls and exits observe memory, not locals. */
 export function storeAll(e: Emitter): void {
   const { c, L } = e;
-  e.registers.forEach((local, index) =>
-    c
-      .i32(L.registers + Word.Bytes * index)
-      .get(local)
-      .memory(Op.I32Store),
-  );
-  flagOrder(e.flags).forEach((local, index) =>
-    c
-      .i32(L.flags + Word.Bytes * index)
-      .get(local)
-      .memory(Op.I32Store),
-  );
-  flagOrder(e.fpFlags).forEach((local, index) =>
-    c
-      .i32(L.fpFlags + Word.Bytes * index)
-      .get(local)
-      .memory(Op.I32Store),
-  );
+  for (const local of stateLocals(e)) c.get(local);
+  c.call(SpillIndex);
   for (const [lane, local] of e.lanes)
     c.i32(L.vfp + Word.Bytes * lane)
       .get(local)
