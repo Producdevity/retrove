@@ -331,6 +331,8 @@ export function threadImports(cpu, heap, returnAddress) {
               if (result.unwind && result.unwind.thread !== t.id) throw Error('Cross-thread C++ exception');
               t.pc = result.unwind ? result.unwind.restore(cpu) : result.pc;
               t.wait = result.wait;
+              // Worker threads wait on their host calls; answer them between this thread's slices.
+              if (remote?.pending()) await serviceRemote();
               if (result.wait || result.budget) break;
             }
             if (!t.done) t.state = cpu.saveState();

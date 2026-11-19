@@ -1,4 +1,5 @@
 import { read32, type GuestMemory } from "../../memory/guest-memory";
+import { RenderingAPI } from "../fixed-function/host";
 import {
   ARGUMENT_REGISTERS,
   CallKind,
@@ -80,7 +81,8 @@ export class GraphicsServer {
     const name = this.names[index] ?? "",
       fn = this.#functions[index];
     if (!fn) throw new Error(`Missing GL import ${name}.`);
-    this.#current = { api: thread.api, context: thread.context };
+    // A thread with no EAGL context yet reports ES 2, as the main thread's EAGLContext does.
+    this.#current = { api: thread.api || RenderingAPI.OpenGLES2, context: thread.context };
     const sp = thread.register(Register.Sp);
     return fn((n) =>
       n < ARGUMENT_REGISTERS

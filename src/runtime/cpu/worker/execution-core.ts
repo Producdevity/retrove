@@ -160,7 +160,10 @@ export class ExecutionThread {
         continue;
       }
       if ((pc & ~THUMB_BIT) === (this.start.until & ~THUMB_BIT)) {
-        this.#channel.call(this.#request(RequestKind.Exit, pc));
+        this.#channel.call(
+          this.#request(RequestKind.Exit, pc),
+          graphics && (() => graphics.serve()),
+        );
         return;
       }
       const generation = this.#control.generation;
