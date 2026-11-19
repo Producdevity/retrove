@@ -7,6 +7,8 @@ import { ModuleFormat } from "./wasm-module";
 const HALFWORD_BYTES = 2;
 const WORD_BYTES = 4;
 const PAIR = 2;
+/** Shared-memory modules import a different memory type, so they keep slots of their own. */
+const SHARED_SLOT = "+shared";
 
 /** A module with digests of its job and of the guest bytes it read, both checked before reuse. */
 interface CachedModule {
@@ -21,6 +23,7 @@ type ReadWord = (address: number) => number | undefined;
 function describe(job: TranslationJob): string {
   return JSON.stringify({
     format: ModuleFormat,
+    shared: job.shared,
     functions: job.functions,
     entries: job.entries,
     layout: job.layout,
@@ -126,7 +129,7 @@ export class ModuleCache {
     const db = job.cacheKey === undefined ? undefined : await this.#ready;
     if (!db) return runJob(job, word);
     const began = performance.now(),
-      key = this.#prefix + job.cacheKey,
+      key = this.#prefix + job.cacheKey + (job.shared ? SHARED_SLOT : ""),
       inputs = await sha256(new TextEncoder().encode(describe(job)));
     const stored = await this.#database
       .get(TranslationStore.Modules, key)

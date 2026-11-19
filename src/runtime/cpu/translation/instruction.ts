@@ -38,6 +38,9 @@ export type ExtendForm = "b" | "h" | "b16";
 export type ReverseForm = "word" | "half" | "signedHalf" | "bits";
 export const AccessBytes = { Byte: 1, Half: 2, Word: 4 } as const;
 export type TransferSize = (typeof AccessBytes)[keyof typeof AccessBytes];
+/** LDREX/STREX access sizes; doubleword exclusives transfer the register pair rt, rt2. */
+export const ExclusiveBytes = { ...AccessBytes, Double: 8 } as const;
+export type ExclusiveSize = (typeof ExclusiveBytes)[keyof typeof ExclusiveBytes];
 
 type DataInstruction = {
   readonly kind: "data";
@@ -170,10 +173,19 @@ type MemoryInstruction =
   | {
       readonly kind: "exclusive";
       readonly load: boolean;
+      readonly size: ExclusiveSize;
       readonly rn: number;
       readonly rt: number;
+      /** Second transfer register of a doubleword exclusive. */
+      readonly rt2: number;
+      /** Status register of a store. */
       readonly rd: number;
       readonly offset: number;
+    }
+  | {
+      /** DMB, DSB and ISB; `clear` marks CLREX, which clears the exclusive monitor instead. */
+      readonly kind: "sync";
+      readonly clear: boolean;
     };
 type ControlInstruction =
   | { readonly kind: "branch"; readonly link: boolean; readonly target: number }
@@ -205,7 +217,7 @@ export type InstructionKind = Instruction["kind"];
 export type InstructionOf<K extends InstructionKind> = Extract<Instruction, { kind: K }>;
 
 export const unsupported = (cond: number): Instruction => ({ cond, kind: "unsupported" });
-export const nop = (): Instruction => ({
+export const nop = (): InstructionOf<"data"> => ({
   cond: Condition.Always,
   kind: "data",
   op: DataOp.MOV,
@@ -213,4 +225,9 @@ export const nop = (): Instruction => ({
   rn: 0,
   rd: 0,
   operand: { kind: "reg", rm: 0, shift: 0, amount: 0 },
+});
+export const sync = (clear: boolean): Instruction => ({
+  cond: Condition.Always,
+  kind: "sync",
+  clear,
 });

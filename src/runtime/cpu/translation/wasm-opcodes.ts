@@ -52,6 +52,7 @@ export const Op = {
   I32GeS: 0x4e,
   I32GeU: 0x4f,
   I64Eqz: 0x50,
+  I64Ne: 0x52,
   F32Eq: 0x5b,
   F32Ne: 0x5c,
   F32Lt: 0x5d,
@@ -125,4 +126,18 @@ export const Saturating = {
   I32TruncSatF32U: 0x01,
   I32TruncSatF64S: 0x02,
   I32TruncSatF64U: 0x03,
+} as const;
+
+export const AtomicPrefix = 0xfe;
+/** Threads proposal opcodes after `AtomicPrefix`; their memarg alignment must be the natural one. */
+export const Atomic = {
+  Fence: 0x03,
+  I32Load: 0x10,
+  I64Load: 0x11,
+  I32Load8U: 0x12,
+  I32Load16U: 0x13,
+  I32Cmpxchg: 0x48,
+  I64Cmpxchg: 0x49,
+  I32Cmpxchg8U: 0x4a,
+  I32Cmpxchg16U: 0x4b,
 } as const;

@@ -28,6 +28,7 @@ describe("translation jobs", () => {
       stopPC: 1,
       code: { start: 0x2000, end: 0x3000 },
       cacheKey: undefined,
+      shared: false,
     });
     expect([...job.labels]).toEqual([
       [0x2000, 0],

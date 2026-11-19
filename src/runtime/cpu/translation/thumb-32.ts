@@ -1,4 +1,11 @@
-import { RegisterCount, Register, unsupported, type Instruction } from "./instruction";
+import {
+  ExclusiveBytes,
+  RegisterCount,
+  Register,
+  unsupported,
+  type Instruction,
+} from "./instruction";
+import { decodeThumbExclusive } from "./decode-exclusive";
 import { bit, field, flag, registerList } from "./bits";
 import { decodeThumbBranch, decodeThumbImmediate } from "./thumb-32-immediate";
 import { decodeThumbRegister } from "./thumb-32-register";
@@ -128,9 +135,18 @@ function loadStoreDual(h1: number, h2: number, pc: number, cond: number): Instru
       writeback: !!wb,
     };
   }
+  const word = {
+    cond,
+    kind: "exclusive",
+    size: ExclusiveBytes.Word,
+    rn,
+    rt,
+    rt2: 0,
+    offset,
+  } as const;
   if ((h1 & Encoding.ExclusiveMask) === Encoding.LoadExclusive)
-    return { cond, kind: "exclusive", load: true, rn, rt, rd: 0, offset };
+    return { ...word, load: true, rd: 0 };
   if ((h1 & Encoding.ExclusiveMask) === Encoding.StoreExclusive)
-    return { cond, kind: "exclusive", load: false, rn, rt, rd: field(h2, Field.Rt2), offset };
-  return unsupported(cond);
+    return { ...word, load: false, rd: field(h2, Field.Rt2) };
+  return decodeThumbExclusive(h1, h2, cond) ?? unsupported(cond);
 }

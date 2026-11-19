@@ -16,6 +16,8 @@ export interface TranslationInput {
   readonly labelAddress: (range: FunctionRange) => number;
   /** Records the PC and address of every memory access (slow; for locating faults). */
   readonly debug?: boolean;
+  /** Code runs on a shared memory: exclusives and barriers become Wasm atomics. */
+  readonly shared?: boolean;
 }
 
 export interface TranslatedFunction extends FunctionRange {

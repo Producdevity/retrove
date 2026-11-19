@@ -2,6 +2,12 @@ import { GUEST_SPAN_MASK, GuestLayout } from "../../memory/guest-layout";
 import { arenaRegion, MaxCodeBytes, PageBits, PageBytes, type ArenaRegion } from "./layout";
 
 const PAGE_OFFSET_MASK = PageBytes - 1;
+/** Bytes a heap must reserve for the arena of a guest span (allocations align up to a page). */
+export const arenaReservation = (span: number = GuestLayout.Span, maxCode = MaxCodeBytes): number =>
+  arenaRegion(span, maxCode).bytes + PageBytes;
+/** Whether a memory is a shared WebAssembly.Memory, whose buffer is a SharedArrayBuffer. */
+export const sharedMemory = (memory: WebAssembly.Memory): boolean =>
+  typeof SharedArrayBuffer !== "undefined" && memory.buffer instanceof SharedArrayBuffer;
 export interface HostHeap {
   readonly HEAPU8: Uint8Array;
   _malloc(bytes: number): number;
@@ -18,6 +24,8 @@ export class GuestPages {
   readonly arena: number;
   /** Offsets from `arena` of the translator's state, tables and label areas. */
   readonly region: ArenaRegion;
+  /** Shared memories can be run by several threads; translated modules must be emitted for them. */
+  readonly shared: boolean;
   readonly #heap: HostHeap;
   readonly #memory: WebAssembly.Memory;
   readonly #allocation: number;
@@ -26,6 +34,7 @@ export class GuestPages {
   readonly #regions = new Map<number, number>();
   #view: DataView;
   #bytes: Uint8Array;
+  #words: Int32Array;
   constructor(
     heap: HostHeap,
     memory: WebAssembly.Memory,
@@ -36,18 +45,24 @@ export class GuestPages {
     this.#memory = memory;
     this.#span = span;
     this.region = arenaRegion(span, maxCode);
-    this.#allocation = heap._malloc(this.region.bytes + PageBytes);
+    this.#allocation = heap._malloc(arenaReservation(span, maxCode));
     if (!this.#allocation) throw new Error("Unable to reserve guest memory.");
     this.arena = Math.ceil(this.#allocation / PageBytes) * PageBytes;
     this.#mapped = new Uint8Array(span / PageBytes);
+    this.shared = sharedMemory(memory);
     this.#bytes = new Uint8Array(memory.buffer);
     this.#view = new DataView(memory.buffer);
+    this.#words = new Int32Array(memory.buffer);
+    // A shared buffer never detaches, so views taken now must already cover the whole arena.
+    if (this.shared && this.#bytes.length < this.arena + this.region.bytes)
+      throw new Error("Shared guest memory does not cover the arena.");
   }
-  /** Growing the memory detaches its buffer, which empties the cached views; `buffer` itself is slow to read. */
+  /** Growing an unshared memory detaches its buffer, which empties the cached views; `buffer` itself is slow to read. */
   #current(): void {
     if (this.#bytes.length) return;
     this.#bytes = new Uint8Array(this.#memory.buffer);
     this.#view = new DataView(this.#memory.buffer);
+    this.#words = new Int32Array(this.#memory.buffer);
   }
   /** Mask translated code applies to guest addresses; the span is a power of two. */
   get mask(): number {
@@ -73,6 +88,11 @@ export class GuestPages {
   get bytes(): Uint8Array {
     this.#current();
     return this.#bytes;
+  }
+  /** Word view for `Atomics`; index a host address divided by the word size. */
+  get words(): Int32Array {
+    this.#current();
+    return this.#words;
   }
   get regions(): Iterable<number> {
     return this.#regions.keys();

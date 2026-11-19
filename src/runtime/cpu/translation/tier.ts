@@ -75,6 +75,7 @@ export class TranslatedTier {
     this.#jobs = new TierJobs(
       () => this.layout,
       () => this.#executable,
+      this.pages.shared,
     );
     this.#modules = new ModuleInstaller({
       memory,
