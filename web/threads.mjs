@@ -17,6 +17,9 @@ export function threadImports(cpu, heap, returnAddress) {
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value),
     compareExchange:(p,expected,value)=>compareExchange32(cpu,p,expected,value),store:(p,value)=>store32(cpu,p,value)});
   const tlsKeys = new Map(), semaphores = new Map(), workers = new Map();
+  // Execution workers for guest threads; undefined unless the CPU runs on shared memory with
+  // retrove.workerThreads=on. Threads placed there run in parallel with this one.
+  const remote = cpu.workers;
   gauges.read(Gauge.GuestThreads, () => 1 + [...workers.values()].filter(t => !t.done).length);
   // Priorities are recorded for the guest to read back; the cooperative scheduler does not use them.
   const schedules = new Map();
@@ -93,6 +96,7 @@ export function threadImports(cpu, heap, returnAddress) {
     const t = {id, pc, pointer, args: [...args], stack, stackBottom: stack, sp: stack + size - 16,
       tls: new Map(), running: false, done: false, detached: !!opts.detached, onExit};
     workers.set(id, t);
+    if (remote) t.remote = remote.place({id, pc, args: t.args, sp: t.sp, pointer, returnAddress});
     return id;
   }
   function cond(p) {
@@ -227,8 +231,65 @@ export function threadImports(cpu, heap, returnAddress) {
     _sleep: a => { const at = performance.now() + a(0)*1000; return asWait(() => performance.now()>=at ? 0 : undefined); }
   };
 
+  // Runs a finished thread's TLS destructors and exit handlers, then frees it.
+  async function finish(t, value, nested) {
+    t.value = value;
+    for (let pass = 0; pass < 4; pass++) {
+      const pending = [...t.tls].filter(([key,value]) => value && tlsKeys.get(key));
+      if (!pending.length) break;
+      for (const [key,value] of pending) {
+        t.tls.delete(key); write32(cpu, keyTable(t) + key * 4, 0);
+        await nested(tlsKeys.get(key),[value]);
+      }
+    }
+    for (const handler of exitHandlers) await handler(t.id);
+    t.done = true;
+    await t.onExit?.(t.value);
+    release(t);
+    if (t.detached) reap(t);
+  }
+
+  // Guest threads on execution workers: their host calls run here, on the main CPU loaded with the
+  // thread's registers, exactly as a cooperative thread's would.
+  let connected, servicing = false;
+  async function serviceRemote() {
+    if (!remote || !connected || servicing) return;
+    servicing = true;
+    try {
+      remote.acknowledge();
+      for (const t of [...workers.values()]) if (t.remote && !t.done) await serviceThread(t);
+    } finally { servicing = false; }
+  }
+  async function serviceThread(t) {
+    const outer = current;
+    if (t.wait) {
+      current = t;
+      try { const value = t.wait(); if (value === undefined) return; t.wait = null; t.remote.resume(t.pc, value); }
+      finally { current = outer; }
+    }
+    const request = t.remote.take();
+    if (!request) return;
+    const {step, nested} = connected, outerState = cpu.saveState();
+    current = t;
+    try {
+      t.remote.enter(request.pc);
+      let result = request.exit ? {done: true, value: cpu.getReg(0)} : step(request.pc);
+      if (result instanceof Promise) result = await result;
+      if (result.done) { await finish(t, result.value, nested); t.remote.finish(); return; }
+      if (result.unwind && result.unwind.thread !== t.id) throw Error('Cross-thread C++ exception');
+      t.pc = result.unwind ? result.unwind.restore(cpu) : result.pc;
+      t.remote.leave();
+      if (result.wait) t.wait = result.wait;
+      else t.remote.resume(t.pc);
+    } finally {
+      current = outer;
+      cpu.restoreState(outerState); cpu.freeState(outerState);
+    }
+  }
+
   async function advance(step, nested, budgetMs = 0) {
-    const ready = () => [...workers.values()].filter(t => !t.done && !t.running);
+    if (remote) await serviceRemote();
+    const ready = () => [...workers.values()].filter(t => !t.done && !t.running && !t.remote);
     let batch = ready();
     if (!batch.length) return;
     const deadline = performance.now() + budgetMs;
@@ -262,20 +323,7 @@ export function threadImports(cpu, heap, returnAddress) {
               let result = step(t.pc);
               if (result instanceof Promise) result = await result;
               if (result.done) {
-                t.value = result.value;
-                for (let pass = 0; pass < 4; pass++) {
-                  const pending = [...t.tls].filter(([key,value]) => value && tlsKeys.get(key));
-                  if (!pending.length) break;
-                  for (const [key,value] of pending) {
-                    t.tls.delete(key); write32(cpu, keyTable(t) + key * 4, 0);
-                    await nested(tlsKeys.get(key),[value]);
-                  }
-                }
-                for (const handler of exitHandlers) await handler(t.id);
-                t.done = true;
-                await t.onExit?.(t.value);
-                release(t);
-                if (t.detached) reap(t);
+                await finish(t, result.value, nested);
                 break;
               }
               if (result.unwind && result.unwind.thread !== t.id) throw Error('Cross-thread C++ exception');
@@ -294,10 +342,14 @@ export function threadImports(cpu, heap, returnAddress) {
       cpu.restoreState(outerState); cpu.freeState(outerState);
     }
   }
-  return {funcs, nativeFunctions, advance, spawnDetached: (pc, args, onExit) => spawn(pc, args, {detached:true}, onExit),
+  return {funcs, nativeFunctions, advance, remote, serviceRemote,
+    connect(step, nested) { connected = {step, nested}; },
+    // Waits for an idle promise (a display refresh, a timer) while answering worker threads.
+    idle: promise => remote ? remote.idle(promise, serviceRemote) : promise,
+    spawnDetached: (pc, args, onExit) => spawn(pc, args, {detached:true}, onExit),
     onExit(handler) { exitHandlers.push(handler); },
     get unwindTop() { return read32(cpu, current.pointer - 4); },
     set unwindTop(frame) { write32(cpu, current.pointer - 4, frame); },
     get stackBottom() { return current.stackBottom; },
-    close() { for (const t of workers.values()) release(t); workers.clear(); }};
+    close() { remote?.close(); for (const t of workers.values()) release(t); workers.clear(); }};
 }

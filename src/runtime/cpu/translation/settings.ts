@@ -60,3 +60,15 @@ export function sharedMemoryEnabled(): boolean {
     return false;
   }
 }
+const WORKER_THREADS_KEY = "retrove.workerThreads";
+/**
+ * Guest threads may run on execution workers only when a tester opts in (`retrove.workerThreads=on`);
+ * they also need shared guest memory (`retrove.sharedMemory=on` on a cross-origin isolated page).
+ */
+export function workerThreadsEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(WORKER_THREADS_KEY) === "on";
+  } catch {
+    return false;
+  }
+}

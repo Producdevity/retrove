@@ -62,7 +62,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   let graphicsMilliseconds = 0, yieldMilliseconds = 0;
   async function yieldToBrowser() {
     const before = performance.now();
-    await new Promise(resolve => setTimeout(resolve, 0));
+    const turn = new Promise(resolve => setTimeout(resolve, 0));
+    await (threads?.remote ? threads.idle(turn) : turn);
     yieldMilliseconds += performance.now() - before;
   }
   const recent = [], active = [], deferred = new Map(), lastCall = {gate: 0, lr: 0, thread: 0};
@@ -86,7 +87,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       memoryMB: Object.fromEntries([Gauge.GuestMappedBytes, Gauge.GuestMappedPeak, Gauge.WasmMemoryBytes, Gauge.TranslatedCodeBytes,
         Gauge.GpuTextureBytes, Gauge.GpuBufferBytes, Gauge.GpuRenderbufferBytes, Gauge.FileCacheBytes]
         .map(gauge => [gauge, Math.round(gauges.value(gauge) / 1e6)])),
-      threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])),
+      threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])), workerThreads: threads?.remote?.statistics(),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
@@ -170,6 +171,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     heap = new Heap(cpu);
     const gates = new Map(), stubs = new Map();
     threads = threadImports(cpu, heap, RETURN);
+    threads.connect(step, nested);
+    const remote = threads.remote;
     const jumps=nonlocalJumps(cpu,heap,threads);
     threads.nativeFunctions.set('_setjmp',jumps.save);
     const sys = systemImports(cpu, heap, ipa, log, threads.funcs._pthread_self, diagnostic, missingAsset, hostGate, nested, image);
@@ -306,6 +309,8 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
               await yieldToBrowser();
             }
           }
+          // Worker threads wait on their host calls; answer them at every slice boundary.
+          if (remote?.pending()) await threads.serviceRemote();
           if (result.budget || performance.now() - lastService > 4) await service();
           if (performance.now() - lastYield > 16) { await yieldToBrowser(); lastYield = performance.now(); }
         } catch (error) {

@@ -2,12 +2,17 @@ import { ExecutionBudget } from "../execution-budget";
 import { Gauge, gauges } from "../../diagnostics/gauges";
 import { runTranslated } from "../translation/runner";
 import { arenaReservation } from "../translation/guest-pages";
-import { sharedMemoryEnabled } from "../translation/settings";
+import type { StateLayout } from "../translation/layout";
+import { sharedMemoryEnabled, workerThreadsEnabled } from "../translation/settings";
 import { TranslatedTier } from "../translation/tier";
 import type { TranslationProfile } from "../translation/translation-profile";
 import { ArenaHeap, crossOriginIsolation } from "./arena-heap";
 import { GuestState, type SavedState } from "./guest-state";
 import { GuestMappings, guestRange, type GuestAtomics } from "./guest-mappings";
+import { ModuleRegistry } from "../worker/module-registry";
+import type { TrapRange } from "../worker/protocol";
+import type { WorkerCpu } from "../worker/remote-thread";
+import { WorkerThreads } from "../worker/worker-host";
 
 const REGISTERS = 16;
 const HEX = 16;
@@ -56,8 +61,10 @@ export class GuestFetchFault extends Error {
  * translated on the calling thread the first time it runs, and host traps are dispatched when
  * translated code leaves for a trap address.
  */
-export class OwnCpu {
+export class OwnCpu implements WorkerCpu {
   readonly tier: TranslatedTier;
+  /** Guest threads on execution workers; only with shared memory and `retrove.workerThreads=on`. */
+  readonly workers: WorkerThreads | undefined;
   /** The object handed to the runtime; trap handlers receive it. */
   facade: object | undefined;
   readonly #state: GuestState;
@@ -70,10 +77,11 @@ export class OwnCpu {
     options: OwnCpuOptions = {},
   ) {
     // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
-    this.tier = new TranslatedTier(
-      new ArenaHeap(arenaReservation(), crossOriginIsolation() && sharedMemoryEnabled()),
-      { ...options, ahead: false },
-    );
+    const heap = new ArenaHeap(arenaReservation(), crossOriginIsolation() && sharedMemoryEnabled()),
+      modules = heap.shared && workerThreadsEnabled() ? new ModuleRegistry() : undefined;
+    this.tier = new TranslatedTier(heap, { ...options, ahead: false, modules });
+    this.workers =
+      modules && new WorkerThreads(this, modules, heap.getTciMemory(), this.tier.pages);
     this.tier.excluded = (pc) => this.#trapAt(pc) !== undefined;
     this.#state = new GuestState(
       () => this.tier.layout,
@@ -201,16 +209,41 @@ export class OwnCpu {
         return { reason: "trap", address, pc: state.pc };
       }
       if (until && (pc & ~1) === (until & ~1)) return { reason: "until", pc };
-      if (!tier.entry(pc) || tries > 0) {
-        if (tier.pages.word(pc & ~(FETCH_BYTES - 1)) === undefined) throw new GuestFetchFault(pc);
-        if (tries >= RETRIES || !tier.translateNow(pc)) throw new GuestCodeError(pc);
-      }
+      if (!tier.entry(pc) || tries > 0) this.#ensure(pc, tries);
       const result = runTranslated(tier, state, pc, until, budget);
       if (result.reason !== "fallback") return result;
       budget = Math.max(1, tier.pages.view.getInt32(tier.layout.budget, true));
       tries = result.pc === pc ? tries + 1 : 0;
       pc = result.pc;
     }
+  }
+  /** Translates the code at `pc` on this thread, or throws the fault the run loop would. */
+  #ensure(pc: number, tries: number): void {
+    if (this.tier.pages.word(pc & ~(FETCH_BYTES - 1)) === undefined) throw new GuestFetchFault(pc);
+    if (tries >= RETRIES || !this.tier.translateNow(pc)) throw new GuestCodeError(pc);
+  }
+  get layout(): StateLayout {
+    return this.tier.layout;
+  }
+  get view(): DataView {
+    return this.tier.pages.view;
+  }
+  get traps(): readonly TrapRange[] {
+    return this.#traps.map(({ first, last }) => ({ first, last }));
+  }
+  /** A worker thread's code miss, handled as this CPU's run loop handles its own. */
+  prepareCode(pc: number, tries: number, missing: boolean): number {
+    if (missing) this.tier.discoveredEntry(pc);
+    if (!this.tier.entry(pc) || tries > 0) this.#ensure(pc, tries);
+    const entry = this.tier.entry(pc);
+    if (!entry) throw new GuestCodeError(pc);
+    return entry - 1;
+  }
+  adoptThread(base: number, pc: number): void {
+    this.#state.adopt(base, pc);
+  }
+  returnThread(base: number): void {
+    this.#state.copyTo(base);
   }
   saveState(): { translated: SavedState; threadPointer: number } {
     return { translated: this.#state.save(), threadPointer: this.#state.threadPointer };
@@ -223,6 +256,7 @@ export class OwnCpu {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.workers?.close();
     this.tier.close();
   }
 }

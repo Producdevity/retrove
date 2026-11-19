@@ -728,7 +728,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
       loopToken = zero(4);
       while (input.hasWindow() || input.hasAlerts() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
-        const time = await nextRefresh();
+        const refresh = nextRefresh(), time = await (threads?.remote ? threads.idle(refresh) : refresh);
         poolPush(loopToken);
         try {
           await lifecycle.pump();

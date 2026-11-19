@@ -53,6 +53,9 @@ export function ownCpuObject(budget: ExecutionBudget, options: OwnCpuOptions) {
     get sharedMemory() {
       return own.sharedMemory;
     },
+    get workers() {
+      return own.workers;
+    },
     compareExchange32: (address: number, expected: number, replacement: number) =>
       own.atomics.compareExchange32(address, expected, replacement),
     add32: (address: number, delta: number) => own.atomics.add32(address, delta),

@@ -65,6 +65,20 @@ export class GuestState {
       bytes = new Uint8Array(this.view().buffer, base, STATE_SPAN).slice();
     return { bytes, pc: this.pc, cpsrBase: this.#cpsrBase };
   }
+  /** Takes the registers of another thread's state block (an execution worker's) at `base`. */
+  adopt(base: number, pc: number): void {
+    const view = this.view(),
+      L = this.layout();
+    new Uint8Array(view.buffer).copyWithin(L.registers, base, base + STATE_SPAN);
+    view.setUint32(L.exclusiveAddress, 0, true);
+    this.pc = pc >>> 0;
+    this.#cpsrBase = Cpsr.User;
+  }
+  /** Copies the registers to another thread's state block at `base`. */
+  copyTo(base: number): void {
+    const own = this.layout().registers;
+    new Uint8Array(this.view().buffer).copyWithin(base, own, own + STATE_SPAN);
+  }
   /** A thread switch clears the exclusive monitor, as the kernel does with CLREX. */
   restore(saved: SavedState): void {
     new Uint8Array(this.view().buffer, this.layout().registers, STATE_SPAN).set(saved.bytes);
