@@ -48,24 +48,24 @@ test('Thumb-2 execution, ARM host thunk and return to Thumb', async () => {
 test('VFP scalar calculation, memory and guest-mode protection', async () => {
   const cpu = await createCPU();
   try {
-    cpu.map(0x80000000, 4096);
-    cpu.write(0x80000000, [
+    cpu.map(0x30000000, 4096);
+    cpu.write(0x30000000, [
       0x10, 0x0a, 0x00, 0xee, // vmov s0,r0
       0x00, 0x0a, 0x30, 0xee, // vadd.f32 s0,s0,s0
       0x10, 0x1a, 0x10, 0xee, // vmov r1,s0
       0x00, 0x10, 0x82, 0xe5, // str r1,[r2]
     ]);
     cpu.setReg(0, 0x3fc00000); // float 1.5
-    cpu.setReg(2, 0x80000100);
-    cpu.run(0x80000000, { until: 0x80000010 });
+    cpu.setReg(2, 0x30000100);
+    cpu.run(0x30000000, { until: 0x30000010 });
     assert.equal(cpu.cpsr & 31, 16);
     assert.equal(cpu.getReg(1), 0x40400000);
-    assert.deepEqual(cpu.read(0x80000100, 4), Uint8Array.of(0, 0, 0x40, 0x40));
-    cpu.protect(0x80000000, 4096, 5);
-    assert.throws(() => cpu.run(0x8000000c, { until: 0x80000010 }),
-      err => err.faultAddress === 0x80000100 && err.faultSize === 4 && /UC_ERR_WRITE_PROT/.test(err.message));
+    assert.deepEqual(cpu.read(0x30000100, 4), Uint8Array.of(0, 0, 0x40, 0x40));
+    cpu.protect(0x30000000, 4096, 5);
+    assert.throws(() => cpu.run(0x3000000c, { until: 0x30000010 }),
+      err => err.faultAddress === 0x30000100 && err.faultSize === 4 && /UC_ERR_WRITE_PROT/.test(err.message));
     cpu.setReg(2, 0x40000000);
-    assert.throws(() => cpu.run(0x8000000c, { until: 0x80000010 }),
+    assert.throws(() => cpu.run(0x3000000c, { until: 0x30000010 }),
       err => err.faultAddress === 0x40000000 && /UC_ERR_WRITE_UNMAPPED/.test(err.message));
   } finally { cpu.close(); }
 });

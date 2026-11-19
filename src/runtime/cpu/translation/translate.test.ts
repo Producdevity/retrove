@@ -6,7 +6,11 @@ import { Bytes } from "./wasm-bytes";
 
 const Code = 0x1000;
 const LabelBase = 0x420000;
-const layout = stateLayout(0x1000, 0x10000, { base: 0x410000, start: Code, end: Code + 0x100 });
+const layout = stateLayout(
+  0x1000,
+  { arena: 0x10000, mask: 0xffff },
+  { base: 0x410000, start: Code, end: Code + 0x100 },
+);
 
 function translateWords(words: readonly number[], thumb: boolean) {
   const bytes = new DataView(new ArrayBuffer(4 * words.length));

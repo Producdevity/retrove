@@ -3,7 +3,7 @@ import { Heap, move, read32, readString, write32 } from "./guest-memory";
 
 const memory = () => {
   const bytes = new Uint8Array(0x10000),
-    base = 0x20000000,
+    base = 0x10000000,
     maps: number[][] = [];
   const at = (address: number) => (address >= base ? address - base : address);
   return {
@@ -36,7 +36,7 @@ test("the heap maps pages on growth and reuses coalesced free blocks", () => {
   const first = heap.alloc(16),
     second = heap.alloc(16),
     third = heap.alloc(16);
-  expect(cpu.maps).toEqual([[0x20000000, 4096, 3]]);
+  expect(cpu.maps).toEqual([[0x10000000, 4096, 3]]);
   heap.free(first);
   heap.free(second);
   expect(heap.alloc(32)).toBe(first);

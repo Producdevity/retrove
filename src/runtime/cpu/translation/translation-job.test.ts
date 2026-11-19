@@ -18,7 +18,11 @@ describe("translation jobs", () => {
       functions: [{ start: 0x2000, end: 0x2008 }],
       entries: [],
       pages: [],
-      layout: stateLayout(0x10000, 0x20000, { base: 0x30000, start: 0x2000, end: 0x3000 }),
+      layout: stateLayout(
+        0x10000,
+        { arena: 0x20000, mask: 0xffff },
+        { base: 0x30000, start: 0x2000, end: 0x3000 },
+      ),
       stopPC: 1,
       code: { start: 0x2000, end: 0x3000 },
       cacheKey: undefined,

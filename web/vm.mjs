@@ -1,7 +1,8 @@
 import {write32} from '../src/runtime/memory/guest-memory.ts';
+import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 
 const PAGE = 4096;
-const LOW = 0x41000000, HIGH = 0x6fc00000; // Between the import gates and main stack.
+const LOW = GuestLayout.MappingLow, HIGH = GuestLayout.MappingHigh;
 const SHARED = 1, PRIVATE = 2, FIXED = 0x10, ANON = 0x1000;
 const pageUp = n => Math.ceil(n / PAGE) * PAGE;
 

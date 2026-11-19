@@ -29,14 +29,15 @@ import {cxxImports} from './cxx.mjs';
 import {guestSqlite} from './sqlite.mjs';
 import {guestFiles} from './guest-files.mjs';
 import {GuestLandingPad} from './sjlj.mjs';
+import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {threadImports} from './threads.mjs';
 import {dispatchImports} from './dispatch.mjs';
 import {objcImports} from './objc.mjs';
 
-const GATES = 0x40000000, GATE_BYTES = 0x40000;
+const GATES = GuestLayout.Gates, GATE_BYTES = GuestLayout.GateBytes;
 const RETURN = GATES + GATE_BYTES - 4;
 const ARM_GATE_LOOP = 0xeafffffe;
-const STACK_TOP = 0x70000000, STACK_SIZE = 4 << 20;
+const STACK_TOP = GuestLayout.StackTop, STACK_SIZE = GuestLayout.StackTop - GuestLayout.StackBottom;
 const hex = address => '0x' + address.toString(16);
 const label = value => String(value).slice(0, 192);
 const registerNames = Array.from({length: 13}, (_, i) => 'r' + i).concat('sp', 'lr', 'pc');

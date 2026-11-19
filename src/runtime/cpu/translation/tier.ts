@@ -62,15 +62,11 @@ export class TranslatedTier {
     this.#memory = module.getTciMemory();
     this.#budget = new CodeBudget((pointer) => module._free(pointer));
     const state = this.#allocate(StateBytes, Alignment.State);
-    this.pages = new GuestPages(
-      module,
-      this.#memory,
-      this.#allocate(GuestPages.tableBytes, Alignment.Table),
-    );
+    this.pages = new GuestPages(module, this.#memory);
     const foreign = this.#allocate(ForeignPages.bytes, Alignment.Index);
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.#layout = {
-      ...stateLayout(state, this.pages.table, { base: 0, start: 0, end: 0 }),
+      ...stateLayout(state, this.pages, { base: 0, start: 0, end: 0 }),
       foreign: { base: foreign, slots: FOREIGN_SLOTS },
     };
     this.statistics.translator = this.#translator.kind;

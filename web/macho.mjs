@@ -1,3 +1,4 @@
+import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {classicRelocations} from "../src/runtime/ios/macho/classic-relocations.ts";
 import {SymbolIndex} from "../src/runtime/diagnostics/symbol-index.ts";
 const PAGE = 4096;
@@ -368,6 +369,8 @@ export function loadMachO(image, memory, resolveImport) {
   }
   for (const s of image.segments) {
     if (s.name === '__PAGEZERO') continue;
+    requireFormat(s.address + s.size <= GuestLayout.HeapBase,
+      'segment ' + s.name + ' ends above the guest heap at 0x' + GuestLayout.HeapBase.toString(16));
     memory.map(s.address, s.size, s.protection);
     if (s.fileSize) memory.write(s.address, image.bytes.subarray(s.fileOffset, s.fileOffset + s.fileSize));
   }

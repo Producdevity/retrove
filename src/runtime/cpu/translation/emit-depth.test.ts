@@ -4,7 +4,11 @@ import { StopState, stateLayout } from "./layout";
 import { translate } from "./translate";
 
 const Code = 0x1000;
-const layout = stateLayout(0x1000, 0x10000, { base: 0x410000, start: Code, end: Code + 0x100 });
+const layout = stateLayout(
+  0x1000,
+  { arena: 0x10000, mask: 0xffff },
+  { base: 0x410000, start: Code, end: Code + 0x100 },
+);
 // A: add r0, r0, #1; b B    B: add r0, r0, #1; b A
 const words = [0xe2800001, 0xeaffffff, 0xe2800001, 0xeafffffb];
 

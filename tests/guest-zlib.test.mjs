@@ -8,7 +8,7 @@ import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 async function fixture(t) {
   const cpu = await createCPU(), heap = new Heap(cpu), gates = new Map();
   t.onTestFinished(() => cpu.close());
-  const gateway = 0x40000000, done = gateway + 4092, stack = 0x70000000 - 4096;
+  const gateway = 0x28000000, done = gateway + 4092, stack = 0x40000000 - 4096;
   cpu.map(gateway, 4096, 5); cpu.map(stack, 4096, 3);
   for (let p = gateway; p < gateway + 64; p += 4) write32(cpu, p, 0xe7f000f0);
   let pending;

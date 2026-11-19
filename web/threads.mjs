@@ -1,5 +1,6 @@
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
+import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
 import {ThreadAttributes, ThreadPolicy, DEFAULT_PRIORITY} from '../src/runtime/ios/threads/attributes.ts';
 
@@ -24,7 +25,7 @@ export function threadImports(cpu, heap, returnAddress) {
     write32(cpu, base + 8, id);
     return base + 8;
   }
-  const main = {id: MAIN, tls: new Map(), stackBottom: 0x6fc00000, pointer: threadPointer(MAIN)};
+  const main = {id: MAIN, tls: new Map(), stackBottom: GuestLayout.StackBottom, pointer: threadPointer(MAIN)};
   if (!main.pointer) throw Error('Guest heap exhausted initializing the main thread');
   cpu.threadPointer = main.pointer;
   // Stackless ARM leaves are callable from ARM or Thumb without crossing into

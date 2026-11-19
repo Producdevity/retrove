@@ -1,43 +1,42 @@
-import { Guard, MappedDelta, PageBits, PageBytes, PageTableBytes, UnmappedDelta } from "./layout";
+import { GUEST_SPAN_MASK, GuestLayout } from "../../memory/guest-layout";
+import { PageBits, PageBytes } from "./layout";
 
-const WORD_BYTES = 4;
-const PAGE_COUNT = PageTableBytes / WORD_BYTES;
 const PAGE_OFFSET_MASK = PageBytes - 1;
+/** Memarg offsets past a masked address (multi-word transfers) land in this tail of the arena. */
+export const ARENA_SLACK = 0x1_0000;
 export interface HostHeap {
   readonly HEAPU8: Uint8Array;
   _malloc(bytes: number): number;
   _free(address: number): void;
 }
-interface Region {
-  readonly host: number;
-  readonly allocation: number;
-  readonly size: number;
-}
 /**
- * Guest pages live in the Unicorn heap so Unicorn (uc_mem_map_ptr) and translated code share the
- * same bytes. The table holds one host-minus-guest delta per guest page; unmapped pages hold a
- * delta that makes the translated access fault past the end of memory.
+ * Guest memory is one flat arena in the Unicorn heap: guest address A lives at `arena + A`, so
+ * Unicorn (uc_mem_map_ptr) and translated code share the same bytes and translated code needs no
+ * page table. Pages outside mapped regions are readable zeros to translated code; Unicorn still
+ * faults on them.
  */
 export class GuestPages {
-  readonly table: number;
+  readonly arena: number;
   readonly #heap: HostHeap;
   readonly #memory: WebAssembly.Memory;
-  readonly #regions = new Map<number, Region>();
-  #deltas: Int32Array | undefined;
+  readonly #allocation: number;
+  readonly #span: number;
+  readonly #mapped: Uint8Array;
+  readonly #regions = new Map<number, number>();
   #view: DataView | undefined;
   #bytes: Uint8Array | undefined;
-  constructor(heap: HostHeap, memory: WebAssembly.Memory, table: number) {
+  constructor(heap: HostHeap, memory: WebAssembly.Memory, span: number = GuestLayout.Span) {
     this.#heap = heap;
     this.#memory = memory;
-    this.table = table;
-    const deltas = this.deltas;
-    for (let page = 0; page < PAGE_COUNT; page++) deltas[page] = UnmappedDelta(page * PageBytes);
+    this.#span = span;
+    this.#allocation = heap._malloc(span + ARENA_SLACK + PageBytes);
+    if (!this.#allocation) throw new Error("Unable to reserve guest memory.");
+    this.arena = Math.ceil(this.#allocation / PageBytes) * PageBytes;
+    this.#mapped = new Uint8Array(span / PageBytes);
   }
-  static readonly tableBytes = PAGE_COUNT * WORD_BYTES;
-  get deltas(): Int32Array {
-    if (this.#deltas?.buffer !== this.#memory.buffer)
-      this.#deltas = new Int32Array(this.#memory.buffer, this.table, PAGE_COUNT);
-    return this.#deltas;
+  /** Mask translated code applies to guest addresses; the span is a power of two. */
+  get mask(): number {
+    return this.#span === GuestLayout.Span ? GUEST_SPAN_MASK : this.#span - 1;
   }
   get view(): DataView {
     if (this.#view?.buffer !== this.#memory.buffer) this.#view = new DataView(this.#memory.buffer);
@@ -51,37 +50,30 @@ export class GuestPages {
   get regions(): Iterable<number> {
     return this.#regions.keys();
   }
+  /**
+   * Maps a region and returns its host address for Unicorn. The arena starts zeroed and unmap
+   * zeroes what it releases, so mapping never touches (and commits) memory the guest has not used.
+   */
   map(address: number, size: number): number {
-    const allocation = this.#heap._malloc(size + PageBytes);
-    if (!allocation) throw new Error("Unable to allocate guest memory.");
-    const host = Math.ceil(allocation / PageBytes) * PageBytes;
-    this.#heap.HEAPU8.fill(0, host, host + size);
-    this.#regions.set(address, { host, allocation, size });
-    const deltas = this.deltas;
-    for (let offset = 0; offset < size; offset += PageBytes)
-      deltas[(address + offset) / PageBytes] = MappedDelta(address, host);
+    if (address < 0 || address + size > this.#span)
+      throw new Error(`Guest region at ${address} is outside the guest address span.`);
+    const host = this.arena + address;
+    this.#mapped.fill(1, address / PageBytes, (address + size) / PageBytes);
+    this.#regions.set(address, size);
     return host;
   }
   unmap(address: number, size: number): void {
-    const deltas = this.deltas;
-    for (let offset = 0; offset < size; offset += PageBytes)
-      deltas[(address + offset) / PageBytes] = UnmappedDelta(address + offset);
-    const region = this.#regions.get(address);
-    if (region?.size === size) {
-      this.#heap._free(region.allocation);
-      this.#regions.delete(address);
-    }
+    if (address < 0 || address + size > this.#span) return;
+    this.#heap.HEAPU8.fill(0, this.arena + address, this.arena + address + size);
+    this.#mapped.fill(0, address / PageBytes, (address + size) / PageBytes);
+    if (this.#regions.get(address) === size) this.#regions.delete(address);
   }
   mapped(address: number): boolean {
-    const page = address >>> PageBits;
-    return this.deltas[page] !== UnmappedDelta(page * PageBytes);
+    return this.#mapped[address >>> PageBits] === 1;
   }
   /** Host byte address of a guest address, or -1 when its page is unmapped. */
   host(address: number): number {
-    const page = address >>> PageBits,
-      delta = this.deltas[page];
-    if (delta === undefined || delta === UnmappedDelta(page * PageBytes)) return -1;
-    return (address + delta + Guard) >>> 0;
+    return this.mapped(address) ? this.arena + address : -1;
   }
   word(address: number): number | undefined {
     const host = this.host(address);
@@ -130,7 +122,7 @@ export class GuestPages {
     return runs;
   }
   close(): void {
-    for (const region of this.#regions.values()) this.#heap._free(region.allocation);
+    this.#heap._free(this.#allocation);
     this.#regions.clear();
   }
 }

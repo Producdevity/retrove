@@ -1,6 +1,7 @@
+import { GuestLayout } from "./guest-layout";
 const PAGE = 4096;
-const HEAP_BASE = 0x20000000;
-const HEAP_LIMIT = 0x38000000;
+const HEAP_BASE: number = GuestLayout.HeapBase;
+const HEAP_LIMIT: number = GuestLayout.HeapLimit;
 const HEAP_ALIGNMENT = 16;
 const STRING_CHUNK = 256;
 const STRING_LIMIT = 0x100000;

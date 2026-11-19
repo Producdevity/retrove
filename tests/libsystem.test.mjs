@@ -5,7 +5,7 @@ import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 import {stringImports} from '../web/strings.mjs';
 
 function pageFixture() {
-  const bytes = new Uint8Array(4096), base = 0x20000000;
+  const bytes = new Uint8Array(4096), base = 0x10000000;
   const cpu = {
     map() {},
     read(address, size) {

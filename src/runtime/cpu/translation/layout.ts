@@ -1,4 +1,4 @@
-/** Translated-code state block. Guest memory is reached through a page table of host-minus-guest deltas. */
+/** Translated-code state block. Guest address A is host byte `arena + (A & mask)`. */
 export interface StateLayout {
   readonly registers: number;
   readonly flags: number;
@@ -22,7 +22,10 @@ export interface StateLayout {
   readonly depth: number;
   readonly vfp: number;
   readonly scratch: number;
-  readonly pageTable: number;
+  /** Host address of guest address 0. */
+  readonly arena: number;
+  /** Guest addresses are masked to the arena's span before every access. */
+  readonly mask: number;
   readonly index: { readonly base: number; readonly start: number; readonly end: number };
   /** Open-addressed table of guest page number + 1 -> table slot + 1, for code pages outside the executable. */
   readonly foreign?: { readonly base: number; readonly slots: number };
@@ -46,25 +49,16 @@ const Offset = {
   Vfp: 256,
   Scratch: 512,
 } as const;
-const AddressSpaceBytes = 0x100000000;
-const PageTableEntryBytes = 4;
-const LastPage = 0xfffff000;
 
 export const StateBytes = 1024;
 export const PageBits = 12;
 export const PageBytes = 1 << PageBits;
-export const PageTableBytes = (AddressSpaceBytes / PageBytes) * PageTableEntryBytes;
-/** Accesses add this memarg offset, so an unmapped page's delta pushes the effective address past 2^32 and traps. */
-export const Guard = 0x1000;
-export const UnmappedDelta = (guestPage: number) => (LastPage - guestPage) | 0;
-export const MappedDelta = (guestPage: number, hostPage: number) =>
-  (hostPage - guestPage - Guard) | 0;
 /** Unwind: the call depth limit was reached; the runner continues at the returned PC with an empty stack. */
 export const StopState = { Running: 0, Stopped: 1, Exit: 2, Budget: 3, Unwind: 4 } as const;
 
 export function stateLayout(
   base: number,
-  pageTable: number,
+  memory: { readonly arena: number; readonly mask: number },
   index: StateLayout["index"],
 ): StateLayout {
   return {
@@ -85,7 +79,8 @@ export function stateLayout(
     depth: base + Offset.Depth,
     vfp: base + Offset.Vfp,
     scratch: base + Offset.Scratch,
-    pageTable,
+    arena: memory.arena,
+    mask: memory.mask,
     index,
   };
 }

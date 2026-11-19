@@ -62,4 +62,3 @@ export const ForeignProbes = 8;
 export const ClearThumb = ~1;
 /** Label table entries are i32 per halfword slot: the slot offset is the halfword offset doubled. */
 export const LabelSlotShift = 1;
-export const PageTableEntryShift = 2;

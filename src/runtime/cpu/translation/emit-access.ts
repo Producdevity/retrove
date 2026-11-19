@@ -1,7 +1,6 @@
-import { PageTableEntryShift, Word } from "./emit-constants";
+import { Word } from "./emit-constants";
 import type { Emitter } from "./emitter";
 import { Register } from "./instruction";
-import { Guard, PageBits } from "./layout";
 import { Op } from "./wasm-opcodes";
 
 const LogEntry = { PreviousWord: 4, PC: 8, Bytes: 12 } as const;
@@ -22,7 +21,7 @@ export function reg(e: Emitter, n: number, pc: number): void {
   else e.c.get(e.register(n));
 }
 
-/** Replaces the guest address on the stack with its host base; accesses then add `Guard` (see `guest`). */
+/** Masks the guest address on the stack into the arena's span; accesses then add the arena base (see `guest`). */
 export function host(e: Emitter): void {
   const { c, L } = e,
     address = e.hostTemp,
@@ -32,8 +31,7 @@ export function host(e: Emitter): void {
     c.i32(L.debugAddress).get(debug).memory(Op.I32Store);
     c.i32(L.debugPC).i32(e.mode(e.debugPC)).memory(Op.I32Store).get(debug);
   }
-  c.tee(address).i32(PageBits).op(Op.I32ShrU).i32(PageTableEntryShift).op(Op.I32Shl);
-  c.memory(Op.I32Load, L.pageTable).get(address).op(Op.I32Add);
+  c.i32(L.mask).op(Op.I32And);
 }
 
 /** Host address of guest word `start + offset`; each word is translated on its own since transfers may cross pages. */
@@ -52,19 +50,19 @@ export function guest(e: Emitter, opcode: number, offset = 0): void {
     c.op(Op.I32LtU).open(Op.If, "log");
     c.get(log.at)
       .get(log.host)
-      .i32(Guard + offset)
+      .i32(L.arena + offset)
       .op(Op.I32Add)
       .memory(Op.I32Store);
     c.get(log.at)
       .get(log.host)
-      .memory(Op.I32Load, Guard + offset);
+      .memory(Op.I32Load, L.arena + offset);
     c.memory(Op.I32Store, LogEntry.PreviousWord);
     c.get(log.at).i32(e.mode(e.debugPC)).memory(Op.I32Store, LogEntry.PC);
     c.i32(L.logCursor).get(log.at).i32(LogEntry.Bytes).op(Op.I32Add).memory(Op.I32Store);
     c.end();
     c.get(log.host).get(log.value);
   }
-  c.memory(opcode, Guard + offset);
+  c.memory(opcode, L.arena + offset);
 }
 
 /** Pushes whether ARM condition `cond` (0-13) holds. */
