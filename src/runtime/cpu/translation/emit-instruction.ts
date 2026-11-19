@@ -8,6 +8,7 @@ import {
   emitDivide,
   emitExtend,
   emitExtract,
+  emitPack,
   emitLongMultiply,
   emitMultiply,
   emitMultiplyHalf,
@@ -28,6 +29,7 @@ const DestinationKinds = new Set<string>([
   "extend",
   "bitfield",
   "extract",
+  "pack",
   "movw",
   "movt",
   "clz",
@@ -79,6 +81,8 @@ function emitBody(e: Emitter, pc: number, i: Instruction, current: number): void
       return emitBitfield(e, pc, i);
     case "extract":
       return emitExtract(e, pc, i);
+    case "pack":
+      return emitPack(e, pc, i);
     case "movw":
       c.i32(i.value).set(e.register(i.rd));
       return;

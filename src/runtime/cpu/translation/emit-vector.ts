@@ -1,3 +1,9 @@
+import {
+  emitIntegerOrder,
+  emitSaturatingNarrow,
+  emitShiftImmediate,
+  emitVectorNot,
+} from "./emit-simd-extra";
 import { emitUnsupported } from "./emit-state";
 import {
   emitEstimate,
@@ -39,7 +45,13 @@ import {
   emitVfpMultiple,
   emitVfpUnary,
 } from "./emit-vfp";
-import { emitCoreMove, emitPairMove, emitScalarMove, emitStatusMove } from "./emit-vfp-move";
+import {
+  emitCoreMove,
+  emitPairMove,
+  emitScalarMove,
+  emitStatusMove,
+  emitStatusWrite,
+} from "./emit-vfp-move";
 import type { Emitter } from "./emitter";
 import type { Instruction } from "./instruction";
 
@@ -70,6 +82,8 @@ export function emitVector(e: Emitter, pc: number, i: Instruction): void {
       return emitScalarMove(e, pc, i);
     case "vmrs":
       return emitStatusMove(e, i);
+    case "vmsr":
+      return emitStatusWrite(e, pc, i);
     case "vldst":
       return emitElements(e, pc, i);
     case "vld2":
@@ -129,6 +143,14 @@ function emitSimd(e: Emitter, pc: number, i: Instruction): void {
       return emitShiftRegister(e, i);
     case "vtrn":
       return emitTranspose(e, pc, i);
+    case "viorder":
+      return emitIntegerOrder(e, i);
+    case "vmvn":
+      return emitVectorNot(e, i);
+    case "vshli":
+      return emitShiftImmediate(e, i);
+    case "vqmovn":
+      return emitSaturatingNarrow(e, i);
     default:
       return emitUnsupported(e, pc);
   }

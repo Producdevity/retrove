@@ -130,6 +130,22 @@ export function emitExtract(e: Emitter, pc: number, i: InstructionOf<"extract">)
   c.set(e.register(i.rd));
 }
 
+const HALF = { Low: 0x0000ffff, High: -0x10000, Bits: 16 } as const;
+/** ASR #0 encodes a shift by 32; 31 leaves the same sign bits in the low half. */
+const MAX_ARITHMETIC_SHIFT = 31;
+
+export function emitPack(e: Emitter, pc: number, i: InstructionOf<"pack">): void {
+  const { c } = e;
+  reg(e, i.rn, pc);
+  c.i32(i.top ? HALF.High : HALF.Low).op(Op.I32And);
+  reg(e, i.rm, pc);
+  if (i.top) {
+    const amount = i.amount === 0 ? MAX_ARITHMETIC_SHIFT : Math.min(i.amount, MAX_ARITHMETIC_SHIFT);
+    c.i32(amount).op(Op.I32ShrS).i32(HALF.Low).op(Op.I32And);
+  } else c.i32(i.amount).op(Op.I32Shl).i32(HALF.High).op(Op.I32And);
+  c.op(Op.I32Or).set(e.register(i.rd));
+}
+
 export function emitClz(e: Emitter, pc: number, i: InstructionOf<"clz">): void {
   reg(e, i.rm, pc);
   e.c.op(Op.I32Clz).set(e.register(i.rd));

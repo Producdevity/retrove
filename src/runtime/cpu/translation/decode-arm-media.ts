@@ -20,7 +20,10 @@ const Encoding = {
   DivideMask: 0x0fd0f0f0,
   Divide: 0x0710f010,
   ReverseMask: 0x0fff0ff0,
+  PackMask: 0x0ff00030,
+  Pack: 0x06800010,
 } as const;
+const PACK_TOP_BIT = 6;
 const MulHighForm = { Add: 0b00, Reserved1: 0b01, Reserved2: 0b10, Subtract: 0b11 } as const;
 
 const ExtendForms: Partial<Record<number, { signed: boolean; form: ExtendForm }>> = {
@@ -102,6 +105,11 @@ export function decodeMedia(w: number, cond: number): Instruction {
       rn: rm,
       rm: field(w, ArmField.Rs),
     };
+  }
+  if ((w & Encoding.PackMask) === Encoding.Pack) {
+    const rn = field(w, ArmField.Rn),
+      top = flag(w, PACK_TOP_BIT);
+    return { cond, kind: "pack", top, rd, rn, rm, amount: lsb };
   }
   const form = ReverseForms[w & Encoding.ReverseMask];
   if (form) return { cond, kind: "reverse", form, rd, rm };

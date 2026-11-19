@@ -2,6 +2,7 @@ import { bit, field, flag } from "./bits";
 import { ArmBit, ArmField } from "./decode-fields";
 import type { SimdRegisters } from "./decode-neon";
 import { decodeSimdImmediate } from "./decode-neon-immediate";
+import { decodeSimdExtra } from "./decode-neon-extra";
 import { decodeSimdOther } from "./decode-neon-other";
 import { Condition, unsupported, type Instruction } from "./instruction";
 
@@ -110,4 +111,5 @@ const Matchers: readonly Matcher[] = [
   logic,
   decodeSimdImmediate,
   decodeSimdOther,
+  decodeSimdExtra,
 ];

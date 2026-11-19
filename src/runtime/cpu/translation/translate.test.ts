@@ -65,6 +65,35 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
 
 describe("translate", () => {
   test.each([
+    // vmov d0, r0, r0; vmov d1, r1, r1; vcgt.u32 d0, d0, d1; vmov r0, r1, d0
+    ["vcgt.u32", [0xec400b10, 0xec411b11, 0xf3200301, 0xec510b10], 0xffffffff, 3, 0xffffffff],
+    // vmov d0, r0, r0; vmvn d0, d0; vmov r0, r1, d0
+    ["vmvn", [0xec400b10, 0xf3b00580, 0xec510b10], 0x0f0f0f0f, 0, 0xf0f0f0f0],
+    // vmov d0, r0, r0; vshl.i32 d0, d0, #4; vmov r0, r1, d0
+    ["vshl.i32", [0xec400b10, 0xf2a40510, 0xec510b10], 0x10000001, 0, 0x10],
+    // vmov d2, r0, r1; vmov d3, r0, r1; vqmovn.s32 d0, q1; vmov r0, r1, d0
+    ["vqmovn.s32", [0xec410b12, 0xec410b13, 0xf3b60282, 0xec510b10], 0x12345, -0x20000, 0x80007fff],
+  ])("%s on 32-bit lanes", async (_, words, r0, r1, expected) => {
+    expect((await run([...words, 0xe12fff1e], false, r0, r1 >>> 0)).r0).toBe(expected);
+  });
+  test.each([
+    ["pkhbt", [0xe6800811, 0xe12fff1e], false, 0x1111aaaa, 0x0000bbbb, 0xbbbbaaaa],
+    ["pkhtb", [0xe6800851, 0xe12fff1e], false, 0x1111aaaa, 0xcccc0000, 0x1111cccc],
+    ["thumb pkhbt", [0x4001eac0, 0xbf004770], true, 0x1111aaaa, 0x0000bbbb, 0xbbbbaaaa],
+  ])("%s packs halfwords", async (_, words, thumb, r0, r1, expected) => {
+    expect((await run(words, thumb, r0, r1)).r0).toBe(expected);
+  });
+  test("vmsr writes the whole FPSCR that vmrs reads back", async () => {
+    // vmsr fpscr, r0; mov r0, #0; vmrs r0, fpscr; bx lr
+    const words = [0xeee10a10, 0xe3a00000, 0xeef10a10, 0xe12fff1e];
+    expect((await run(words, false, 0xa3000000, 0)).r0).toBe(0xa3000000);
+  });
+  test("vdup.16 from a core register fills every halfword", async () => {
+    // vdup.16 d0, r0; vmov r0, r1, d0; bx lr
+    const words = [0xee800b30, 0xec510b10, 0xe12fff1e];
+    expect((await run(words, false, 0x1234abcd, 0)).r0).toBe(0xabcdabcd);
+  });
+  test.each([
     ["vmla", 0xee011a20, 0x41000000],
     ["vmls", 0xee011a60, 0xc0800000],
     ["vnmls", 0xee111a20, 0x40800000],

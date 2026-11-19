@@ -69,6 +69,23 @@ export function emitScalarMove(e: Emitter, pc: number, i: InstructionOf<"vmovsca
 }
 
 /** VMRS reads FPSCR with the cached flags; `APSR_nzcv` (Rt = PC) copies them to the core flags. */
+/** VMSR FPSCR: the comparison flags go to their locals, the rest to the state block. */
+export function emitStatusWrite(e: Emitter, pc: number, i: InstructionOf<"vmsr">): void {
+  const { c } = e,
+    fp = e.fpFlags,
+    [value] = e.t;
+  reg(e, i.rt, pc);
+  c.set(value);
+  c.arena().get(value).memory(Op.I32Store, relative(e.L, e.L.fpscr));
+  for (const [local, shift] of [
+    [fp.n, Status.N],
+    [fp.z, Status.Z],
+    [fp.c, Status.C],
+    [fp.v, Status.V],
+  ] as const)
+    c.get(value).i32(shift).op(Op.I32ShrU).i32(1).op(Op.I32And).set(local);
+}
+
 export function emitStatusMove(e: Emitter, i: InstructionOf<"vmrs">): void {
   const { c } = e,
     fp = e.fpFlags,

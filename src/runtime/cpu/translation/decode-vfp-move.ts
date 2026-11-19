@@ -1,6 +1,6 @@
 import { bit, field, flag } from "./bits";
 import { ArmBit, ArmField, vfpRegister } from "./decode-fields";
-import { Register, unsupported, type Instruction } from "./instruction";
+import { AccessBytes, Register, unsupported, type Instruction } from "./instruction";
 
 const Encoding = {
   ThreadPointerMask: 0x0fff0fff,
@@ -9,7 +9,8 @@ const Encoding = {
   Core: 0x0e000a10,
   StatusMask: 0x0fff0fff,
   Status: 0x0ef10a10,
-  DuplicateMask: 0x0fd00f7f,
+  WriteStatus: 0x0ee10a10,
+  DuplicateMask: 0x0f900f5f,
   Duplicate: 0x0e800b10,
   ToScalarMask: 0x0f900f1f,
   ToScalar: 0x0e000b10,
@@ -18,6 +19,9 @@ const Encoding = {
 } as const;
 const Scalar = { ByteForm: 2, HalfForm: 1, ByteIndexShift: 2, HalfIndexShift: 1 } as const;
 const DuplicateQ = 21;
+/** VDUP element size bits b (22) and e (5): 32, 16 or 8 bits. */
+const DuplicateSize = { B: 22, E: 5 } as const;
+const DUPLICATE_BYTES = [AccessBytes.Word, AccessBytes.Half, AccessBytes.Byte] as const;
 const ScalarUnsigned = 23;
 const CoreRegisterShift = 1;
 
@@ -31,9 +35,12 @@ export function decodeVfpMove(w: number, cond: number): Instruction {
     return { cond, kind: "vmovcore", toCore: flag(w, ArmBit.Load), rt, s };
   }
   if ((w & Encoding.StatusMask) === Encoding.Status) return { cond, kind: "vmrs", rt };
+  if ((w & Encoding.StatusMask) === Encoding.WriteStatus && rt !== Register.PC)
+    return { cond, kind: "vmsr", rt };
   const d = vfpRegister(field(w, ArmField.Rn), bit(w, ArmBit.N), true);
-  if ((w & Encoding.DuplicateMask) === Encoding.Duplicate && rt !== Register.PC)
-    return { cond, kind: "vdupcore", q: flag(w, DuplicateQ), d, rt };
+  const bytes = DUPLICATE_BYTES[(bit(w, DuplicateSize.B) << 1) | bit(w, DuplicateSize.E)];
+  if ((w & Encoding.DuplicateMask) === Encoding.Duplicate && rt !== Register.PC && bytes)
+    return { cond, kind: "vdupcore", q: flag(w, DuplicateQ), d, rt, bytes };
   const opc1 = field(w, ArmField.Opc1),
     opc2 = field(w, ArmField.Opc2);
   const byteIndex = ((opc1 & 1) << Scalar.ByteIndexShift) | opc2,

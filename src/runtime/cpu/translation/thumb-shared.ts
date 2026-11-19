@@ -7,6 +7,7 @@ import {
   type MemoryOffset,
   type Operand,
   type TransferSize,
+  ShiftType,
 } from "./instruction";
 
 /** PC as read by a Thumb instruction: its address plus 4. */
@@ -74,6 +75,7 @@ const WideOp = {
   Or: 0b0010,
   OrNot: 0b0011,
   Xor: 0b0100,
+  Pack: 0b0110,
   Add: 0b1000,
   AddCarry: 0b1010,
   SubtractCarry: 0b1011,
@@ -110,6 +112,17 @@ export function wideData(
       return test
         ? data(cond, DataOp.TEQ, true, rn, 0, operand)
         : data(cond, DataOp.EOR, s, rn, rd, operand);
+    case WideOp.Pack:
+      if (operand.kind !== "reg" || s) return unsupported(cond);
+      return {
+        cond,
+        kind: "pack",
+        top: operand.shift === ShiftType.ASR,
+        rd,
+        rn,
+        rm: operand.rm,
+        amount: operand.amount,
+      };
     case WideOp.Add:
       return test
         ? data(cond, DataOp.CMN, true, rn, 0, operand)

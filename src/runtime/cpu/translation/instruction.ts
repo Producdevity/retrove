@@ -109,6 +109,15 @@ type BitInstruction =
       readonly width: number;
     }
   | {
+      /** PKHBT (bottom half from rn, top from rm LSL) or PKHTB (top from rn, bottom from rm ASR). */
+      readonly kind: "pack";
+      readonly top: boolean;
+      readonly rd: number;
+      readonly rn: number;
+      readonly rm: number;
+      readonly amount: number;
+    }
+  | {
       readonly kind: "extract";
       readonly signed: boolean;
       readonly rd: number;

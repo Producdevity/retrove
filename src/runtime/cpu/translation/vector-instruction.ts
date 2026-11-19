@@ -81,7 +81,9 @@ type VfpInstruction =
       readonly toCore?: boolean;
       readonly signed?: boolean;
     }
-  | { readonly kind: "vmrs"; readonly rt: number };
+  | { readonly kind: "vmrs"; readonly rt: number }
+  /** VMSR FPSCR: the whole status word, including the comparison flags. */
+  | { readonly kind: "vmsr"; readonly rt: number };
 
 type SimdMemory =
   | {
@@ -137,7 +139,13 @@ type SimdInstruction =
   | (Unary & { readonly kind: "vestimate"; readonly sqrt: boolean })
   | { readonly kind: "vmovn"; readonly wide: boolean; readonly d: number; readonly m: number }
   | (Binary & { readonly kind: "viarith"; readonly sub: boolean })
-  | { readonly kind: "vdupcore"; readonly q: boolean; readonly d: number; readonly rt: number }
+  | {
+      readonly kind: "vdupcore";
+      readonly q: boolean;
+      readonly d: number;
+      readonly rt: number;
+      readonly bytes: LaneBytes;
+    }
   | (Unary & { readonly kind: "vzip"; readonly unzip: boolean; readonly bytes: LaneBytes })
   | {
       readonly kind: "vpminmax";
@@ -147,6 +155,19 @@ type SimdInstruction =
       readonly m: number;
     }
   | (Binary & { readonly kind: "vicompare"; readonly test: boolean })
+  /** VCGT/VCGE on 32-bit integer lanes. */
+  | (Binary & { readonly kind: "viorder"; readonly ge: boolean; readonly unsigned: boolean })
+  | (Unary & { readonly kind: "vmvn" })
+  /** VSHL by an immediate, 32-bit lanes. */
+  | (Unary & { readonly kind: "vshli"; readonly amount: number })
+  /** VQMOVN/VQMOVUN from 32-bit to 16-bit lanes; the sticky QC flag is not tracked. */
+  | {
+      readonly kind: "vqmovn";
+      readonly signedSource: boolean;
+      readonly signedResult: boolean;
+      readonly d: number;
+      readonly m: number;
+    }
   | (Unary & { readonly kind: "viunary"; readonly abs: boolean })
   | (Binary & { readonly kind: "vshlreg"; readonly unsigned: boolean })
   | {

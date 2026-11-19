@@ -168,9 +168,16 @@ export function emitIntegerArithmetic(e: Emitter, i: InstructionOf<"viarith">): 
   }
 }
 
+/** Multiplier that copies a low element into every element of a word. */
+const REPLICATE = { 1: 0x01010101, 2: 0x00010001, 4: 1 } as const;
+const ELEMENT_MASK = { 1: 0xff, 2: 0xffff, 4: -1 } as const;
+
 export function emitDuplicateCore(e: Emitter, pc: number, i: InstructionOf<"vdupcore">): void {
+  const [word] = e.t;
+  reg(e, i.rt, pc);
+  e.c.i32(ELEMENT_MASK[i.bytes]).op(Op.I32And).i32(REPLICATE[i.bytes]).op(Op.I32Mul).set(word);
   for (let k = 0; k < elements(i.q); k++) {
-    reg(e, i.rt, pc);
+    e.c.get(word);
     setLane(e, at(i.d, k));
   }
 }
