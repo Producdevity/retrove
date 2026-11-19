@@ -1,4 +1,5 @@
 import { errorMessage } from "../../domain/validation";
+import { BUILD_ID } from "../../pwa/update-protocol";
 import { applyUpdate, updateRegistration, watchUpdates } from "../../pwa/updates";
 import { element } from "../../ui/dom";
 
@@ -29,13 +30,70 @@ const ACTION: Partial<Record<UpdateState, string>> = {
 /** A launch that finds an update already downloaded installs it before the user starts. */
 const LAUNCH_WINDOW_MS = 4_000;
 const RECHECK_MS = 60_000;
+const ANNOUNCE_MS = 8_000;
+/** Set just before the restart that applies an update, so the next launch can confirm it. */
+const UPDATED_FROM_KEY = "retrove.updated-from";
+interface BannerCopy {
+  readonly title: string;
+  readonly detail: string;
+  readonly action: string;
+}
+const BANNER: Partial<Record<UpdateState, BannerCopy>> = {
+  ready: { title: "Update ready", detail: "Restart to use the new version.", action: "Restart" },
+  applying: { title: "Updating Retrove", detail: "Restarting with the new version…", action: "" },
+};
+
+/** The floating update banner: progress of an update, then a confirmation after its restart. */
+class UpdateBanner {
+  private readonly bar = element("update-banner", HTMLDivElement);
+  private readonly title = element("update-title", HTMLElement);
+  private readonly detail = element("update-detail", HTMLSpanElement);
+  readonly action = element("update-restart", HTMLButtonElement);
+  /** True while the confirmation of a just-applied update is shown. */
+  announcing = false;
+  show(copy: BannerCopy | undefined): void {
+    this.bar.hidden = !copy;
+    if (!copy) return;
+    this.title.textContent = copy.title;
+    this.detail.textContent = copy.detail;
+    this.action.textContent = copy.action;
+    this.action.hidden = !copy.action;
+  }
+  announce(state: () => UpdateState): void {
+    this.announcing = true;
+    this.show({ title: "Retrove updated", detail: `Now running build ${BUILD_ID}.`, action: "OK" });
+    window.setTimeout(() => {
+      if (this.announcing) this.dismiss(state());
+    }, ANNOUNCE_MS);
+  }
+  dismiss(state: UpdateState): void {
+    this.announcing = false;
+    this.show(BANNER[state]);
+  }
+}
+
+function takeUpdatedFrom(): string | undefined {
+  try {
+    const previous = sessionStorage.getItem(UPDATED_FROM_KEY) ?? undefined;
+    sessionStorage.removeItem(UPDATED_FROM_KEY);
+    return previous;
+  } catch {
+    return undefined;
+  }
+}
+function rememberUpdate(): void {
+  try {
+    sessionStorage.setItem(UPDATED_FROM_KEY, BUILD_ID);
+  } catch {
+    // Without session storage the update still applies; only the confirmation is skipped.
+  }
+}
 
 /** Checks for updates in the background and installs them with at most one tap. */
 export function connectUpdates(report: (error: unknown) => void): void {
   const status = element("update-status", HTMLSpanElement),
     action = element("update-action", HTMLButtonElement),
-    banner = element("update-banner", HTMLDivElement),
-    restart = element("update-restart", HTMLButtonElement);
+    banner = new UpdateBanner();
   const started = performance.now();
   let registration: ServiceWorkerRegistration | undefined;
   let state: UpdateState = UpdateState.Checking;
@@ -47,13 +105,15 @@ export function connectUpdates(report: (error: unknown) => void): void {
     action.hidden = !label;
     action.textContent = label ?? "";
     action.classList.toggle("filled", next === UpdateState.Ready);
-    banner.hidden = next !== UpdateState.Ready && next !== UpdateState.Applying;
-    restart.disabled = next === UpdateState.Applying;
+    if (BANNER[next]) banner.announcing = false;
+    if (!banner.announcing) banner.show(BANNER[next]);
   };
+  if (![undefined, BUILD_ID].includes(takeUpdatedFrom())) banner.announce(() => state);
   const install = async (current: ServiceWorkerRegistration): Promise<void> => {
     show(UpdateState.Applying);
     try {
       await applyUpdate(current);
+      rememberUpdate();
       location.reload();
     } catch (error) {
       report(error);
@@ -85,7 +145,9 @@ export function connectUpdates(report: (error: unknown) => void): void {
     else void check(registration);
   };
   action.addEventListener("click", run);
-  restart.addEventListener("click", run);
+  banner.action.addEventListener("click", () =>
+    banner.announcing ? banner.dismiss(state) : run(),
+  );
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) {
     show(UpdateState.Off);
     return;
