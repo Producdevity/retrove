@@ -1,11 +1,12 @@
 import { ExecutionBudget } from "../execution-budget";
 import { Gauge, gauges } from "../../diagnostics/gauges";
 import { runTranslated } from "../translation/runner";
+import { arenaReservation } from "../translation/guest-pages";
 import { TranslatedTier } from "../translation/tier";
 import type { TranslationProfile } from "../translation/translation-profile";
 import { ArenaHeap } from "./arena-heap";
 import { GuestState, type SavedState } from "./guest-state";
-import { GuestMappings, guestRange } from "./guest-mappings";
+import { GuestMappings, guestRange, type GuestAtomics } from "./guest-mappings";
 
 const REGISTERS = 16;
 const HEX = 16;
@@ -68,7 +69,7 @@ export class OwnCpu {
     options: OwnCpuOptions = {},
   ) {
     // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
-    this.tier = new TranslatedTier(new ArenaHeap(), { ...options, ahead: false });
+    this.tier = new TranslatedTier(new ArenaHeap(arenaReservation()), { ...options, ahead: false });
     this.tier.excluded = (pc) => this.#trapAt(pc) !== undefined;
     this.#state = new GuestState(
       () => this.tier.layout,
@@ -99,6 +100,10 @@ export class OwnCpu {
   get interpretedMilliseconds(): number {
     return 0;
   }
+  /** Guest memory is a shared WebAssembly.Memory that other threads can run translated code on. */
+  get sharedMemory(): boolean {
+    return this.tier.pages.shared;
+  }
   set threadPointer(address: number) {
     this.#state.threadPointer = address;
   }
@@ -119,6 +124,9 @@ export class OwnCpu {
   }
   read32(address: number): number {
     return this.#memory.read32(address);
+  }
+  get atomics(): GuestAtomics {
+    return this.#memory;
   }
   getReg(register: number): number {
     return this.#state.get(this.#register(register));
