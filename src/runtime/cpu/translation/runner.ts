@@ -1,5 +1,4 @@
 import { StopState } from "./layout";
-import type { RegisterBridge } from "./register-bridge";
 import type { TranslatedTier } from "./tier";
 
 type TranslatedEntry = (pc: number) => number;
@@ -16,7 +15,8 @@ function translatedEntry(value: unknown): value is TranslatedEntry {
  */
 export function runTranslated(
   tier: TranslatedTier,
-  bridge: RegisterBridge,
+  /** Receives the guest PC (with the Thumb bit) as translated code moves it. */
+  bridge: { pc: number },
   start: number,
   until: number,
   budget: number,

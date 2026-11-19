@@ -51,7 +51,7 @@ export function emitVector(e: Emitter, pc: number, i: Instruction): void {
     case "vmulti":
       return emitVfpMultiple(e, pc, i);
     case "varith":
-      return emitVfpArithmetic(e, pc, i);
+      return emitVfpArithmetic(e, i);
     case "vcvtfd":
       return emitPrecision(e, i);
     case "vunary":

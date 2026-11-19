@@ -1,3 +1,4 @@
+import type { CodeSnapshot } from "./translation-job";
 import { ForeignProbes } from "./translate";
 
 export const FOREIGN_SLOTS = 1024;
@@ -88,5 +89,23 @@ export class ForeignQueue {
   clear(): void {
     this.#entries.clear();
     this.#queued.clear();
+  }
+}
+/** Every entry seen per page, so a page translated again keeps the entries of earlier passes. */
+export class PageEntries {
+  readonly #pages = new Map<number, Set<number>>();
+  constructor(
+    /** Copies the guest code bytes of a range, as translation jobs carry them. */
+    readonly snapshots: (start: number, end: number) => CodeSnapshot[],
+  ) {}
+  /** Records `pc` on `page` and returns all of the page's entries. */
+  add(page: number, pc: number): number[] {
+    const entries = this.#pages.get(page) ?? new Set<number>();
+    entries.add(pc);
+    this.#pages.set(page, entries);
+    return [...entries];
+  }
+  clear(): void {
+    this.#pages.clear();
   }
 }

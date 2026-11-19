@@ -64,6 +64,17 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
 }
 
 describe("translate", () => {
+  test.each([
+    ["vmla", 0xee011a20, 0x41000000],
+    ["vmls", 0xee011a60, 0xc0800000],
+    ["vnmls", 0xee111a20, 0x40800000],
+    ["vnmla", 0xee111a60, 0xc1000000],
+  ])("%s.f32 accumulates the rounded product into the destination", async (_, op, expected) => {
+    // vmov s0, r0; vmov s1, r1; vmov s2, r0; <op> s2, s0, s1; vmov r0, s2; bx lr
+    const words = [0xee000a10, 0xee001a90, 0xee010a10, op, 0xee110a10, 0xe12fff1e];
+    const result = await run(words, false, 0x40000000, 0x40400000);
+    expect([result.pc, result.r0]).toEqual([0x5000, expected]);
+  });
   test("emits a valid module for an ARM function", () => {
     const translation = translateWords([0xe0800001, 0xe12fff1e], false);
     expect(WebAssembly.validate(translation.wasm)).toBe(true);

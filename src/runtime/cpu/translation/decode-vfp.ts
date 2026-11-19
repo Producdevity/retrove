@@ -14,6 +14,8 @@ const VfpRegisters = 32;
 const MultipleGroup = 0b110;
 const DataSignature = { Field: { shift: 9, width: 3 }, Value: 0b101 } as const;
 const DataOpcode = {
+  MultiplyAccumulate: 0b000,
+  NegatedMultiplyAccumulate: 0b001,
   Multiply: 0b010,
   Add: 0b011,
   Divide: 0b100,
@@ -112,6 +114,10 @@ export function decodeVfpData(w: number, cond: number): Instruction {
     m = vfpRegister(field(w, ArmField.Rm), bit(w, ArmBit.M), double);
   const opc1 = (bit(w, ArmBit.Up) << DataOpcode.HighShift) | field(w, DataOpcode.Low),
     op6 = flag(w, ArmBit.Op6);
+  if (opc1 === DataOpcode.MultiplyAccumulate)
+    return { cond, kind: "varith", op: op6 ? "mls" : "mla", double, d, n, m };
+  if (opc1 === DataOpcode.NegatedMultiplyAccumulate)
+    return { cond, kind: "varith", op: op6 ? "nmla" : "nmls", double, d, n, m };
   if (opc1 === DataOpcode.Multiply)
     return { cond, kind: "varith", op: op6 ? "nmul" : "mul", double, d, n, m };
   if (opc1 === DataOpcode.Add)

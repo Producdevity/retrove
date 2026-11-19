@@ -1,4 +1,6 @@
 export type VfpArithmetic = "add" | "sub" | "mul" | "nmul" | "div";
+/** VMLA, VMLS, VNMLA and VNMLS: a rounded product added to (or subtracted from) the destination. */
+export type VfpAccumulate = "mla" | "mls" | "nmla" | "nmls";
 import type { TransferSize } from "./instruction";
 
 export type LaneBytes = TransferSize;
@@ -27,7 +29,7 @@ type VfpInstruction =
     }
   | {
       readonly kind: "varith";
-      readonly op: VfpArithmetic;
+      readonly op: VfpArithmetic | VfpAccumulate;
       readonly double: boolean;
       readonly d: number;
       readonly n: number;

@@ -1,5 +1,4 @@
 import { Double, Lanes, Single, Word } from "./emit-constants";
-import { fail } from "./emit-state";
 import type { Emitter } from "./emitter";
 import type { VfpArithmetic } from "./vector-instruction";
 import { BlockType, Op, Saturating, Type } from "./wasm-opcodes";
@@ -127,7 +126,6 @@ export function storeDouble(e: Emitter, d: number): void {
 
 export function doubleArithmetic(
   e: Emitter,
-  pc: number,
   op: VfpArithmetic,
   d: number,
   n: number,
@@ -138,14 +136,8 @@ export function doubleArithmetic(
   flushedDouble(e, n);
   flushedDouble(e, m);
   c.op(doubleOp(op)).set(r);
-  // A result at the smallest normal may have been tiny before rounding; the interpreter decides that case.
-  // Inside an IT block an exit would lose ITSTATE; there the rounded result is kept (differs only when the exact
-  // result was tiny but rounded up to the smallest normal).
-  if (e.itStart === undefined) {
-    c.get(r).op(Op.F64Abs).f64(Double.Minimum).op(Op.F64Eq).open(Op.If, "ambiguous");
-    fail(e, () => c.i32(e.mode(pc)));
-    c.end();
-  }
+  // A result rounded up to the smallest normal is kept even if it was tiny before rounding, where
+  // flush-to-zero would give zero: no interpreter decides that case, and it only differs there.
   c.get(r).op(Op.F64Abs).f64(Double.Minimum).op(Op.F64Lt).op(Op.If, Type.F64);
   c.get(r).f64(0).op(Op.F64Mul).op(Op.Else).get(r).op(Op.End);
   if (op === "nmul") c.op(Op.F64Neg);

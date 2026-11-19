@@ -15,6 +15,7 @@ import {
 import { emitUnsupported } from "./emit-state";
 import type { Emitter } from "./emitter";
 import { Register, type InstructionOf } from "./instruction";
+import type { VfpArithmetic } from "./vector-instruction";
 import { Op, Saturating } from "./wasm-opcodes";
 
 const LowWord = 0xffffffffn;
@@ -83,9 +84,46 @@ export function emitVfpMultiple(e: Emitter, pc: number, i: InstructionOf<"vmulti
       .set(e.register(i.rn));
 }
 
-export function emitVfpArithmetic(e: Emitter, pc: number, i: InstructionOf<"varith">): void {
-  if (i.double) doubleArithmetic(e, pc, i.op, i.d, i.n, i.m);
-  else singleArithmetic(e, i.op, i.d, i.n, i.m);
+/** Scratch registers past the architectural ones: S64/S65, or D32/D33 for doubles. */
+const Scratch = { Product: Lanes.Architectural, Negated: Lanes.Architectural + 1 } as const;
+const scratchRegister = (double: boolean, scratch: number) =>
+  double ? scratch - Lanes.Architectural + Lanes.Architectural / Lanes.PerDouble : scratch;
+
+/** Copies register `from` into `to` with its sign flipped (VNEG without NaN handling). */
+function negated(e: Emitter, double: boolean, from: number, to: number): void {
+  const high = double ? Lanes.PerDouble * from + 1 : from;
+  if (double) {
+    getLane(e, Lanes.PerDouble * from);
+    setLane(e, Lanes.PerDouble * to);
+  }
+  getLane(e, high);
+  e.c.i32(Word.Sign).op(Op.I32Xor);
+  setLane(e, double ? Lanes.PerDouble * to + 1 : to);
+}
+
+function arithmetic(
+  e: Emitter,
+  double: boolean,
+  op: VfpArithmetic,
+  operands: readonly [number, number, number],
+): void {
+  const [d, n, m] = operands;
+  if (double) doubleArithmetic(e, op, d, n, m);
+  else singleArithmetic(e, op, d, n, m);
+}
+
+export function emitVfpArithmetic(e: Emitter, i: InstructionOf<"varith">): void {
+  const op = i.op;
+  if (op !== "mla" && op !== "mls" && op !== "nmla" && op !== "nmls")
+    return arithmetic(e, i.double, op, [i.d, i.n, i.m]);
+  const product = scratchRegister(i.double, Scratch.Product),
+    negatedD = scratchRegister(i.double, Scratch.Negated);
+  arithmetic(e, i.double, "mul", [product, i.n, i.m]);
+  if (op === "mla") return arithmetic(e, i.double, "add", [i.d, i.d, product]);
+  if (op === "mls") return arithmetic(e, i.double, "sub", [i.d, i.d, product]);
+  negated(e, i.double, i.d, negatedD);
+  if (op === "nmla") negated(e, i.double, product, product);
+  arithmetic(e, i.double, "add", [i.d, negatedD, product]);
 }
 
 export function emitPrecision(e: Emitter, i: InstructionOf<"vcvtfd">): void {

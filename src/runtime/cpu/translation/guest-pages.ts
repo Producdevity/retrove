@@ -45,6 +45,19 @@ export class GuestPages {
   get mask(): number {
     return this.#span === GuestLayout.Span ? GUEST_SPAN_MASK : this.#span - 1;
   }
+  /** Reads guest memory for executable discovery; unmapped bytes read as empty. */
+  get reader(): {
+    word(address: number): number | undefined;
+    read(address: number, length: number): Uint8Array;
+  } {
+    return {
+      word: (address) => this.word(address),
+      read: (address, length) => {
+        const bytes = new Uint8Array(length);
+        return this.read(address, bytes) ? bytes : new Uint8Array(0);
+      },
+    };
+  }
   get view(): DataView {
     if (this.#view?.buffer !== this.#memory.buffer) this.#view = new DataView(this.#memory.buffer);
     return this.#view;

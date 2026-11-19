@@ -8,7 +8,8 @@ import {TciTier, TciTierLimit} from '../src/runtime/cpu/tci/tier.ts';
 import {TranslatedTier} from '../src/runtime/cpu/translation/tier.ts';
 import {RegisterBridge} from '../src/runtime/cpu/translation/register-bridge.ts';
 import {runTranslated} from '../src/runtime/cpu/translation/runner.ts';
-import {translationCacheEnabled, translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
+import {ownCpuEnabled, translationCacheEnabled, translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
+import {ownCpuObject} from '../src/runtime/cpu/own/own-cpu-object.ts';
 import {deviceBudget} from '../src/runtime/memory/device-budget.ts';
 import {loadTranslationProfile, saveTranslationProfile} from '../src/runtime/cpu/translation/profile-storage.ts';
 
@@ -35,6 +36,11 @@ function range(address, size, aligned = false) {
 
 export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled() && deviceBudget().translation, translationProfile} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
+  if (ownCpuEnabled() && deviceBudget().translation) {
+    const key = translationCacheEnabled() ? translationProfile : undefined;
+    return ownCpuObject(budget, {profile: key ? await loadTranslationProfile(key) : undefined, cache: key,
+      codeBudget: deviceBudget().codeBytes, onProfile: key ? p => saveTranslationProfile(key, p) : undefined});
+  }
   const profileKey = translation && translationCacheEnabled() ? translationProfile : undefined;
   const profile = profileKey ? await loadTranslationProfile(profileKey) : undefined;
   const uc = await createUnicorn();

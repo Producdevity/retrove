@@ -1,10 +1,10 @@
 import { MaxCodeBytes, PageBytes, stateLayout, type StateLayout } from "./layout";
-import type { Translation } from "./translate";
-import { labelBlockBytes, runJob, type TranslationJob } from "./translation-job";
+import { runJob, type TranslationJob } from "./translation-job";
 import { Translator } from "./translator";
-import { i32Global, installTranslation, instantiateTranslation } from "./install";
+import { ModuleInstaller } from "./module-installer";
+import { demandAt } from "./code-range";
 import { GuestPages } from "./guest-pages";
-import { ForeignPages, ForeignQueue, FOREIGN_SLOTS } from "./foreign-pages";
+import { ForeignPages, ForeignQueue, FOREIGN_SLOTS, PageEntries } from "./foreign-pages";
 import { discoverExecutable, functionAt, type Executable } from "./executable";
 import { emptyStatistics, recordError, type TierStatistics } from "./tier-statistics";
 import { collectBatch } from "./collect";
@@ -31,12 +31,11 @@ export class TranslatedTier {
   /** Guest PCs that must stay on the interpreter (host traps). */
   excluded: (pc: number) => boolean = () => false;
   #layout: StateLayout;
-  readonly #memory: WebAssembly.Memory;
   readonly #foreign: ForeignPages;
   readonly #labels: LabelAreas;
   readonly #jobs: TierJobs;
   #aot: AheadOfTime | undefined;
-  readonly #arena: WebAssembly.Global;
+  readonly #modules: ModuleInstaller;
   readonly #translated = new Set<number>();
   readonly #queued = new Set<number>();
   readonly #hot = new HotFunctions();
@@ -52,6 +51,8 @@ export class TranslatedTier {
   readonly #profile: ProfileRecorder;
   readonly #options: TierOptions;
   readonly #foreignQueue = new ForeignQueue();
+  /** Entries seen on each code page outside the executable, for pages translated on demand. */
+  readonly #foreignEntries = new PageEntries((start, end) => this.pages.snapshots(start, end));
   #executable: Executable | undefined;
   #discovered = false;
   #working = false;
@@ -64,9 +65,9 @@ export class TranslatedTier {
   constructor(module: TierModule, options: TierOptions = {}) {
     this.#options = options;
     this.#profile = new ProfileRecorder(options.profile);
-    this.#memory = module.getTciMemory();
+    const memory = module.getTciMemory();
     this.#budget = new CodeBudget(options.codeBudget);
-    this.pages = new GuestPages(module, this.#memory);
+    this.pages = new GuestPages(module, memory);
     const { arena, region } = this.pages,
       foreign = arena + region.foreign;
     this.#labels = new LabelAreas(arena, region);
@@ -74,7 +75,15 @@ export class TranslatedTier {
       () => this.#layout,
       () => this.#executable,
     );
-    this.#arena = i32Global(arena);
+    this.#modules = new ModuleInstaller({
+      memory,
+      table: this.table,
+      pages: this.pages,
+      labels: this.#labels,
+      budget: this.#budget,
+      statistics: this.statistics,
+      translator: this.#translator,
+    });
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.#layout = {
       ...stateLayout(arena + region.state, this.pages, { base: 0, start: 0, end: 0 }),
@@ -87,13 +96,7 @@ export class TranslatedTier {
   }
   #discover(): void {
     this.#discovered = true;
-    const executable = discoverExecutable(this.pages.regions, {
-      word: (address) => this.pages.word(address),
-      read: (address, length) => {
-        const bytes = new Uint8Array(length);
-        return this.pages.read(address, bytes) ? bytes : new Uint8Array(0);
-      },
-    });
+    const executable = discoverExecutable(this.pages.regions, this.pages.reader);
     if (!executable || executable.codeEnd - executable.codeStart > MaxCodeBytes) return;
     this.#executable = executable;
     const base = this.pages.arena + this.pages.region.index;
@@ -118,9 +121,7 @@ export class TranslatedTier {
     this.statistics.replayModules = this.#replay.length;
     this.#schedule();
   }
-  #handled(start: number): boolean {
-    return this.#translated.has(start) || this.#planned.has(start);
-  }
+  readonly #handled = (start: number) => this.#translated.has(start) || this.#planned.has(start);
   /** Function table slot + 1 for a guest PC, 0 when not translated. */
   entry(pc: number): number {
     const inside = this.#index.get(pc);
@@ -189,29 +190,6 @@ export class TranslatedTier {
     setTimeout(() => void run(), urgent ? 0 : Coalesce.DelayMs);
   }
 
-  /** Translates and compiles a job; undefined when the tier closed or code changed meanwhile. */
-  async #compile(
-    job: TranslationJob,
-  ): Promise<{ translation: Translation; slots: number[] } | undefined> {
-    const epoch = this.#epoch,
-      { translation, elapsedMs, cached } = await this.#translator.translate(job);
-    this.statistics.translateMs += elapsedMs;
-    if (cached) this.statistics.cachedModules++;
-    this.statistics.unsupported += translation.statistics.unsupported;
-    const block = this.#labels.allocate(labelBlockBytes(translation));
-    if (block === undefined) throw new Error("Translated label area is full.");
-    const exports = await instantiateTranslation(
-      translation,
-      { memory: this.#memory, table: this.table, arena: this.#arena, labels: i32Global(block) },
-      this.statistics,
-    );
-    if (this.#closed || epoch !== this.#epoch) return undefined;
-    this.#budget.add(translation.wasm.length);
-    return {
-      translation,
-      slots: installTranslation(this.table, this.pages.bytes, exports, translation, block),
-    };
-  }
   async #foreignBatch(): Promise<void> {
     for (const [page, entries] of this.#foreignQueue.take()) {
       const start = page * PageBytes,
@@ -235,6 +213,7 @@ export class TranslatedTier {
     this.#labels.reset();
     this.#aot?.suspend();
     this.#foreignQueue.clear();
+    this.#foreignEntries.clear();
     for (let slot = 0; slot < this.table.length; slot++) this.table.set(slot, null);
     this.#budget.release();
     this.statistics.flushes++;
@@ -251,7 +230,7 @@ export class TranslatedTier {
     const ranges = collectBatch({
       queued: this.#queued,
       executable,
-      handled: (start) => this.#handled(start),
+      handled: this.#handled,
       readWord: (address) => this.pages.word(address),
       limits: Batch,
     });
@@ -260,6 +239,10 @@ export class TranslatedTier {
       await this.#install(this.#jobs.build(ranges, this.#profile.entriesOf(ranges), []), false);
   }
   /** Compiles a job and points the index at its functions; replayed functions retranslated meanwhile are skipped. */
+  #compile(job: TranslationJob) {
+    const epoch = this.#epoch;
+    return this.#modules.compile(job, () => !this.#closed && epoch === this.#epoch);
+  }
   async #install(job: TranslationJob, replay: boolean, record = true): Promise<void> {
     const compiled = await this.#compile(job);
     if (!compiled) {
@@ -277,6 +260,26 @@ export class TranslatedTier {
     this.statistics.batches++;
     this.statistics.translatedFunctions = this.#translated.size;
     this.#profile.scheduleSave(this.#options.onProfile, PROFILE_SAVE_MS);
+  }
+  /**
+   * Translates and installs the code at `pc` on the calling thread, for an engine with no
+   * interpreter to run it meanwhile. False when nothing was installed for `pc`.
+   */
+  translateNow(pc: number): boolean {
+    if (!this.#discovered) this.#discover();
+    if (this.#budget.exceeded || this.#labels.crowded) this.#flush();
+    const demand = demandAt(pc, this.#executable, this.#profile, this.#foreignEntries);
+    if (!demand) return false;
+    const { range } = demand,
+      job = this.#jobs.build([demand.function], demand.entries, demand.pages);
+    const [slot] = this.#modules.now(job).slots;
+    if (slot === undefined) return false;
+    if (!range) return this.#foreign.set(pageOf(pc), slot);
+    this.#index.set(range, slot + 1);
+    this.#translated.add(range.start);
+    this.#profile.record(range.start);
+    this.statistics.translatedFunctions = this.#translated.size;
+    return true;
   }
   /** Drops translations covering written guest memory; later entries retranslate from new bytes. */
   invalidate(address: number, length: number): void {
