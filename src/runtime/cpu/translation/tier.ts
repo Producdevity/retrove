@@ -1,8 +1,8 @@
 import { MaxCodeBytes, PageBytes, stateLayout, type StateLayout } from "./layout";
 import type { Translation } from "./translate";
-import { runJob, type TranslationJob } from "./translation-job";
+import { labelBlockBytes, runJob, type TranslationJob } from "./translation-job";
 import { Translator } from "./translator";
-import { installTranslation, instantiateTranslation } from "./install";
+import { i32Global, installTranslation, instantiateTranslation } from "./install";
 import { GuestPages } from "./guest-pages";
 import { ForeignPages, ForeignQueue, FOREIGN_SLOTS } from "./foreign-pages";
 import { discoverExecutable, functionAt, type Executable } from "./executable";
@@ -15,7 +15,7 @@ import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches } from "./translation-profile";
 import { Batch, Coalesce, PROFILE_SAVE_MS, Replay } from "./tier-options";
 import { LabelAreas } from "./label-areas";
-import { AheadOfTime, AOT_HOT_ENTRIES } from "./aot";
+import { AheadOfTime, AOT_HOT_ENTRIES, translationAheadEnabled } from "./aot";
 import { TierJobs } from "./tier-jobs";
 import type { TierModule, TierOptions } from "./tier-options";
 
@@ -71,12 +71,10 @@ export class TranslatedTier {
       foreign = arena + region.foreign;
     this.#labels = new LabelAreas(arena, region);
     this.#jobs = new TierJobs(
-      arena,
-      this.#labels,
       () => this.#layout,
       () => this.#executable,
     );
-    this.#arena = new WebAssembly.Global({ value: "i32", mutable: false }, arena);
+    this.#arena = i32Global(arena);
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.#layout = {
       ...stateLayout(arena + region.state, this.pages, { base: 0, start: 0, end: 0 }),
@@ -106,7 +104,7 @@ export class TranslatedTier {
     for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))
       this.#translator.setCode(snapshot);
     const cache = this.#options.cache;
-    if (cache) this.#startAot(executable, cache);
+    if (cache && translationAheadEnabled()) this.#startAot(executable, cache);
     if (!this.#options.profile) return;
     profileBatches(this.#options.profile, executable, Replay).forEach((functions, index) => {
       const slot = cache && moduleSlot(cache, index);
@@ -196,22 +194,18 @@ export class TranslatedTier {
     this.statistics.translateMs += elapsedMs;
     if (cached) this.statistics.cachedModules++;
     this.statistics.unsupported += translation.statistics.unsupported;
+    const block = this.#labels.allocate(labelBlockBytes(translation));
+    if (block === undefined) throw new Error("Translated label area is full.");
     const exports = await instantiateTranslation(
       translation,
-      { memory: this.#memory, table: this.table, arena: this.#arena },
+      { memory: this.#memory, table: this.table, arena: this.#arena, labels: i32Global(block) },
       this.statistics,
     );
     if (this.#closed || epoch !== this.#epoch) return undefined;
     this.#budget.add(translation.wasm.length);
     return {
       translation,
-      slots: installTranslation(
-        this.table,
-        this.pages.bytes,
-        exports,
-        translation,
-        this.pages.arena,
-      ),
+      slots: installTranslation(this.table, this.pages.bytes, exports, translation, block),
     };
   }
   async #foreignBatch(): Promise<void> {
@@ -242,7 +236,7 @@ export class TranslatedTier {
     this.statistics.flushes++;
   }
   async #batch(): Promise<void> {
-    if (this.#budget.exceeded) this.#flush();
+    if (this.#budget.exceeded || this.#labels.crowded) this.#flush();
     if (this.#foreignQueue.size) await this.#foreignBatch();
     const replay = this.#replay.shift();
     if (replay) return this.#install(replay, true);

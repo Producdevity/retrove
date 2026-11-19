@@ -3,6 +3,8 @@ import type { TranslationJob } from "./translation-job";
 import type { FunctionRange } from "./translation-types";
 import { aotSlot } from "./translation-store";
 
+export { translationAheadEnabled } from "./settings";
+
 const THUMB_BIT = 1;
 const WORD_BYTES = 4;
 /** Small enough that loading a chunk for one function costs little of the code budget. */

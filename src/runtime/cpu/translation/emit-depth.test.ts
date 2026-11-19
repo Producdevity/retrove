@@ -1,3 +1,4 @@
+import { i32Global } from "./install";
 import { expect, test } from "vite-plus/test";
 import { MaxCallDepth } from "./emit-depth";
 import { StopState, stateLayout } from "./layout";
@@ -32,7 +33,7 @@ test("jumps between translated functions unwind at the call depth limit", async 
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
   const { instance } = await WebAssembly.instantiate(translation.wasm, {
-    env: { memory, table, arena: new WebAssembly.Global({ value: "i32", mutable: false }, 0) },
+    env: { memory, table, arena: i32Global(0), labels: i32Global(0) },
   });
   for (const translated of translation.functions)
     new Uint8Array(memory.buffer).set(

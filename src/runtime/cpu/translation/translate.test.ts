@@ -1,3 +1,4 @@
+import { i32Global } from "./install";
 import { describe, expect, test } from "vite-plus/test";
 import { Double, Single } from "./emit-constants";
 import { StopState, stateLayout } from "./layout";
@@ -40,7 +41,7 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
   const memory = new WebAssembly.Memory({ initial: 128 });
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 1 });
   const { instance } = await WebAssembly.instantiate(translation.wasm, {
-    env: { memory, table, arena: new WebAssembly.Global({ value: "i32", mutable: false }, 0) },
+    env: { memory, table, arena: i32Global(0), labels: i32Global(0) },
   });
   const view = new DataView(memory.buffer);
   const [entry] = translation.functions;

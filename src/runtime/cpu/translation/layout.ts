@@ -58,26 +58,25 @@ export const ArenaSlack = 0x1_0000;
 export const MaxCodeBytes = 0x400_0000;
 /** Index and label tables hold one i32 per code halfword. */
 export const TableBytesPerCodeByte = 2;
-const FOREIGN_LABEL_BYTES = 0x80_0000;
+/** Label blocks beyond one table per code byte, for retranslations and code outside the executable. */
+const EXTRA_LABEL_BYTES = 0x80_0000;
 const STATE_ALIGNMENT = 64;
 /**
  * Fixed offsets from the arena base of everything translated code addresses, so a module is
- * valid at any base: the guest span, the state block, the foreign table, the address index, the
- * executable's label tables (at `Labels + 2 * code offset`) and a bump area for other labels.
+ * valid at any base: the guest span, the state block, the foreign table, the address index and
+ * the area that per-module label blocks are allocated from.
  */
 export function arenaRegion(span: number, maxCode = MaxCodeBytes) {
   const state = Math.ceil((span + ArenaSlack) / STATE_ALIGNMENT) * STATE_ALIGNMENT;
   const foreign = state + PageBytes;
   const index = span + MEBIBYTE;
   const labels = index + TableBytesPerCodeByte * maxCode;
-  const foreignLabels = labels + TableBytesPerCodeByte * maxCode;
   return {
     state,
     foreign,
     index,
     labels,
-    foreignLabels,
-    bytes: foreignLabels + FOREIGN_LABEL_BYTES,
+    bytes: labels + TableBytesPerCodeByte * maxCode + EXTRA_LABEL_BYTES,
   };
 }
 export type ArenaRegion = ReturnType<typeof arenaRegion>;

@@ -1,37 +1,33 @@
-import { TableBytesPerCodeByte, type ArenaRegion } from "./layout";
-import type { FunctionRange } from "./translation-types";
+import type { ArenaRegion } from "./layout";
 
-const THUMB_BIT = 1;
-const LABEL_ALIGNMENT = 16;
+const CROWDED_DIVISOR = 2;
 
 /**
- * Places label tables at fixed offsets from the arena: a main-executable function's table sits at
- * `labels + 2 * code offset`, so a module translated in any session, or ahead of time, finds it.
- * Code outside the executable gets tables from a bump area that a flush resets.
+ * Hands out each module's label block from the arena's label area. Blocks are never shared or
+ * reused before a flush, because a function stays reachable in every module that contains it.
  */
 export class LabelAreas {
-  #foreignNext: number;
+  #next: number;
   constructor(
     private readonly arena: number,
     private readonly region: ArenaRegion,
   ) {
-    this.#foreignNext = region.foreignLabels;
+    this.#next = region.labels;
   }
-  address(
-    range: FunctionRange,
-    code: { readonly start: number; readonly end: number } | undefined,
-  ): number {
-    const start = range.start & ~THUMB_BIT;
-    if (code && start >= code.start && range.end <= code.end)
-      return this.arena + this.region.labels + TableBytesPerCodeByte * (start - code.start);
-    const bytes = TableBytesPerCodeByte * (range.end - start);
-    const offset = Math.ceil(this.#foreignNext / LABEL_ALIGNMENT) * LABEL_ALIGNMENT;
-    if (offset + bytes > this.region.bytes) throw new Error("Foreign label area is full.");
-    this.#foreignNext = offset + bytes;
-    return this.arena + offset;
+  /** Host address of a fresh block, or undefined when the area is full. */
+  allocate(bytes: number): number | undefined {
+    if (this.#next + bytes > this.region.bytes) return undefined;
+    const block = this.arena + this.#next;
+    this.#next += bytes;
+    return block;
   }
-  /** Every module was dropped, so no foreign table is referenced any more. */
+  /** Over half the area is in use, so the next batch should start from a flush. */
+  get crowded(): boolean {
+    const used = this.#next - this.region.labels;
+    return used > (this.region.bytes - this.region.labels) / CROWDED_DIVISOR;
+  }
+  /** Every module was dropped, so no block is referenced any more. */
   reset(): void {
-    this.#foreignNext = this.region.foreignLabels;
+    this.#next = this.region.labels;
   }
 }

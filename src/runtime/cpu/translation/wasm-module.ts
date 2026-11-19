@@ -30,7 +30,7 @@ export interface ModuleFunction {
   readonly exportName?: string;
 }
 
-/** Module importing `env.memory`, `env.table` and the immutable i32 `env.arena`, with the given functions and exports. */
+/** Module importing `env.memory`, `env.table` and the immutable i32s `env.arena` and `env.labels`. */
 export function module(options: {
   readonly types: readonly FunctionType[];
   readonly functions: readonly ModuleFunction[];
@@ -52,7 +52,11 @@ export function module(options: {
     .name("table")
     .byte(ExternalKind.Table, FunctionReference, NoMaximum);
   const arena = new Bytes().name("env").name("arena").byte(ExternalKind.Global, I32, Immutable);
-  section(Section.Import, new Bytes().vector([memory.unsigned(0), table.unsigned(0), arena]));
+  const labels = new Bytes().name("env").name("labels").byte(ExternalKind.Global, I32, Immutable);
+  section(
+    Section.Import,
+    new Bytes().vector([memory.unsigned(0), table.unsigned(0), arena, labels]),
+  );
   const declarations = options.functions.map((entry) => new Bytes().unsigned(entry.type));
   section(Section.Function, new Bytes().vector(declarations));
   const exports = options.functions.flatMap((entry, index) =>

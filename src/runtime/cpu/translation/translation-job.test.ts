@@ -12,10 +12,12 @@ describe("translation jobs", () => {
     expect(memory.word(0x1000)).toBe(0x09090001);
     expect(memory.word(0x1004)).toBe(7);
   });
-  it("asks for a label table per function and translates without live memory", () => {
-    const asked: number[] = [];
+  it("lays out a label block per module and translates without live memory", () => {
     const job = buildJob({
-      functions: [{ start: 0x2000, end: 0x2008 }],
+      functions: [
+        { start: 0x2000, end: 0x2008 },
+        { start: 0x2009, end: 0x200e },
+      ],
       entries: [],
       pages: [],
       layout: stateLayout(
@@ -26,21 +28,20 @@ describe("translation jobs", () => {
       stopPC: 1,
       code: { start: 0x2000, end: 0x3000 },
       cacheKey: undefined,
-      labelAddress: (range) => {
-        asked.push(range.start);
-        return 0x40000;
-      },
     });
-    expect(asked).toEqual([0x2000]);
-    expect(job.labels.get(0x2000)).toBe(0x40000);
-    expect(Object.keys(job)).not.toContain("labelAddress");
+    expect([...job.labels]).toEqual([
+      [0x2000, 0],
+      [0x2009, 0x10],
+    ]);
     // mov r0, #1 ; bx lr
     const code = new Map([
       [0x2000, 0xe3a00001],
       [0x2004, 0xe12fff1e],
     ]);
-    const { translation } = runJob(job, (address) => code.get(address));
+    const { translation } = runJob({ ...job, functions: job.functions.slice(0, 1) }, (address) =>
+      code.get(address),
+    );
     expect(WebAssembly.validate(translation.wasm)).toBe(true);
-    expect(translation.functions.map((f) => f.labelAddress)).toEqual([0x40000]);
+    expect(translation.functions.map((f) => f.labelAddress)).toEqual([0]);
   });
 });

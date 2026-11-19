@@ -25,3 +25,12 @@ export function translationCacheEnabled(): boolean {
     return true;
   }
 }
+const AHEAD_KEY = "retrove.translationAhead";
+/** Ahead-of-time chunks are used unless a tester turns them off (`retrove.translationAhead=off`). */
+export function translationAheadEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(AHEAD_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}

@@ -32,9 +32,9 @@ export function labelAt(e: Emitter, offset: number): void {
     .get(offset)
     .i32(LabelSlotShift)
     .op(Op.I32Shl)
-    .arena()
+    .labels()
     .op(Op.I32Add)
-    .memory(Op.I32Load, relative(e.L, e.labelAddress));
+    .memory(Op.I32Load, e.labelAddress);
 }
 
 /** Jumps to a PC computed into local `target`; `kind` selects local dispatch or leaving the function. */

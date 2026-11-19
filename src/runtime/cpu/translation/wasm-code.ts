@@ -1,8 +1,9 @@
 import { Bytes } from "./wasm-bytes";
 import { BlockType, Op, SaturatingPrefix, type ValueType } from "./wasm-opcodes";
 
-/** Translated modules import the arena base as their only global. */
+/** Translated modules import the arena base and the host address of their own label block. */
 export const ArenaGlobal = 0;
+export const LabelsGlobal = 1;
 
 const FloatBytes = { Single: 4, Double: 8 } as const;
 
@@ -78,6 +79,12 @@ export class Code {
   /** Pushes the host address of guest address 0, imported as global 0 (`env.arena`). */
   arena(): this {
     this.body.byte(Op.GlobalGet).unsigned(ArenaGlobal);
+    return this;
+  }
+
+  /** Pushes the host address of this module's label tables, imported as global 1 (`env.labels`). */
+  labels(): this {
+    this.body.byte(Op.GlobalGet).unsigned(LabelsGlobal);
     return this;
   }
 

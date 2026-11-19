@@ -1,8 +1,10 @@
-import type { StateLayout } from "./layout";
+import { TableBytesPerCodeByte, type StateLayout } from "./layout";
 import { translate } from "./translate";
 import type { FunctionRange, Translation } from "./translation-types";
 
 const WORD_BYTES = 4;
+const THUMB_BIT = 1;
+const LABEL_ALIGNMENT = 16;
 /** A copy of guest bytes starting at a guest address. */
 export interface CodeSnapshot {
   readonly start: number;
@@ -14,7 +16,7 @@ export interface TranslationJob {
   readonly entries: readonly number[];
   readonly layout: StateLayout;
   readonly stopPC: number;
-  /** Function start -> host address of its label table, allocated by the caller. */
+  /** Function start -> offset of its label table in the module's own label block. */
   readonly labels: ReadonlyMap<number, number>;
   /** Literal pools are folded only inside this range (the main executable's code). */
   readonly code: { readonly start: number; readonly end: number } | undefined;
@@ -85,14 +87,24 @@ export function runJob(
   });
   return { translation, elapsedMs: performance.now() - began, cached: false };
 }
-/** Builds a job with the label table address (an i32 per halfword) of each function. */
-export function buildJob(
-  input: Omit<TranslationJob, "labels"> & {
-    readonly labelAddress: (range: FunctionRange) => number;
-  },
-): TranslationJob {
+/**
+ * Builds a job with each function's label table (an i32 per halfword) laid out in one block per
+ * module. A function can be live in several modules at once, so tables are never shared.
+ */
+export function buildJob(input: Omit<TranslationJob, "labels">): TranslationJob {
   const labels = new Map<number, number>();
-  for (const range of input.functions) labels.set(range.start, input.labelAddress(range));
-  const { labelAddress: _labelAddress, ...job } = input;
-  return { ...job, labels };
+  let next = 0;
+  for (const range of input.functions) {
+    labels.set(range.start, next);
+    next += alignLabels(TableBytesPerCodeByte * (range.end - (range.start & ~THUMB_BIT)));
+  }
+  return { ...input, labels };
+}
+const alignLabels = (bytes: number) => Math.ceil(bytes / LABEL_ALIGNMENT) * LABEL_ALIGNMENT;
+/** Bytes of label block a translation needs. */
+export function labelBlockBytes(translation: Translation): number {
+  let end = 0;
+  for (const translated of translation.functions)
+    end = Math.max(end, translated.labelAddress + translated.labels.byteLength);
+  return alignLabels(end);
 }

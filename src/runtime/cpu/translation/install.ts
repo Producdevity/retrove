@@ -1,6 +1,9 @@
 import type { Translation } from "./translate";
 import type { TierStatistics } from "./tier-statistics";
 
+export const i32Global = (value: number): WebAssembly.Global =>
+  new WebAssembly.Global({ value: "i32", mutable: false }, value);
+
 /** Compiles a translated module; the browser compiles asynchronous instantiation off the main thread. */
 export async function instantiateTranslation(
   translation: Translation,
@@ -8,6 +11,7 @@ export async function instantiateTranslation(
     readonly memory: WebAssembly.Memory;
     readonly table: WebAssembly.Table;
     readonly arena: WebAssembly.Global;
+    readonly labels: WebAssembly.Global;
   },
   statistics: TierStatistics,
 ): Promise<WebAssembly.Exports> {
@@ -23,8 +27,8 @@ export function installTranslation(
   heap: Uint8Array,
   exports: WebAssembly.Exports,
   translation: Translation,
-  /** Label addresses in a translation are relative to the arena base. */
-  arena: number,
+  /** Host address of the module's label block; label addresses are offsets into it. */
+  labels: number,
 ): number[] {
   const first = table.grow(translation.functions.length);
   return translation.functions.map((translated, offset) => {
@@ -32,10 +36,10 @@ export function installTranslation(
     if (typeof exported !== "function")
       throw new Error(`Missing translated export ${translated.exportName}.`);
     table.set(first + offset, exported);
-    const labels = translated.labels;
+    const labelTable = translated.labels;
     heap.set(
-      new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength),
-      arena + translated.labelAddress,
+      new Uint8Array(labelTable.buffer, labelTable.byteOffset, labelTable.byteLength),
+      labels + translated.labelAddress,
     );
     return first + offset;
   });
