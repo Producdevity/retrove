@@ -7,9 +7,13 @@ import type { DockControls, DockLayers } from "./glass-dock";
  * WebGL2, with reduced motion or transparency, or after the context is lost, the controls
  * keep their CSS material.
  */
+const RETRY_MS = 1_000;
+const MAX_RESTARTS = 3;
+
 export class Dock {
   private layers: DockLayers | undefined;
   private active = false;
+  private restarts = 0;
   constructor(private readonly controls: DockControls) {
     if (!refractionAllowed()) return;
     this.start();
@@ -17,6 +21,10 @@ export class Dock {
     addEventListener("pagehide", () => this.release());
     addEventListener("pageshow", (event) => {
       if (event.persisted) this.start();
+    });
+    // A context lost in the background comes back with the app instead of leaving CSS glass for good.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && this.restarts > 0) this.start();
     });
   }
   /** Renders above the tab bar, for the selection lens. */
@@ -35,13 +43,19 @@ export class Dock {
     this.layers?.lens.destroy();
     this.layers = undefined;
   }
+  private lost(): void {
+    this.release();
+    if (++this.restarts > MAX_RESTARTS) return;
+    window.setTimeout(() => {
+      if (document.visibilityState === "visible") this.start();
+    }, RETRY_MS);
+  }
   private start(): void {
-    if (this.active) return;
+    if (this.active || this.restarts > MAX_RESTARTS) return;
     this.active = true;
     import("./glass-dock").then(
       ({ mountGlass }) => {
-        if (this.active && !this.layers)
-          this.layers = mountGlass(this.controls, () => this.release());
+        if (this.active && !this.layers) this.layers = mountGlass(this.controls, () => this.lost());
       },
       () => {
         this.active = false;

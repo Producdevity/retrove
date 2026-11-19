@@ -60,6 +60,19 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
   compact.addEventListener("change", changed, { signal });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", changed, { signal });
   document.addEventListener("load", changed, { capture: true, signal });
+  // Content that animates or resizes into place moves after the mutation that announced it.
+  for (const type of ["transitionend", "animationend"])
+    document.addEventListener(type, changed, { capture: true, signal });
+  const resized = new ResizeObserver(changed);
+  resized.observe(document.querySelector("main") ?? document.body);
+  // iOS can blank a WebGL canvas while the app is in the background without losing its context.
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.visibilityState === "visible") changed();
+    },
+    { signal },
+  );
   const observer = new MutationObserver(changed);
   observer.observe(document.querySelector("main") ?? document.body, {
     subtree: true,
@@ -77,6 +90,7 @@ export function mountGlass(controls: DockControls, lost: () => void): DockLayers
     stop: () => {
       listeners.abort();
       observer.disconnect();
+      resized.disconnect();
     },
   };
 }
