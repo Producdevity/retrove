@@ -282,6 +282,7 @@ export class TranslatedTier {
     this.#translated.add(range.start);
     this.#profile.record(range.start);
     this.statistics.translatedFunctions = this.#translated.size;
+    this.#profile.scheduleSave(this.#options.onProfile, PROFILE_SAVE_MS);
     return true;
   }
   /** Drops translations covering written guest memory; later entries retranslate from new bytes. */
