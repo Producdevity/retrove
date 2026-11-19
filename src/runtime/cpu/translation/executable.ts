@@ -1,3 +1,4 @@
+import { callTargets } from "./call-targets";
 import type { FunctionRange } from "./translate";
 
 const MachO = {
@@ -24,7 +25,9 @@ const MachO = {
 } as const;
 const Uleb = { Payload: 0x7f, Continue: 0x80, Bits: 7, Base: 2 } as const;
 const MINIMUM_STUB_BYTES = 12;
-const Section = { Text: "__text", Stubs: "__picsymbolstub4", LinkEdit: "__LINKEDIT" } as const;
+const Section = { Text: "__text", LinkEdit: "__LINKEDIT" } as const;
+/** Import stub sections: PIC stubs, and the non-PIC stubs of iOS 3 era builds (Rayman 2). */
+const STUB_SECTIONS = new Set(["__picsymbolstub4", "__symbol_stub4"]);
 const THUMB_BIT = 1;
 
 /** Executable code discovered from the Mach-O header and LC_FUNCTION_STARTS in guest memory. */
@@ -67,7 +70,7 @@ function segment(reader: ExecutableReader, at: number, commands: Commands): void
       end = start + word(section + MachO.SectionSizeOffset),
       sectionName = name(reader, section);
     if (sectionName === Section.Text) commands.text = { start, end };
-    if (sectionName === Section.Stubs)
+    if (STUB_SECTIONS.has(sectionName))
       commands.stubs = { start, end, size: word(section + MachO.StubSizeOffset) };
   }
 }
@@ -114,6 +117,13 @@ export function functionStarts(bytes: Uint8Array, header: number, text: Span): n
   }
   return starts;
 }
+/** One start per address; call scans can find the same address in both instruction sets. */
+function distinctStarts(starts: readonly number[]): number[] {
+  return starts.filter(
+    (start, index) =>
+      index === 0 || ((starts[index - 1] ?? 0) & ~THUMB_BIT) !== (start & ~THUMB_BIT),
+  );
+}
 function executableAt(reader: ExecutableReader, header: number): Executable | undefined {
   if (
     reader.word(header) !== MachO.Magic ||
@@ -121,9 +131,16 @@ function executableAt(reader: ExecutableReader, header: number): Executable | un
   )
     return undefined;
   const { text, stubs, linkedit, starts } = loadCommands(reader, header);
-  if (!text.end || !starts.size || !linkedit.address) return undefined;
-  const bytes = reader.read(linkedit.address + starts.offset - linkedit.fileOffset, starts.size);
-  const list = functionStarts(bytes, header, text);
+  if (!text.end) return undefined;
+  const list =
+    starts.size && linkedit.address
+      ? functionStarts(
+          reader.read(linkedit.address + starts.offset - linkedit.fileOffset, starts.size),
+          header,
+          text,
+        )
+      : distinctStarts(callTargets(reader.read(text.start, text.end - text.start), text.start));
+  if (!list.length) return undefined;
   const ranges: FunctionRange[] = list.map((start, index) => ({
     start,
     end: (list[index + 1] ?? text.end) & ~THUMB_BIT,
