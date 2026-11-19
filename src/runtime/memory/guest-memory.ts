@@ -5,6 +5,7 @@ const HEAP_LIMIT: number = GuestLayout.HeapLimit;
 const HEAP_ALIGNMENT = 16;
 /** Freed blocks up to this size wait in per-size stacks; the game frees and reallocates them constantly. */
 const SMALL_BLOCK_LIMIT = 256;
+const SMALL_SCAN_LIMIT = 64;
 const STRING_CHUNK = 256;
 const STRING_LIMIT = 0x100000;
 const COPY_CHUNK = 65536;
@@ -117,21 +118,29 @@ export class Heap {
   alloc(bytes: number, alignment = HEAP_ALIGNMENT): number {
     if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > HEAP_LIMIT - HEAP_BASE) return 0;
     const size = Math.ceil(Math.max(1, bytes) / HEAP_ALIGNMENT) * HEAP_ALIGNMENT;
-    const reused = alignment <= HEAP_ALIGNMENT ? this.#small.get(size)?.pop() : undefined;
+    const small = size <= SMALL_BLOCK_LIMIT && alignment <= HEAP_ALIGNMENT;
+    const reused = small ? this.#small.get(size)?.pop() : undefined;
     if (reused !== undefined) {
       this.live.set(reused, size);
       return reused;
     }
+    // Small sizes recycle through their own stacks; a fragmented free list is not worth scanning for them.
+    const fresh = () => this.#grow(Math.ceil(this.#next / alignment) * alignment, size);
+    const address =
+      small && this.#free.length > SMALL_SCAN_LIMIT
+        ? fresh() || this.#firstFit(size, alignment)
+        : this.#firstFit(size, alignment) || fresh();
+    if (address) this.live.set(address, size);
+    return address;
+  }
+
+  #firstFit(size: number, alignment: number): number {
     const align = (pointer: number) => Math.ceil(pointer / alignment) * alignment;
     const index = this.#free.findIndex(
       (block) => align(block.address) + size <= block.address + block.size,
     );
     const block = this.#free[index];
-    const address = block
-      ? this.#takeFree(index, block, align(block.address), size)
-      : this.#grow(align(this.#next), size);
-    if (address) this.live.set(address, size);
-    return address;
+    return block ? this.#takeFree(index, block, align(block.address), size) : 0;
   }
 
   free(address: number): void {

@@ -54,3 +54,14 @@ test("the heap hands freed small blocks back to allocations of the same size", (
   expect(heap.alloc(32)).toBe(first);
   expect(heap.alloc(64, 64) % 64).toBe(0);
 });
+
+test("small allocations bump past a fragmented free list instead of scanning it", () => {
+  const heap = new Heap(memory());
+  const fragments = 80,
+    gap = 512;
+  const blocks = Array.from({ length: fragments * 2 }, () => heap.alloc(gap));
+  blocks.filter((_, index) => index % 2 === 0).forEach((block) => heap.free(block));
+  const next = heap.next;
+  expect(heap.alloc(24)).toBe(next);
+  expect(heap.alloc(gap)).toBe(blocks[0]);
+});

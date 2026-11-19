@@ -236,15 +236,16 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     if (!poolStacks.has(id)) poolStacks.set(id, []);
     return poolStacks.get(id);
   };
-  function poolPush() { const token = zero(4); poolStack().push({ token, objects: [] }); return token; }
-  async function poolPop(token) {
+  function poolPush(token = zero(4)) { poolStack().push({ token, objects: [] }); return token; }
+  /** A kept token stays allocated for the caller's next push; nested pools above it are still freed. */
+  async function poolPop(token, keep = false) {
     const pools = poolStack();
     const index = pools.findIndex(p => p.token === token);
     if (index < 0) throw Error('Invalid Objective-C autorelease pool');
     while (pools.length > index) {
       const p = pools.pop();
       for (const self of p.objects.reverse()) await releaseFromHost(self);
-      heap.free(p.token);
+      if (!keep || p.token !== token) heap.free(p.token);
     }
   }
   function autorelease(self) { if (owned.has(self)) poolStack().at(-1)?.objects.push(self); return self; }
@@ -715,15 +716,18 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   }
   async function applicationMain(a) {
     const principalName=a(2)?text(a(2)):null,delegateName=a(3)?text(a(3)):null;
+    let loopToken = 0;
     try {
       await launchApplication({resolveClass:name=>names.get(name),isApplicationClass:cls=>subclass(cls,names.get('UIApplication')),
         currentApplication:()=>application,setApplication:pointer=>{application=pointer;},responds:(p,name)=>!!lookup(read(p),name),send,
-        pushPool:poolPush,popPool:poolPop,loadMainNib:app=>nibs.main(app),connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
+        pushPool:()=>poolPush(),popPool:poolPop,loadMainNib:app=>nibs.main(app),connectInput:()=>input.connect(),activate:()=>lifecycle.start(visibility),phase:onLifecycle},principalName,delegateName);
       onLifecycle('UIKit event loop', {keyWindow: input.hasWindow(), displayLinks: displays.size, scene:input.scene(p=>classes.get(read(p))?.name)});
+      // The loop turns many times per frame; one guest token serves every turn's pool.
+      loopToken = zero(4);
       while (input.hasWindow() || input.hasAlerts() || dispatchService?.hasPendingMain?.() || scheduler.pending() || foundationObjects.pending() || audioPlayers.pending() || [...displays.values()].some(d => d.scheduled)) {
         await lifecycle.pump();
         const time = await nextRefresh();
-        const token = poolPush();
+        poolPush(loopToken);
         try {
           await lifecycle.pump();
           await foundationObjects.pollMain();
@@ -740,9 +744,9 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
             await send(d.target, d.action, [ptr]);
           }
           await service(workerSliceMs(time, performance.now()), true);
-        } finally { await poolPop(token); }
+        } finally { await poolPop(loopToken, true); }
       }
-    } finally { lifecycle.close(); input.disconnect(); }
+    } finally { heap.free(loopToken); lifecycle.close(); input.disconnect(); }
     throw Error('UIApplication launched without a supported event source (key window or CADisplayLink)');
   }
 
@@ -998,7 +1002,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
     _objc_autorelease: a => autorelease(a(0)),
     _objc_retainAutoreleasedReturnValue: a => retain(a(0)),
     _objc_autoreleaseReturnValue: a => autorelease(a(0)),
-    _objc_autoreleasePoolPush: poolPush, _objc_autoreleasePoolPop: a => poolPop(a(0)),
+    _objc_autoreleasePoolPush: () => poolPush(), _objc_autoreleasePoolPop: a => poolPop(a(0)),
     _NSClassFromString: a => { const cls=a(0)&&names.get(text(a(0))); return classes.get(cls)?.supported?cls:0; },
     _NSStringFromClass: a => a(0) ? string(classes.get(a(0)).name) : 0,
     _NSSelectorFromString: a => a(0) ? selector(text(a(0))) : 0,
