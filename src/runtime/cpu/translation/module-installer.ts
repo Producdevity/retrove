@@ -5,9 +5,11 @@ import {
   installTranslation,
   instantiateTranslation,
   instantiateTranslationNow,
+  type Instantiated,
   type TranslationImports,
 } from "./install";
 import type { LabelAreas } from "./label-areas";
+import type { ModuleSink } from "./tier-options";
 import type { TierStatistics } from "./tier-statistics";
 import { labelBlockBytes, runJob, type TranslationJob } from "./translation-job";
 import type { Translation } from "./translation-types";
@@ -28,6 +30,7 @@ interface InstallerParts {
   readonly budget: CodeBudget;
   readonly statistics: TierStatistics;
   readonly translator: Translator;
+  readonly modules?: ModuleSink | undefined;
 }
 
 /** Turns jobs into installed functions: translation, a label block, compilation and table slots. */
@@ -45,13 +48,22 @@ export class ModuleInstaller {
     const labels = i32Global(block);
     return { block, imports: { memory, table, arena: this.#arena, labels, state: this.#state } };
   }
-  #install(translation: Translation, exports: WebAssembly.Exports, block: number): InstalledModule {
-    const { table, pages, budget } = this.parts;
+  #install(translation: Translation, compiled: Instantiated, block: number): InstalledModule {
+    const { table, pages, budget, modules } = this.parts;
     budget.add(translation.wasm.length);
-    return {
-      translation,
-      slots: installTranslation(table, pages.bytes, exports, translation, block),
-    };
+    const slots = installTranslation(table, pages.bytes, compiled.exports, translation, block);
+    modules?.record({
+      module: compiled.module,
+      labels: block,
+      slots,
+      exports: translation.functions.map((translated) => translated.exportName),
+    });
+    return { translation, slots };
+  }
+  /** Frees every label block; other threads first stop running modules that use them. */
+  reset(): void {
+    this.parts.modules?.flush();
+    this.parts.labels.reset();
   }
   /** Translates on the worker and compiles off the main thread; undefined when `current` turns false. */
   async compile(job: TranslationJob, current: () => boolean): Promise<InstalledModule | undefined> {
@@ -61,8 +73,8 @@ export class ModuleInstaller {
     if (cached) statistics.cachedModules++;
     statistics.unsupported += translation.statistics.unsupported;
     const { block, imports } = this.#imports(translation);
-    const exports = await instantiateTranslation(translation, imports, statistics);
-    return current() ? this.#install(translation, exports, block) : undefined;
+    const compiled = await instantiateTranslation(translation, imports, statistics);
+    return current() ? this.#install(translation, compiled, block) : undefined;
   }
   /** Translates and compiles on the calling thread. */
   now(job: TranslationJob): InstalledModule {

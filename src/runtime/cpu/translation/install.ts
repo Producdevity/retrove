@@ -16,31 +16,35 @@ export type TranslationImports = Readonly<{
   state: WebAssembly.Global;
 }>;
 
+/** The compiled module is kept so other threads can instantiate it over their own state block. */
+export interface Instantiated {
+  readonly module: WebAssembly.Module;
+  readonly exports: WebAssembly.Exports;
+}
 /** Compiles a translated module; the browser compiles asynchronous instantiation off the main thread. */
 export async function instantiateTranslation(
   translation: Translation,
   imports: TranslationImports,
   statistics: TierStatistics,
-): Promise<WebAssembly.Exports> {
+): Promise<Instantiated> {
   const compiled = performance.now();
-  const { instance } = await WebAssembly.instantiate(translation.wasm, { env: imports });
+  const { module, instance } = await WebAssembly.instantiate(translation.wasm, { env: imports });
   statistics.compileMs += performance.now() - compiled;
   statistics.wasmBytes += translation.wasm.length;
-  return instance.exports;
+  return { module, exports: instance.exports };
 }
 /** Compiles and instantiates on the calling thread, for code that must run before a worker could answer. */
 export function instantiateTranslationNow(
   translation: Translation,
   imports: TranslationImports,
   statistics: TierStatistics,
-): WebAssembly.Exports {
+): Instantiated {
   const compiled = performance.now();
-  const instance = new WebAssembly.Instance(new WebAssembly.Module(translation.wasm), {
-    env: imports,
-  });
+  const module = new WebAssembly.Module(translation.wasm);
+  const instance = new WebAssembly.Instance(module, { env: imports });
   statistics.compileMs += performance.now() - compiled;
   statistics.wasmBytes += translation.wasm.length;
-  return instance.exports;
+  return { module, exports: instance.exports };
 }
 /** Adds the module's functions to the shared table and writes their label tables; returns table slots. */
 export function installTranslation(

@@ -86,6 +86,7 @@ export class TranslatedTier {
       budget: this.#budget,
       statistics: this.statistics,
       translator: this.#translator,
+      modules: options.modules,
     });
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.layout = {
@@ -212,7 +213,7 @@ export class TranslatedTier {
     this.#replay.length = 0;
     this.#planned.clear();
     this.#foreign.clear();
-    this.#labels.reset();
+    this.#modules.reset();
     this.#aot?.suspend();
     this.#foreignQueue.clear();
     this.#foreignEntries.clear();

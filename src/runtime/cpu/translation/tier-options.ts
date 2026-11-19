@@ -4,6 +4,20 @@ import type { TranslationProfile } from "./translation-profile";
 export interface TierModule extends HostHeap {
   getTciMemory(): WebAssembly.Memory;
 }
+/** A compiled module as installed in the main table, for other threads to instantiate again. */
+export interface CompiledModule {
+  readonly module: WebAssembly.Module;
+  /** Host address of the module's label block. */
+  readonly labels: number;
+  /** Table slot of each translated function, in export order. */
+  readonly slots: readonly number[];
+  readonly exports: readonly string[];
+}
+/** Receives every installed module; `flush` runs before label blocks are reused. */
+export interface ModuleSink {
+  record(compiled: CompiledModule): void;
+  flush(): void;
+}
 export interface TierOptions {
   /** Functions translated in earlier launches; replayed in large batches when the executable is found. */
   readonly profile?: TranslationProfile | undefined;
@@ -14,6 +28,8 @@ export interface TierOptions {
   readonly codeBudget?: number | undefined;
   /** Prepares ahead-of-time chunks in the background; off for callers that never load them. */
   readonly ahead?: boolean | undefined;
+  /** Keeps installed modules for execution workers; only set when guest threads may run on them. */
+  readonly modules?: ModuleSink | undefined;
 }
 
 export const Alignment = { State: 64, Table: 4096, Index: 16 } as const;
