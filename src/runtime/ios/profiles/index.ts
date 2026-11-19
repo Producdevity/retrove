@@ -7,11 +7,15 @@ import { installBioShockHooks } from "./bioshock/guest-hooks";
 import { prepareBioShockAntialias } from "./bioshock/audio/antialias";
 import { prepareBioShockDct64 } from "./bioshock/audio/dct64";
 import { prepareBioShockDct36 } from "./bioshock/audio/dct36";
+import { bioShockThreads } from "./bioshock/threads";
+import type { ThreadRule } from "../../cpu/worker/placement";
 interface PreparedApplication {
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly install?: typeof installBioShockKernels;
   /** Guest-code fast paths every CPU method keeps. */
   readonly native?: typeof installBioShockHooks;
+  /** Guest threads to run on execution workers when worker threads are on. */
+  readonly threads?: readonly ThreadRule[];
 }
 const HEXADECIMAL = 16;
 const HEX_BYTE_WIDTH = 2;
@@ -35,6 +39,7 @@ export async function prepareApplication(
   return {
     bytes,
     native: installBioShockHooks,
+    threads: bioShockThreads,
     install: (host) => {
       const installDct = prepareBioShockDct36(host.cpu);
       const installDct64 = prepareBioShockDct64(host.cpu);
