@@ -12,6 +12,9 @@ afterEach(() => {
 /** The own CPU over a shared memory, as on a cross-origin isolated page. */
 function sharedOwnCpu() {
   vi.stubGlobal("crossOriginIsolated", true);
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => (key === "retrove.sharedMemory" ? "on" : null),
+  });
   return ownCpuObject(ExecutionBudget.Blocks, {});
 }
 async function fixture(shared = false) {

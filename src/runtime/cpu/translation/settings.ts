@@ -48,3 +48,15 @@ export function setOwnCpuEnabled(enabled: boolean): void {
   if (enabled) globalThis.localStorage?.removeItem(CPU_KEY);
   else globalThis.localStorage?.setItem(CPU_KEY, "unicorn");
 }
+const SHARED_MEMORY_KEY = "retrove.sharedMemory";
+/**
+ * Guest memory is shared only when a tester opts in (`retrove.sharedMemory=on`): until guest threads
+ * run on workers, a shared arena costs atomic code paths and an up-front reservation for nothing.
+ */
+export function sharedMemoryEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SHARED_MEMORY_KEY) === "on";
+  } catch {
+    return false;
+  }
+}

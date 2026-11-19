@@ -2,9 +2,10 @@ import { ExecutionBudget } from "../execution-budget";
 import { Gauge, gauges } from "../../diagnostics/gauges";
 import { runTranslated } from "../translation/runner";
 import { arenaReservation } from "../translation/guest-pages";
+import { sharedMemoryEnabled } from "../translation/settings";
 import { TranslatedTier } from "../translation/tier";
 import type { TranslationProfile } from "../translation/translation-profile";
-import { ArenaHeap } from "./arena-heap";
+import { ArenaHeap, crossOriginIsolation } from "./arena-heap";
 import { GuestState, type SavedState } from "./guest-state";
 import { GuestMappings, guestRange, type GuestAtomics } from "./guest-mappings";
 
@@ -69,7 +70,10 @@ export class OwnCpu {
     options: OwnCpuOptions = {},
   ) {
     // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
-    this.tier = new TranslatedTier(new ArenaHeap(arenaReservation()), { ...options, ahead: false });
+    this.tier = new TranslatedTier(
+      new ArenaHeap(arenaReservation(), crossOriginIsolation() && sharedMemoryEnabled()),
+      { ...options, ahead: false },
+    );
     this.tier.excluded = (pc) => this.#trapAt(pc) !== undefined;
     this.#state = new GuestState(
       () => this.tier.layout,

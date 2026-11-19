@@ -54,6 +54,9 @@ test.each([false, true])(
   "the own CPU runs exclusives and host atomics on its memory (isolated: %s)",
   (isolated) => {
     vi.stubGlobal("crossOriginIsolated", isolated);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => (key === "retrove.sharedMemory" ? "on" : null),
+    });
     const cpu = new OwnCpu(ExecutionBudget.Blocks);
     try {
       expect(cpu.sharedMemory).toBe(isolated);
