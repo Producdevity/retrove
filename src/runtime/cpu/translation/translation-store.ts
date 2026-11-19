@@ -52,6 +52,11 @@ function sumSizes(store: IDBObjectStore): Promise<number> {
 export function moduleSlot(app: string, index: number): string {
   return app + SLOT_SEPARATOR + String(index);
 }
+/** Cache key for one ahead-of-time chunk of an app's executable. */
+export function aotSlot(app: string, chunk: number): string {
+  return app + SLOT_SEPARATOR + AOT_PREFIX + String(chunk);
+}
+const AOT_PREFIX = "aot";
 function completion(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();

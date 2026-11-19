@@ -4,14 +4,17 @@ export const TranslationMessage = {
   Code: "code",
   Patch: "patch",
   Translate: "translate",
+  /** Translates into the module cache only; the reply carries no module. */
+  Prepare: "prepare",
   Done: "done",
+  Prepared: "prepared",
   Failed: "failed",
 } as const;
 export type TranslationRequest =
   | { readonly type: typeof TranslationMessage.Code; readonly snapshot: CodeSnapshot }
   | { readonly type: typeof TranslationMessage.Patch; readonly snapshot: CodeSnapshot }
   | {
-      readonly type: typeof TranslationMessage.Translate;
+      readonly type: typeof TranslationMessage.Translate | typeof TranslationMessage.Prepare;
       readonly id: number;
       readonly job: TranslationJob;
     };
@@ -20,6 +23,11 @@ export type TranslationResponse =
       readonly type: typeof TranslationMessage.Done;
       readonly id: number;
       readonly result: JobResult;
+    }
+  | {
+      readonly type: typeof TranslationMessage.Prepared;
+      readonly id: number;
+      readonly cached: boolean;
     }
   | {
       readonly type: typeof TranslationMessage.Failed;
@@ -38,7 +46,7 @@ export function isTranslationRequest(value: unknown): value is TranslationReques
   if (value.type === TranslationMessage.Code || value.type === TranslationMessage.Patch)
     return snapshot(value.snapshot);
   return (
-    value.type === TranslationMessage.Translate &&
+    (value.type === TranslationMessage.Translate || value.type === TranslationMessage.Prepare) &&
     typeof value.id === "number" &&
     record(value.job) &&
     Array.isArray(value.job.functions) &&
@@ -48,6 +56,7 @@ export function isTranslationRequest(value: unknown): value is TranslationReques
 export function isTranslationResponse(value: unknown): value is TranslationResponse {
   if (!record(value) || typeof value.id !== "number") return false;
   if (value.type === TranslationMessage.Failed) return typeof value.message === "string";
+  if (value.type === TranslationMessage.Prepared) return typeof value.cached === "boolean";
   return (
     value.type === TranslationMessage.Done &&
     record(value.result) &&

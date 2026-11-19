@@ -1,6 +1,6 @@
-import { MaxCodeBytes, PageBytes, relativeLayout, stateLayout, type StateLayout } from "./layout";
-import type { FunctionRange, Translation } from "./translate";
-import { buildJob, runJob, type CodeSnapshot, type TranslationJob } from "./translation-job";
+import { MaxCodeBytes, PageBytes, stateLayout, type StateLayout } from "./layout";
+import type { Translation } from "./translate";
+import { runJob, type TranslationJob } from "./translation-job";
 import { Translator } from "./translator";
 import { installTranslation, instantiateTranslation } from "./install";
 import { GuestPages } from "./guest-pages";
@@ -13,8 +13,10 @@ import { CodeBudget } from "./code-budget";
 import { FunctionIndex } from "./function-index";
 import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches } from "./translation-profile";
-import { Batch, Coalesce, PROFILE_SAVE_MS, Replay, STOP_PC } from "./tier-options";
+import { Batch, Coalesce, PROFILE_SAVE_MS, Replay } from "./tier-options";
 import { LabelAreas } from "./label-areas";
+import { AheadOfTime, AOT_HOT_ENTRIES } from "./aot";
+import { TierJobs } from "./tier-jobs";
 import type { TierModule, TierOptions } from "./tier-options";
 
 export type { TierModule, TierOptions } from "./tier-options";
@@ -32,10 +34,13 @@ export class TranslatedTier {
   readonly #memory: WebAssembly.Memory;
   readonly #foreign: ForeignPages;
   readonly #labels: LabelAreas;
+  readonly #jobs: TierJobs;
+  #aot: AheadOfTime | undefined;
   readonly #arena: WebAssembly.Global;
   readonly #translated = new Set<number>();
   readonly #queued = new Set<number>();
   readonly #hot = new HotFunctions();
+  readonly #aotHot = new HotFunctions(AOT_HOT_ENTRIES);
   readonly #budget: CodeBudget;
   readonly #index = new FunctionIndex(
     () => this.pages.view,
@@ -65,6 +70,12 @@ export class TranslatedTier {
     const { arena, region } = this.pages,
       foreign = arena + region.foreign;
     this.#labels = new LabelAreas(arena, region);
+    this.#jobs = new TierJobs(
+      arena,
+      this.#labels,
+      () => this.#layout,
+      () => this.#executable,
+    );
     this.#arena = new WebAssembly.Global({ value: "i32", mutable: false }, arena);
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.#layout = {
@@ -94,11 +105,12 @@ export class TranslatedTier {
     };
     for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))
       this.#translator.setCode(snapshot);
-    if (!this.#options.profile) return;
     const cache = this.#options.cache;
+    if (cache) this.#startAot(executable, cache);
+    if (!this.#options.profile) return;
     profileBatches(this.#options.profile, executable, Replay).forEach((functions, index) => {
       const slot = cache && moduleSlot(cache, index);
-      this.#replay.push(this.#job(functions, this.#profile.entriesOf(functions), [], slot));
+      this.#replay.push(this.#jobs.build(functions, this.#profile.entriesOf(functions), [], slot));
       for (const range of functions) this.#planned.add(range.start);
     });
     this.statistics.replayModules = this.#replay.length;
@@ -140,17 +152,33 @@ export class TranslatedTier {
       return;
     }
     const range = functionAt(executable, pc);
-    const skip = !range || this.#handled(range.start) || this.#queued.has(range.start);
-    if (skip || !this.#hot.enter(range.start)) return;
+    if (!range || this.#handled(range.start) || this.#queued.has(range.start)) return;
+    if (this.#aotHot.enter(range.start) && this.#aot?.request(range.start)) return this.#schedule();
+    if (!this.#hot.enter(range.start)) return;
     this.#queued.add(range.start);
     this.statistics.pendingFunctions = this.#queued.size;
     this.#schedule();
   }
+
+  #startAot(executable: Executable, app: string): void {
+    this.#aot = new AheadOfTime(executable, app, {
+      job: (functions, key) =>
+        this.#jobs.build(functions, this.#profile.entriesOf(functions), [], key),
+      prepare: (job) => this.#translator.prepare(job),
+      busy: () => this.#working || this.#replay.length > 0 || this.#queued.size > 0,
+      closed: () => this.#closed,
+      progress: (aotPrepared, aotChunks) =>
+        Object.assign(this.statistics, { aotPrepared, aotChunks }),
+    });
+    void this.#aot.start();
+  }
   #schedule(): void {
-    const waiting = this.#queued.size + this.#foreignQueue.size + this.#replay.length;
+    const waiting =
+      this.#queued.size + this.#foreignQueue.size + this.#replay.length + (this.#aot?.waiting ?? 0);
     if (this.#working || this.#closed || !waiting) return;
     this.#working = true;
-    const urgent = this.#replay.length || this.#queued.size >= Coalesce.Functions;
+    const urgent =
+      this.#replay.length || this.#aot?.waiting || this.#queued.size >= Coalesce.Functions;
     const run = async (): Promise<void> => {
       await this.#batch().catch((error: unknown) => recordError(this.statistics, error));
       this.#working = false;
@@ -158,31 +186,7 @@ export class TranslatedTier {
     };
     setTimeout(() => void run(), urgent ? 0 : Coalesce.DelayMs);
   }
-  #job(
-    functions: readonly FunctionRange[],
-    entries: readonly number[],
-    pages: readonly CodeSnapshot[],
-    cacheKey?: string,
-  ): TranslationJob {
-    const executable = this.#executable;
-    return buildJob({
-      functions,
-      entries,
-      pages,
-      layout: relativeLayout(this.#layout),
-      stopPC: STOP_PC,
-      code:
-        executable && !pages.length
-          ? { start: executable.codeStart, end: executable.codeEnd }
-          : undefined,
-      labelAddress: (range) =>
-        this.#labels.address(
-          range,
-          executable && { start: executable.codeStart, end: executable.codeEnd },
-        ) - this.pages.arena,
-      cacheKey,
-    });
-  }
+
   /** Translates and compiles a job; undefined when the tier closed or code changed meanwhile. */
   async #compile(
     job: TranslationJob,
@@ -215,7 +219,7 @@ export class TranslatedTier {
       const start = page * PageBytes,
         pages = this.pages.snapshots(start, start + PageBytes + PageBytes);
       const compiled = await this.#compile(
-        this.#job([{ start, end: start + PageBytes }], entries, pages),
+        this.#jobs.build([{ start, end: start + PageBytes }], entries, pages),
       );
       if (this.#closed) return;
       const slot = compiled?.slots.length === 1 ? compiled.slots[0] : undefined;
@@ -231,6 +235,7 @@ export class TranslatedTier {
     this.#planned.clear();
     this.#foreign.clear();
     this.#labels.reset();
+    this.#aot?.suspend();
     this.#foreignQueue.clear();
     for (let slot = 0; slot < this.table.length; slot++) this.table.set(slot, null);
     this.#budget.release();
@@ -241,6 +246,8 @@ export class TranslatedTier {
     if (this.#foreignQueue.size) await this.#foreignBatch();
     const replay = this.#replay.shift();
     if (replay) return this.#install(replay, true);
+    const chunk = this.#aot?.take();
+    if (chunk) return this.#install(chunk, false, false);
     const executable = this.#executable;
     if (!executable) return;
     const ranges = collectBatch({
@@ -252,10 +259,10 @@ export class TranslatedTier {
     });
     this.statistics.pendingFunctions = this.#queued.size;
     if (ranges.length)
-      await this.#install(this.#job(ranges, this.#profile.entriesOf(ranges), []), false);
+      await this.#install(this.#jobs.build(ranges, this.#profile.entriesOf(ranges), []), false);
   }
   /** Compiles a job and points the index at its functions; replayed functions retranslated meanwhile are skipped. */
-  async #install(job: TranslationJob, replay: boolean): Promise<void> {
+  async #install(job: TranslationJob, replay: boolean, record = true): Promise<void> {
     const compiled = await this.#compile(job);
     if (!compiled) {
       for (const range of job.functions)
@@ -267,7 +274,7 @@ export class TranslatedTier {
       if (replay && !this.#planned.delete(translated.start)) return;
       this.#index.set(translated, (compiled.slots[offset] ?? -1) + 1);
       this.#translated.add(translated.start);
-      this.#profile.record(translated.start);
+      if (record) this.#profile.record(translated.start);
     });
     this.statistics.batches++;
     this.statistics.translatedFunctions = this.#translated.size;

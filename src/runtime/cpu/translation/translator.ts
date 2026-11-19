@@ -30,6 +30,7 @@ export class Translator {
   #worker: Worker | undefined;
   readonly #inline: (job: TranslationJob) => JobResult;
   readonly #pending = new Map<number, Pending>();
+  readonly #preparing = new Map<number, (cached: boolean) => void>();
   #next = 0;
   constructor(inline: (job: TranslationJob) => JobResult) {
     this.#inline = inline;
@@ -49,11 +50,17 @@ export class Translator {
   }
   #receive(message: unknown): void {
     if (!isTranslationResponse(message)) return;
+    const prepared = this.#preparing.get(message.id);
+    if (prepared) {
+      this.#preparing.delete(message.id);
+      prepared(message.type === TranslationMessage.Prepared && message.cached);
+      return;
+    }
     const pending = this.#pending.get(message.id);
     if (!pending) return;
     this.#pending.delete(message.id);
     if (message.type === TranslationMessage.Done) pending.resolve(message.result);
-    else pending.reject(new Error(message.message));
+    else if (message.type === TranslationMessage.Failed) pending.reject(new Error(message.message));
   }
   /** Moves pending jobs to the inline translator when the worker cannot run. */
   #fallBack(): void {
@@ -61,6 +68,8 @@ export class Translator {
     this.#worker = undefined;
     const pending = [...this.#pending.values()];
     this.#pending.clear();
+    for (const prepared of this.#preparing.values()) prepared(false);
+    this.#preparing.clear();
     for (const job of pending) this.#runInline(job);
   }
   #runInline(pending: Pending): void {
@@ -90,7 +99,19 @@ export class Translator {
       this.#post({ type: TranslationMessage.Translate, id, job });
     });
   }
+  /** Translates a job into the worker's cache; false without a worker or cache. */
+  prepare(job: TranslationJob): Promise<boolean> {
+    const worker = this.#worker;
+    if (!worker) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const id = ++this.#next;
+      this.#preparing.set(id, resolve);
+      this.#post({ type: TranslationMessage.Prepare, id, job });
+    });
+  }
   close(): void {
+    for (const prepared of this.#preparing.values()) prepared(false);
+    this.#preparing.clear();
     this.#worker?.terminate();
     this.#worker = undefined;
     for (const pending of this.#pending.values()) pending.reject(new Error("Translator closed."));

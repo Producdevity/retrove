@@ -134,7 +134,7 @@ export class DebugOverlay {
       row(
         "Code",
         megabytes(code),
-        `${value(Gauge.TranslatedFunctions)} fn, ${value(Gauge.CodeFlushes)} flushes`,
+        `${value(Gauge.TranslatedFunctions)} fn, ${value(Gauge.CodeFlushes)} flushes, ahead ${value(Gauge.AotPrepared)}/${value(Gauge.AotChunks)}`,
       ),
       row("Textures", megabytes(textures)),
       row("Buffers", megabytes(buffers), `render ${megabytes(renderbuffers)}`),

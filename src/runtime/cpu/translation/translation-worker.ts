@@ -30,6 +30,15 @@ async function translate(id: number, job: TranslationJob): Promise<void> {
     postMessage({ type: TranslationMessage.Failed, id, message: String(error) }, []);
   }
 }
+/** Fills the cache for an ahead-of-time chunk; the module stays in the worker. */
+async function prepare(id: number, job: TranslationJob): Promise<void> {
+  try {
+    if (cache) await cache.run(job, word);
+    postMessage({ type: TranslationMessage.Prepared, id, cached: Boolean(cache) }, []);
+  } catch (error) {
+    postMessage({ type: TranslationMessage.Failed, id, message: String(error) }, []);
+  }
+}
 addEventListener("message", (event: MessageEvent<unknown>) => {
   const request = event.data;
   if (!isTranslationRequest(request)) return;
@@ -42,5 +51,8 @@ addEventListener("message", (event: MessageEvent<unknown>) => {
       return;
     case TranslationMessage.Translate:
       void translate(request.id, request.job);
+      return;
+    case TranslationMessage.Prepare:
+      void prepare(request.id, request.job);
   }
 });

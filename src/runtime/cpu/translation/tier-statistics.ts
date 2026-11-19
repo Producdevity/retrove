@@ -16,6 +16,9 @@ export interface TierStatistics {
   retranslations: number;
   /** Times every module was dropped because live code passed its budget. */
   flushes: number;
+  /** Ahead-of-time chunks of the executable, and how many are in the module cache. */
+  aotChunks: number;
+  aotPrepared: number;
   /** Times translated code reached the call depth limit and continued from the runner. */
   stackUnwinds: number;
   errors: number;
@@ -37,6 +40,8 @@ export function emptyStatistics(): TierStatistics {
     invalidations: 0,
     retranslations: 0,
     flushes: 0,
+    aotChunks: 0,
+    aotPrepared: 0,
     stackUnwinds: 0,
     errors: 0,
     lastError: "",

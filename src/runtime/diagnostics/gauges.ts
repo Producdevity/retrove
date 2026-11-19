@@ -8,6 +8,8 @@ export const Gauge = {
   TranslatedCodeBytes: "translatedCodeBytes",
   TranslatedFunctions: "translatedFunctions",
   CodeFlushes: "codeFlushes",
+  AotPrepared: "aotPrepared",
+  AotChunks: "aotChunks",
   GpuTextureBytes: "gpuTextureBytes",
   GpuBufferBytes: "gpuBufferBytes",
   GpuRenderbufferBytes: "gpuRenderbufferBytes",

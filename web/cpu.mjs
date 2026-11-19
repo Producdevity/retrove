@@ -116,6 +116,8 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   gauges.read(Gauge.GuestCpuMs, () => executedMilliseconds);
   gauges.read(Gauge.TranslatedFunctions, () => tier?.statistics.translatedFunctions ?? 0);
   gauges.read(Gauge.CodeFlushes, () => tier?.statistics.flushes ?? 0);
+  gauges.read(Gauge.AotPrepared, () => tier?.statistics.aotPrepared ?? 0);
+  gauges.read(Gauge.AotChunks, () => tier?.statistics.aotChunks ?? 0);
   const cpu = {
     get budget() { return budget; },
     get compiler() { return compiler?.statistics; },
