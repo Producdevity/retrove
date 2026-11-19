@@ -13,7 +13,7 @@ import { CodeBudget } from "./code-budget";
 import { FunctionIndex } from "./function-index";
 import { moduleSlot } from "./translation-store";
 import { ProfileRecorder, profileBatches } from "./translation-profile";
-import { Batch, Coalesce, PROFILE_SAVE_MS, Replay } from "./tier-options";
+import { Batch, Coalesce, PROFILE_SAVE_MS, replayLimits } from "./tier-options";
 import { LabelAreas } from "./label-areas";
 import { AheadOfTime, AOT_HOT_ENTRIES, translationAheadEnabled } from "./aot";
 import { TierJobs } from "./tier-jobs";
@@ -65,7 +65,7 @@ export class TranslatedTier {
     this.#options = options;
     this.#profile = new ProfileRecorder(options.profile);
     this.#memory = module.getTciMemory();
-    this.#budget = new CodeBudget();
+    this.#budget = new CodeBudget(options.codeBudget);
     this.pages = new GuestPages(module, this.#memory);
     const { arena, region } = this.pages,
       foreign = arena + region.foreign;
@@ -106,11 +106,15 @@ export class TranslatedTier {
     const cache = this.#options.cache;
     if (cache && translationAheadEnabled()) this.#startAot(executable, cache);
     if (!this.#options.profile) return;
-    profileBatches(this.#options.profile, executable, Replay).forEach((functions, index) => {
-      const slot = cache && moduleSlot(cache, index);
-      this.#replay.push(this.#jobs.build(functions, this.#profile.entriesOf(functions), [], slot));
-      for (const range of functions) this.#planned.add(range.start);
-    });
+    profileBatches(this.#options.profile, executable, replayLimits(this.#budget.limit)).forEach(
+      (functions, index) => {
+        const slot = cache && moduleSlot(cache, index);
+        this.#replay.push(
+          this.#jobs.build(functions, this.#profile.entriesOf(functions), [], slot),
+        );
+        for (const range of functions) this.#planned.add(range.start);
+      },
+    );
     this.statistics.replayModules = this.#replay.length;
     this.#schedule();
   }

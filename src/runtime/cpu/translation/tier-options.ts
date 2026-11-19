@@ -1,4 +1,3 @@
-import { CODE_BUDGET_BYTES } from "./code-budget";
 import type { HostHeap } from "./guest-pages";
 import type { TranslationProfile } from "./translation-profile";
 
@@ -11,6 +10,8 @@ export interface TierOptions {
   readonly onProfile?: ((profile: TranslationProfile) => void) | undefined;
   /** The app's key for its modules in the worker's cache; without it nothing is cached. */
   readonly cache?: string | undefined;
+  /** Live translated code before a flush; set from the device budget. */
+  readonly codeBudget?: number | undefined;
 }
 
 export const Alignment = { State: 64, Table: 4096, Index: 16 } as const;
@@ -19,10 +20,11 @@ export const Batch = { instructions: 60_000, functions: 400 } as const;
 const WASM_BYTES_PER_INSTRUCTION = 55;
 const REPLAY_SHARE_OF_BUDGET = 0.5;
 /** Earlier launches' functions replayed at startup, kept to half the code budget so replay never flushes. */
-export const Replay = {
-  ...Batch,
-  total: Math.floor((CODE_BUDGET_BYTES * REPLAY_SHARE_OF_BUDGET) / WASM_BYTES_PER_INSTRUCTION),
-} as const;
+export const replayLimits = (codeBudget: number) =>
+  ({
+    ...Batch,
+    total: Math.floor((codeBudget * REPLAY_SHARE_OF_BUDGET) / WASM_BYTES_PER_INSTRUCTION),
+  }) as const;
 /** A short wait lets functions noted close together share one module. */
 export const Coalesce = { Functions: 32, DelayMs: 30 } as const;
 export const PROFILE_SAVE_MS = 5000;

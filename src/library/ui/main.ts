@@ -18,6 +18,7 @@ import { connectNavigation, Page } from "./navigation";
 import { connectSettings } from "./settings";
 import { TabBar } from "./tab-bar";
 import { connectUpdates } from "./updates";
+import { checkDeviceReserve } from "../../runtime/memory/device-budget";
 
 initializeAppearance();
 element("build-id", HTMLSpanElement).textContent = `Build ${BUILD_ID}`;
@@ -76,3 +77,6 @@ connectImport(library, refresh, failure, (milliseconds) => dock.wake(millisecond
 void refresh().catch(failure);
 
 connectUpdates((cause) => libraryJournal.record(DiagnosticOperation.Offline, {}, cause));
+/** Measured from the library, never during a game: the check briefly reserves gigabytes. */
+const DEVICE_CHECK_DELAY_MS = 3000;
+setTimeout(() => void checkDeviceReserve(), DEVICE_CHECK_DELAY_MS);

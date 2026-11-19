@@ -9,6 +9,7 @@ import {TranslatedTier} from '../src/runtime/cpu/translation/tier.ts';
 import {RegisterBridge} from '../src/runtime/cpu/translation/register-bridge.ts';
 import {runTranslated} from '../src/runtime/cpu/translation/runner.ts';
 import {translationCacheEnabled, translationEnabled} from '../src/runtime/cpu/translation/settings.ts';
+import {deviceBudget} from '../src/runtime/memory/device-budget.ts';
 import {loadTranslationProfile, saveTranslationProfile} from '../src/runtime/cpu/translation/profile-storage.ts';
 
 const PAGE = 4096;
@@ -32,7 +33,7 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled(), translationProfile} = {}) {
+export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled() && deviceBudget().translation, translationProfile} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
   const profileKey = translation && translationCacheEnabled() ? translationProfile : undefined;
   const profile = profileKey ? await loadTranslationProfile(profileKey) : undefined;
@@ -51,7 +52,7 @@ export async function createCPU({budget = ExecutionBudget.Instructions, compilat
   const registers = Array.from({ length: 16 }, (_, n) => uc[`ARM_REG_R${n}`]);
   // Translated functions share guest memory with Unicorn (uc_mem_map_ptr) and fall back to it for
   // everything they cannot run: host traps, unsupported instructions and unrepresentable state.
-  const tier = translation ? new TranslatedTier(uc, {profile, cache: profileKey,
+  const tier = translation ? new TranslatedTier(uc, {profile, cache: profileKey, codeBudget: deviceBudget().codeBytes,
     onProfile: profileKey ? p => saveTranslationProfile(profileKey, p) : undefined}) : undefined;
   const bridge = tier && new RegisterBridge(uc, handle, registerTransfer, {
     core: registers, doubles: Array.from({length: 32}, (_, n) => uc[`ARM_REG_D${n}`]), cpsr: uc.ARM_REG_CPSR,

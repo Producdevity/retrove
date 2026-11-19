@@ -11,7 +11,7 @@ export const CODE_BUDGET_BYTES = 67_108_864;
 export class CodeBudget {
   #live = 0;
   constructor(
-    private readonly limit = CODE_BUDGET_BYTES,
+    readonly limit = CODE_BUDGET_BYTES,
     private readonly gauge: Gauges = gauges,
   ) {}
   add(bytes: number): void {
