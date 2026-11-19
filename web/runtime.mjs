@@ -49,6 +49,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   log = () => {}, report = () => {}, diagnostic = (_level, _area, message) => log(message), mediaHost, needsMovieResume, signal} = {}) {
   const started = performance.now();
   let cpu, heap, threads, audio, al, queues, sounds, objc, closeFiles, closeAudioFiles, closeGraphics, glErrorFlag = 0, bindingShadow = 0, image;
+  const threadCpuMs = new Map(), THREAD_TIMING_STRIDE = 64;
   let phase = 'Read executable', calls = 0, cpuSlices = 0, budgetSlices = 0, pending = 0, firstFault;
   let completedInitializers = 0;
   let link = {}, exitStatus, firstRender = false;
@@ -81,6 +82,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), cpuMethod: cpu ? cpu.method ?? (cpu.translation ? 'interpreter with translation' : 'interpreter') : undefined, mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: {...render}, frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
+      threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   function milestone(message, details) {
@@ -337,7 +339,14 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       cpuSlices++;
       let result;
       if (stubs.has(pc)) { pending = pc; result = {reason:'trap'}; }
-      else result = cpu.run(pc, {until: RETURN, count: 65536});
+      else if (cpuSlices % THREAD_TIMING_STRIDE) result = cpu.run(pc, {until: RETURN, count: 65536});
+      else {
+        // One slice in THREAD_TIMING_STRIDE is timed: reading the clock on every slice costs more than the estimate is worth.
+        const started = performance.now();
+        result = cpu.run(pc, {until: RETURN, count: 65536});
+        const thread = threads.funcs._pthread_self();
+        threadCpuMs.set(thread, (threadCpuMs.get(thread) ?? 0) + (performance.now() - started) * THREAD_TIMING_STRIDE);
+      }
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
       if (result.reason === 'budget') { budgetSlices++; executionMetrics.sample(threads.funcs._pthread_self(),result.pc,image.symbolAt(result.pc)); return {pc:result.pc, budget:true}; }
       const gate = pending, host = stubs.get(gate);
