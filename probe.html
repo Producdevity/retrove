@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Retrove device probe</title>
+    <link rel="icon" href="/icons/icon.svg" />
+    <style>
+      body {
+        margin: 0;
+        padding: calc(env(safe-area-inset-top) + 24px) 16px 32px;
+        font: 400 15px / 1.45 var(--font);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font: var(--text-title);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 16px 0;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--fill);
+        color: var(--tint);
+        font: 600 15px / 1 var(--font);
+      }
+      #probe-start {
+        background: var(--tint);
+        color: var(--on-tint);
+      }
+      pre {
+        overflow-x: auto;
+        padding: 12px;
+        border-radius: 12px;
+        background: var(--surface);
+        font: 12px / 1.4 var(--font-mono);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Device probe</h1>
+    <p>
+      Measures how much WebAssembly memory this browser allows and how fast it compiles code. The
+      last test fills memory until iOS closes the page; when it reopens, open this page again to see
+      the results.
+    </p>
+    <p id="probe-status" role="status">Ready.</p>
+    <div class="actions">
+      <button id="probe-start">Start</button><button id="probe-copy">Copy results</button
+      ><button id="probe-reset">Reset</button>
+    </div>
+    <pre id="probe-output"></pre>
+    <script type="module" src="/src/probe/main.ts"></script>
+  </body>
+</html>
