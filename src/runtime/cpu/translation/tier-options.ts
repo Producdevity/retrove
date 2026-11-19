@@ -12,6 +12,8 @@ export interface TierOptions {
   readonly cache?: string | undefined;
   /** Live translated code before a flush; set from the device budget. */
   readonly codeBudget?: number | undefined;
+  /** Prepares ahead-of-time chunks in the background; off for callers that never load them. */
+  readonly ahead?: boolean | undefined;
 }
 
 export const Alignment = { State: 64, Table: 4096, Index: 16 } as const;

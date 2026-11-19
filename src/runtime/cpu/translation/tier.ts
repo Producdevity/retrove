@@ -109,7 +109,8 @@ export class TranslatedTier {
     for (const snapshot of this.pages.snapshots(executable.codeStart, executable.codeEnd))
       this.#translator.setCode(snapshot);
     const cache = this.#options.cache;
-    if (cache && translationAheadEnabled()) this.#startAot(executable, cache);
+    if (cache && this.#options.ahead !== false && translationAheadEnabled())
+      this.#startAot(executable, cache);
     if (!this.#options.profile) return;
     profileBatches(this.#options.profile, executable, replayLimits(this.#budget.limit)).forEach(
       (functions, index) => {

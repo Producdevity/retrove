@@ -67,7 +67,8 @@ export class OwnCpu {
     readonly budget: ExecutionBudget = ExecutionBudget.Blocks,
     options: OwnCpuOptions = {},
   ) {
-    this.tier = new TranslatedTier(new ArenaHeap(), options);
+    // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
+    this.tier = new TranslatedTier(new ArenaHeap(), { ...options, ahead: false });
     this.tier.excluded = (pc) => this.#trapAt(pc) !== undefined;
     this.#state = new GuestState(
       () => this.tier.layout,
