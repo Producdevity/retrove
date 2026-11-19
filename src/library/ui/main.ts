@@ -19,6 +19,7 @@ import { connectSettings } from "./settings";
 import { TabBar } from "./tab-bar";
 import { connectUpdates } from "./updates";
 import { checkDeviceReserve } from "../../runtime/memory/device-budget";
+import { checkDeviceTouch } from "../../runtime/memory/touch-check";
 
 initializeAppearance();
 element("build-id", HTMLSpanElement).textContent = `Build ${BUILD_ID}`;
@@ -77,6 +78,9 @@ connectImport(library, refresh, failure, (milliseconds) => dock.wake(millisecond
 void refresh().catch(failure);
 
 connectUpdates((cause) => libraryJournal.record(DiagnosticOperation.Offline, {}, cause));
-/** Measured from the library, never during a game: the check briefly reserves gigabytes. */
+/**
+ * Measured once from the library, never during a game: the checks briefly reserve gigabytes and
+ * fill up to two, and iOS may reload the library once when the fill reaches its limit.
+ */
 const DEVICE_CHECK_DELAY_MS = 3000;
-setTimeout(() => void checkDeviceReserve(), DEVICE_CHECK_DELAY_MS);
+setTimeout(() => void checkDeviceReserve().then(() => checkDeviceTouch()), DEVICE_CHECK_DELAY_MS);

@@ -1,3 +1,5 @@
+import { browserDeviceMemory, TOUCH_LIMIT_MB, touchedLimitMB } from "./touch-check";
+
 const STORAGE_KEY = "retrove.deviceBudget";
 const RECORD_VERSION = 1;
 const WASM_PAGE_BYTES = 65_536;
@@ -11,6 +13,11 @@ const TRANSLATION_RESERVE_MB = 2048;
 const FULL_RESERVE_MB = 3072;
 /** `navigator.deviceMemory` (GB, Chromium only) below this reduces the code budget. */
 const FULL_DEVICE_GB = 4;
+/**
+ * Memory the page could keep in use below which games run on the interpreter alone: in Safari,
+ * BioShock with translated code used about 400 MB more than without.
+ */
+const TRANSLATION_TOUCH_MB = 768;
 export const CodeBudgetBytes = { Full: 67_108_864, Reduced: 33_554_432 } as const;
 
 /** Reserve check progress, written before and after every step so a killed page leaves its limit. */
@@ -24,6 +31,8 @@ export interface DeviceBudget {
   /** Whether a reserve check finished, or was cut short by the page being killed. */
   readonly measured: boolean;
   readonly reserveMB: number;
+  /** Memory the page kept in use before the system ended it; undefined until measured. */
+  readonly touchMB: number | undefined;
   /** The translated tier's arena fits; without it games run on the interpreter alone. */
   readonly translation: boolean;
   readonly codeBytes: number;
@@ -36,10 +45,6 @@ function browserStorage(): BudgetStorage | undefined {
   } catch {
     return undefined;
   }
-}
-function browserDeviceMemory(): number | undefined {
-  const value: unknown = Reflect.get(globalThis.navigator ?? {}, "deviceMemory");
-  return typeof value === "number" && value > 0 ? value : undefined;
 }
 function readRecord(storage: BudgetStorage | undefined): ReserveRecord | undefined {
   let value: unknown;
@@ -69,17 +74,22 @@ function writeRecord(storage: BudgetStorage | undefined, record: ReserveRecord):
 export function deviceBudget(
   storage = browserStorage(),
   deviceMemoryGB = browserDeviceMemory(),
+  touchMB = touchedLimitMB(storage),
 ): DeviceBudget {
   const record = readRecord(storage);
   const measured = !!record && (record.done || record.attemptMB > record.reserveMB);
   const reserveMB = measured ? record.reserveMB : CHECK_LIMIT_MB;
   const small =
     reserveMB < FULL_RESERVE_MB ||
-    (deviceMemoryGB !== undefined && deviceMemoryGB < FULL_DEVICE_GB);
+    (deviceMemoryGB !== undefined && deviceMemoryGB < FULL_DEVICE_GB) ||
+    (touchMB !== undefined && touchMB < TOUCH_LIMIT_MB);
   return {
     measured,
     reserveMB,
-    translation: reserveMB >= TRANSLATION_RESERVE_MB,
+    touchMB,
+    translation:
+      reserveMB >= TRANSLATION_RESERVE_MB &&
+      (touchMB === undefined || touchMB >= TRANSLATION_TOUCH_MB),
     codeBytes: small ? CodeBudgetBytes.Reduced : CodeBudgetBytes.Full,
   };
 }
