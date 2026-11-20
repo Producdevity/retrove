@@ -2,6 +2,7 @@ import {sjljExceptions} from './sjlj.mjs';
 import {gnuContainerImports} from '../src/runtime/cxx/gnu-tree.ts';
 import {CowStrings, EMPTY_REP_SYMBOL, gnuStringImports} from '../src/runtime/cxx/gnu-string.ts';
 import { read32, readCStringBytes, write32 } from '../src/runtime/memory/guest-memory.ts';
+import { pureMathImports } from '../src/runtime/ios/libc/pure-math.ts';
 
 export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
   const bits = new DataView(new ArrayBuffer(8));
@@ -18,17 +19,6 @@ export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
   function writeDouble(at,n) {
     const w=wide(n);
     write32(cpu,at,Number(w & 0xffffffffn)); write32(cpu,at+4,Number(w >> 32n));
-  }
-  function intFloat(value) {
-    const negative=value<0n;
-    const magnitude=negative?-value:value;
-    const shift=magnitude.toString(2).length-24;
-    if(shift<=0)return word(Number(value));
-    const n=BigInt(shift), half=1n<<(n-1n);
-    let rounded=magnitude>>n;
-    const remainder=magnitude-(rounded<<n);
-    if(remainder>half || (remainder===half && (rounded&1n)))rounded++;
-    return word((negative?-1:1)*Number(rounded)*2**shift);
   }
   function exactDivide(a,b) {
     if (!b) throw Error('Guest integer division by zero');
@@ -56,54 +46,16 @@ export function cxxImports(cpu, heap, currentThread = () => 1, unwind) {
     },
     ___cxa_pure_virtual: () => {throw Error('Guest called a pure virtual method');},
     __ZSt9terminatev: () => {throw Error('Guest called std::terminate()');},
-    ___divdi3: a => BigInt.asUintN(64,i64(a,0)/i64(a,2)),
-    ___udivdi3: a => u64(a,0)/u64(a,2),
-    ___umoddi3: a => u64(a,0)%u64(a,2),
-    ___divsi3: a => exactDivide(a(0)|0,a(1)|0)>>>0,
-    ___udivsi3: a => exactDivide(a(0)>>>0,a(1)>>>0)>>>0,
-    ___modsi3: a => { const x=a(0)|0,y=a(1)|0; return (x-y*exactDivide(x,y))>>>0; },
-    ___umodsi3: a => { const x=a(0)>>>0,y=a(1)>>>0; return (x-y*exactDivide(x,y))>>>0; },
     ___divmodsi4: a => {
       const x=a(0)|0,y=a(1)|0, q=exactDivide(x,y);
       write32(cpu,a(2),(x-q*y)>>>0);return q>>>0;
     },
-    ___floatdidf: a=>wide(Number(i64(a,0))), ___floatundidf: a=>wide(Number(u64(a,0))),
-    ___floatdisf: a=>intFloat(i64(a,0)), ___floatundisf: a=>intFloat(u64(a,0)),
     _atoi: a => decimal(a(0)),
     // long is 32 bits on ARMv6, so atol shares atoi's result.
     _atol: a => decimal(a(0)),
   };
-  // Nonrepresentable integer conversions saturate at the compiler-rt boundary.
-  for(const [name,readInput,signed] of [['___fixdfdi',f64,true],['___fixsfdi',f32,true],
-    ['___fixunsdfdi',f64,false],['___fixunssfdi',f32,false]]) {
-    funcs[name]=a=>{
-      const n=readInput(a,0), hi=signed?(1n<<63n)-1n:(1n<<64n)-1n, lo=signed?-(1n<<63n):0n;
-      let v;
-      if(Number.isNaN(n))v=0n;else if(n===Infinity)v=hi;else if(n===-Infinity)v=lo;
-      else { const i=BigInt(Math.trunc(n));v=i<lo?lo:i>hi?hi:i; }
-      return BigInt.asUintN(64,v);
-    };
-  }
-  for(const name of ['acos','asin','atan','ceil','cos','exp','floor','log','log10','sin','tan','sqrt','fabs']) {
-    const op=name==='fabs'?Math.abs:Math[name];
-    funcs['_'+name]=a=>wide(op(f64(a,0)));
-    funcs['_'+name+'f']=a=>word(op(f32(a,0)));
-  }
-  for(const name of ['cosh','sinh','tanh','exp2']) {
-    const op=name==='exp2'?x=>2**x:Math[name];
-    funcs['_'+name]=a=>wide(op(f64(a,0)));
-  }
-  for(const [name,op] of [['atan2',Math.atan2],['pow',Math.pow],['fmod',(x,y)=>x%y]]) {
-    funcs['_'+name]=a=>wide(op(f64(a,0),f64(a,2)));
-    funcs['_'+name+'f']=a=>word(op(f32(a,0),f32(a,1)));
-  }
-  function roundEven(n) {
-    const i=Math.trunc(n), frac=Math.abs(n-i);
-    return frac<0.5 || (frac===0.5 && i%2===0) ? i : i+Math.sign(n);
-  }
-  funcs._rintf=a=>word(roundEven(f32(a,0)));
-  funcs._lrintf=a=>roundEven(f32(a,0))|0;
-  funcs._roundf=a=>{const x=f32(a,0);return word(x<0 ? -Math.round(-x) : Math.round(x));};
+  // libm and compiler-rt functions of their arguments alone; execution workers run the same ones.
+  Object.assign(funcs, pureMathImports());
   for(const [name,readValue,encode,sink,at] of [['_modf',f64,wide,writeDouble,2],
     ['_modff',f32,word,(p,n)=>write32(cpu,p,word(n)),1]]) {
     funcs[name]=a=>{

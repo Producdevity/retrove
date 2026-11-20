@@ -101,7 +101,10 @@ export class GraphicsLink {
         if (result.done) return this.#settle(result);
         if (result.pending) return this.#later();
         this.serve();
-        if (spins % SPINS_PER_CHECK === 0 && performance.now() - started > ANSWER_TIMEOUT_MS)
+        if (spins % SPINS_PER_CHECK !== 0) continue;
+        // A preemption can lose a race with the owner starting its next slice.
+        this.host.wake();
+        if (performance.now() - started > ANSWER_TIMEOUT_MS)
           throw new Error("The graphics worker stopped answering.");
       }
     } finally {

@@ -2,6 +2,8 @@ import type { StateLayout } from "../translation/layout";
 import { RequestKind, ResponseKind, type ChannelRequest, type ThreadChannel } from "./channel";
 import type { ModuleRegistry } from "./module-registry";
 import { ExecutionMessage, isFailedMessage, type ExecutionPort } from "./protocol";
+import { Preemption } from "./preemption";
+import { stateLayout } from "../translation/layout";
 
 /** What the main thread's CPU does for a guest thread running on an execution worker. */
 export interface WorkerCpu {
@@ -31,6 +33,7 @@ export class RemoteThread {
   hostMs = 0;
   codeRequests = 0;
   #entered = 0;
+  #preemption: Preemption | undefined;
   constructor(
     private readonly cpu: WorkerCpu,
     private readonly registry: ModuleRegistry,
@@ -42,6 +45,14 @@ export class RemoteThread {
     /** The thread's EAGL rendering API and context; read when the thread resumes. */
     private readonly graphicsState: () => readonly [number, number] | undefined = () => undefined,
   ) {}
+  /** Ends the worker's current slice early so it answers the main thread's request now. */
+  preempt(): void {
+    this.#preemption ??= new Preemption(
+      this.cpu.view.buffer,
+      stateLayout(this.base, this.cpu.layout, this.cpu.layout.index).budget,
+    );
+    this.#preemption.trigger();
+  }
   /** Records a failure the worker reported; the next `take` throws it. */
   listen(message: unknown): void {
     if (isFailedMessage(message)) this.#failure = new Error(`Execution worker: ${message.message}`);

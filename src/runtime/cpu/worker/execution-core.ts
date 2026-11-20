@@ -15,6 +15,10 @@ import {
   type TrapRange,
 } from "./protocol";
 import { WorkerCode } from "./worker-code";
+import { Forward, localImports, type LocalImport } from "./local-imports";
+import { HostCalls } from "../translation/host-calls";
+import { Preemption } from "./preemption";
+import { GuestView } from "../../graphics/remote/guest-view";
 import { runWorkerSlice } from "./worker-runner";
 import type { CallingThread } from "../../graphics/remote/graphics-server";
 import type { WorkerGraphics } from "../../graphics/remote/graphics-owner";
@@ -31,6 +35,21 @@ export const WORKER_SLICE = 65_536;
 const THUMB_BIT = 1;
 const WORD_BYTES = 4;
 const RESULT_REGISTER = 0;
+const Register = { SP: 13, LR: 14 } as const;
+const ARGUMENT_REGISTERS = 4;
+const LOW_WORD = 0xffff_ffffn;
+const HIGH_SHIFT = 32n;
+
+/** The worker's own implementation of each local import gate the main thread listed. */
+function gateImports(start: StartMessage, memory: GuestView): Map<number, LocalImport> {
+  const table = localImports(memory, { id: start.thread, timeOrigin: start.timeOrigin }),
+    gates = new Map<number, LocalImport>();
+  for (const [pc, name] of start.imports) {
+    const run = table.get(name);
+    if (run) gates.set(pc, run);
+  }
+  return gates;
+}
 
 /** Lets the worker's event loop run once: OffscreenCanvas frames show and async work finishes. */
 function nextTask(): Promise<void> {
@@ -59,6 +78,11 @@ export class ExecutionThread {
   readonly #traps: readonly TrapRange[];
   #layout: StateLayout;
   #codeWaiter: ((message: CodeMessage) => void) | undefined;
+  readonly #guest: GuestView;
+  readonly #locals: Map<number, LocalImport>;
+  readonly #host: HostCalls;
+  /** A GL call started in place that finishes asynchronously; the run loop awaits it at its gate. */
+  #pending: { readonly pc: number; readonly next: Promise<number> } | undefined;
   constructor(
     private readonly start: StartMessage,
     private readonly graphics: () => WorkerGraphics | undefined = () => undefined,
@@ -69,7 +93,23 @@ export class ExecutionThread {
     this.#traps = start.traps;
     this.#layout = { ...stateLayout(start.state, start.layout, start.layout.index) };
     if (start.layout.foreign) this.#layout = { ...this.#layout, foreign: start.layout.foreign };
-    this.#code = new WorkerCode(start.memory, () => this.#layout, this.#control.generation);
+    this.#guest = new GuestView(start.memory, start.layout.arena, start.layout.mask);
+    this.#locals = gateImports(start, this.#guest);
+    this.#host = new HostCalls(
+      () => this.#view,
+      () => this.#layout,
+    );
+    this.#host.handler = (pc) => this.#inPlace(pc);
+    const main = new Preemption(start.memory.buffer, start.preempt);
+    this.#channel.preempt = () => {
+      main.trigger();
+    };
+    this.#code = new WorkerCode(
+      start.memory,
+      () => this.#layout,
+      this.#control.generation,
+      this.#host.call,
+    );
   }
   /** Delivers a code reply from the main thread. */
   receive(message: CodeMessage): void {
@@ -128,6 +168,34 @@ export class ExecutionThread {
       context,
     };
   }
+  /** Runs a local import or this worker's own GL call at gate `pc` from inside translated code. */
+  #inPlace(pc: number): number | undefined {
+    const local = this.#locals.get(pc);
+    if (local) return this.#runLocal(local);
+    const graphics = this.graphics();
+    if (!graphics?.has(pc)) return undefined;
+    const next = graphics.local(pc, this.#callingThread());
+    if (typeof next === "number") return next;
+    this.#pending = { pc, next };
+    return undefined;
+  }
+  #runLocal(local: LocalImport): number | undefined {
+    const view = this.#view,
+      registers = this.#layout.registers;
+    const register = (n: number) => view.getUint32(registers + WORD_BYTES * n, true);
+    const value = local((n) =>
+      n < ARGUMENT_REGISTERS
+        ? register(n)
+        : this.#guest.read32(register(Register.SP) + WORD_BYTES * (n - ARGUMENT_REGISTERS)),
+    );
+    if (value === Forward) return undefined;
+    if (typeof value === "bigint") {
+      view.setUint32(registers, Number(value & LOW_WORD), true);
+      view.setUint32(registers + WORD_BYTES, Number((value >> HIGH_SHIFT) & LOW_WORD), true);
+    } else if (value !== undefined) view.setUint32(registers, value >>> 0, true);
+    this.#channel.local();
+    return register(Register.LR);
+  }
   /** Answers the main thread's GL requests; yields when a frame or async GL work waits. */
   async #serveGraphics(graphics: WorkerGraphics): Promise<void> {
     graphics.serve();
@@ -135,6 +203,9 @@ export class ExecutionThread {
   }
   /** Runs the host call at gate `pc`; returns where to resume, or undefined when the thread ended. */
   async #hostCall(pc: number, graphics: WorkerGraphics | undefined): Promise<number | undefined> {
+    const pending = this.#pending;
+    this.#pending = undefined;
+    if (pending?.pc === pc) return await pending.next;
     if (graphics?.has(pc)) {
       const next = graphics.local(pc, this.#callingThread());
       return typeof next === "number" ? next : await next;

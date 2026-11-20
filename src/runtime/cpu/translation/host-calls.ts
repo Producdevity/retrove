@@ -41,15 +41,14 @@ export class HostCalls {
       L = this.layout(),
       depth = view.getUint32(L.depth, true);
     if (depth > DEPTH_LIMIT) return NOT_HANDLED;
-    const budget = view.getInt32(L.budget, true),
-      outer = this.#base;
+    const outer = this.#base;
     this.#base = depth;
     try {
       const next = handler(pc);
       if (next === undefined) return NOT_HANDLED;
       view.setUint32(L.stopped, StopState.Running, true);
+      // The budget word is left alone: another thread may have preempted this slice meanwhile.
       view.setUint32(L.depth, depth, true);
-      view.setInt32(L.budget, budget, true);
       return next;
     } finally {
       this.#base = outer;

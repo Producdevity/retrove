@@ -6,6 +6,8 @@ import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
 import {ThreadAttributes, ThreadPolicy, DEFAULT_PRIORITY} from '../src/runtime/ios/threads/attributes.ts';
 
 const PAGE = 4096, MAIN = 1;
+// Bounds the service loop when worker threads keep releasing each other.
+const SERVICE_PASSES = 8;
 const asWait = poll => {
   const value = poll();
   return value === undefined ? {wait: poll} : value;
@@ -258,31 +260,39 @@ export function threadImports(cpu, heap, returnAddress) {
     if (!remote || !connected || servicing) return;
     servicing = true;
     try {
-      remote.acknowledge();
-      for (const t of [...workers.values()]) if (t.remote && !t.done) await serviceThread(t);
+      // An answered call (a signal, an unlock) can release another worker thread's wait: poll again
+      // while anything moved, so that thread does not wait for the next display refresh.
+      for (let pass = 0, moved = true; moved && pass < SERVICE_PASSES; pass++) {
+        remote.acknowledge();
+        moved = false;
+        for (const t of [...workers.values()]) if (t.remote && !t.done && await serviceThread(t)) moved = true;
+      }
     } finally { servicing = false; }
   }
+  // Whether the thread moved: its wait ended or a request was answered.
   async function serviceThread(t) {
     const outer = current;
+    let moved = false;
     if (t.wait) {
       current = t;
-      try { const value = t.wait(); if (value === undefined) return; t.wait = null; t.remote.resume(t.pc, value); }
+      try { const value = t.wait(); if (value === undefined) return false; t.wait = null; t.remote.resume(t.pc, value); moved = true; }
       finally { current = outer; }
     }
     const request = t.remote.take();
-    if (!request) return;
+    if (!request) return moved;
     const {step, nested} = connected, outerState = cpu.saveState();
     current = t;
     try {
       t.remote.enter(request.pc);
       let result = request.exit ? {done: true, value: cpu.getReg(0)} : step(request.pc);
       if (result instanceof Promise) result = await result;
-      if (result.done) { await finish(t, result.value, nested); t.remote.finish(); return; }
+      if (result.done) { await finish(t, result.value, nested); t.remote.finish(); return true; }
       if (result.unwind && result.unwind.thread !== t.id) throw Error('Cross-thread C++ exception');
       t.pc = result.unwind ? result.unwind.restore(cpu) : result.pc;
       t.remote.leave();
       if (result.wait) t.wait = result.wait;
       else t.remote.resume(t.pc);
+      return true;
     } finally {
       current = outer;
       cpu.restoreState(outerState); cpu.freeState(outerState);

@@ -97,8 +97,10 @@ const Word = {
 } as const;
 // Even, so the statistics after the words stay 8-byte aligned.
 const CHANNEL_WORDS = 12;
-const Statistic = { Calls: 0, TotalMs: 1, MaxMs: 2, ExecuteMs: 3 } as const;
-const STATISTICS = 4;
+/** How long a request may wait untaken before the worker preempts the main thread again. */
+const UNTAKEN_WAIT_MS = 2;
+const Statistic = { Calls: 0, TotalMs: 1, MaxMs: 2, ExecuteMs: 3, LocalCalls: 4 } as const;
+const STATISTICS = 5;
 
 export interface ChannelRequest {
   readonly kind: RequestKind;
@@ -114,6 +116,8 @@ export interface HostCallStatistics {
   readonly maxMs: number;
   /** Worker milliseconds spent running translated code. */
   readonly executeMs: number;
+  /** Imports the worker answered itself, in place. */
+  readonly localCalls: number;
 }
 
 /**
@@ -131,6 +135,8 @@ export class ThreadChannel {
     this.words = new Int32Array(buffer, 0, CHANNEL_WORDS);
     this.#statistics = new Float64Array(buffer, CHANNEL_WORDS * WORD_BYTES, STATISTICS);
   }
+  /** Worker side: asks the main thread to answer now rather than at the end of its slice. */
+  preempt: (() => void) | undefined;
   /** Worker side: publishes a request without waiting for its answer. */
   post(request: ChannelRequest): void {
     const words = this.words;
@@ -140,6 +146,7 @@ export class ThreadChannel {
     words[Word.Missing] = request.missing ? 1 : 0;
     Atomics.store(words, Word.State, ChannelState.Request);
     this.control.ring();
+    this.preempt?.();
   }
   /**
    * Worker side: publishes a request and blocks until the main thread answers, running `wake`
@@ -155,7 +162,9 @@ export class ThreadChannel {
       const signal = Atomics.load(this.words, Word.Signal);
       if (Atomics.load(this.words, Word.State) === ChannelState.Response) break;
       wake?.();
-      Atomics.wait(this.words, Word.Signal, signal);
+      const waited = Atomics.wait(this.words, Word.Signal, signal, UNTAKEN_WAIT_MS);
+      if (waited === "timed-out" && Atomics.load(this.words, Word.State) === ChannelState.Request)
+        this.preempt?.();
     }
     const answer = this.answer();
     if (request.kind === RequestKind.HostCall) this.#record(performance.now() - started);
@@ -180,6 +189,10 @@ export class ThreadChannel {
     this.#statistics[Statistic.ExecuteMs] =
       (this.#statistics[Statistic.ExecuteMs] ?? 0) + milliseconds;
   }
+  /** Worker side: counts an import answered on the worker. */
+  local(): void {
+    this.#statistics[Statistic.LocalCalls] = (this.#statistics[Statistic.LocalCalls] ?? 0) + 1;
+  }
   get statistics(): HostCallStatistics {
     const statistics = this.#statistics;
     return {
@@ -187,6 +200,7 @@ export class ThreadChannel {
       totalMs: statistics[Statistic.TotalMs] ?? 0,
       maxMs: statistics[Statistic.MaxMs] ?? 0,
       executeMs: statistics[Statistic.ExecuteMs] ?? 0,
+      localCalls: statistics[Statistic.LocalCalls] ?? 0,
     };
   }
   /** Main side: the waiting request, now marked taken, or undefined. */

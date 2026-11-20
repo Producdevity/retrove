@@ -50,6 +50,8 @@ export class WorkerCode {
     memory: WebAssembly.Memory,
     private readonly layout: () => StateLayout,
     generation: number,
+    /** In-place import handler (`HostCalls.call`); 0 sends the call to the main thread. */
+    host: (pc: number) => number = () => 0,
   ) {
     const L = layout(),
       view = new DataView(memory.buffer);
@@ -59,8 +61,7 @@ export class WorkerCode {
       arena: i32Global(L.arena),
       labels: i32Global(0),
       state: i32Global(L.registers),
-      // Host calls go to the main thread through the channel once the slice leaves at the gate.
-      host: () => 0,
+      host,
     };
     this.#missing = missingFunction(this.#imports, L);
     this.#index = new FunctionIndex(

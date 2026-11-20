@@ -58,6 +58,8 @@ export interface WorkerThreadStatistics {
   readonly codeRequests: number;
   /** Worker milliseconds spent running translated code. */
   readonly executeMs: number;
+  /** Imports workers answered themselves. */
+  readonly localCalls: number;
   /** Guest thread ids running on the worker that owns the WebGL context. */
   readonly graphicsThreads: readonly number[];
   readonly graphics?: GraphicsLinkStatistics;
@@ -85,6 +87,8 @@ export class WorkerThreads {
   placement: (thread: ThreadCandidate) => Placement = () => Placement.Cooperative;
   /** The EAGL rendering API and context of the guest thread the main thread runs host calls for. */
   graphicsState: (() => readonly [number, number]) | undefined;
+  /** Import gates whose symbols workers answer themselves (`LOCAL_IMPORT_NAMES`). */
+  localGates: () => readonly (readonly [number, string])[] = () => [];
   constructor(
     private readonly cpu: WorkerCpu & { readonly traps: readonly TrapRange[] },
     private readonly registry: ModuleRegistry,
@@ -101,6 +105,7 @@ export class WorkerThreads {
       hostMs: 0,
       codeRequests: 0,
       executeMs: 0,
+      localCalls: 0,
     };
   }
   get graphics(): GraphicsLink | undefined {
@@ -152,6 +157,10 @@ export class WorkerThreads {
       until: start.returnAddress,
       traps: this.cpu.traps,
       layout: foreign ? { arena, mask, index: code, foreign } : { arena, mask, index: code },
+      thread: start.id,
+      imports: this.localGates(),
+      timeOrigin: performance.timeOrigin,
+      preempt: this.cpu.layout.budget,
     });
     return thread;
   }
@@ -166,7 +175,11 @@ export class WorkerThreads {
       (handler) => worker.listeners.push(handler),
       { memory: this.memory, control: this.registry.control.buffer, arena, mask },
       options,
-      () => this.#workers[index]?.thread?.channel.signal(),
+      () => {
+        const thread = this.#workers[index]?.thread;
+        thread?.channel.signal();
+        thread?.preempt();
+      },
     );
     this.#graphics = { index, link };
     return link;
@@ -210,7 +223,7 @@ export class WorkerThreads {
     worker.thread = undefined;
   }
   #add(totals: Totals, thread: RemoteThread): void {
-    const { calls, totalMs, maxMs, executeMs } = thread.channel.statistics;
+    const { calls, totalMs, maxMs, executeMs, localCalls } = thread.channel.statistics;
     totals.threads++;
     totals.hostCalls += calls;
     totals.roundTripMs += totalMs;
@@ -218,6 +231,7 @@ export class WorkerThreads {
     totals.hostMs += thread.hostMs;
     totals.codeRequests += thread.codeRequests;
     totals.executeMs += executeMs;
+    totals.localCalls += localCalls;
   }
   /** Whether a worker posted a request since `acknowledge`. */
   pending(): boolean {

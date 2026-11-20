@@ -28,6 +28,7 @@ import {glesImports} from './gles.mjs';
 import {remoteDrawable} from './drawable.mjs';
 import {startRemoteGraphics} from '../src/runtime/graphics/remote/remote-graphics.ts';
 import {threadPlacement} from '../src/runtime/cpu/worker/placement.ts';
+import {LOCAL_IMPORT_NAMES} from '../src/runtime/cpu/worker/local-imports.ts';
 import {audioQueues} from './audio-queue.mjs';
 import {audioFiles} from './audio-file.mjs';
 import {audioImports} from './audio.mjs';
@@ -200,6 +201,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     al=openAL({read:(p,n)=>cpu.read(p,n),readWord:p=>read32(cpu,p),writeWord:(p,v)=>write32(cpu,p,v),text:p=>readString(cpu,p),string:s=>heap.string(s),allocate:n=>heap.zero(n),free:p=>heap.free(p),
       output:()=>{const context=audioContext();return !context||context.state==='closed'?null:new WebAudioOutput(context);},gate:(name,fn)=>hostGate({name,library:'OpenAL'},fn)});
     if (cpu.workers && prepared.threads) cpu.workers.placement = threadPlacement(prepared.threads, image, p => read32(cpu, p));
+    if (cpu.workers) cpu.workers.localGates = () => [...stubs].filter(([, host]) => LOCAL_IMPORT_NAMES.has(host.binding.name)).map(([gate, host]) => [gate, host.binding.name]);
     // With worker threads, the app's graphics thread runs where the WebGL context lives.
     remoteGraphics = await startRemoteGraphics({workers: cpu.workers, rules: prepared.threads, display: offscreenGraphics, heap,
       idle: promise => threads.idle(promise), diagnostic});

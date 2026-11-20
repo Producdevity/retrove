@@ -33,6 +33,14 @@ export interface StartMessage {
   readonly until: number;
   readonly traps: readonly TrapRange[];
   readonly layout: SharedLayout;
+  /** Guest thread id (pthread_t). */
+  readonly thread: number;
+  /** Import gates the worker answers itself, by symbol (see `LOCAL_IMPORT_NAMES`). */
+  readonly imports: readonly (readonly [number, string])[];
+  /** The main thread's `performance.timeOrigin`, which guest clocks count from. */
+  readonly timeOrigin: number;
+  /** Host address of the main thread's budget word, which the worker preempts (`Preemption`). */
+  readonly preempt: number;
 }
 export interface CodeMessage {
   readonly type: typeof ExecutionMessage.Code;
@@ -81,6 +89,12 @@ const trapRange = (value: unknown): value is TrapRange =>
   record(value) && integer(value.first) && integer(value.last);
 const strings = (value: unknown): value is readonly string[] =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string");
+const PAIR = 2;
+const gateName = (value: unknown): value is readonly [number, string] =>
+  Array.isArray(value) &&
+  value.length === PAIR &&
+  integer(value[0]) &&
+  typeof value[1] === "string";
 const integers = (value: unknown): value is readonly number[] =>
   Array.isArray(value) && value.every(integer);
 function compiledModule(value: unknown): value is CompiledModule {
@@ -106,7 +120,12 @@ function startMessage(
     integer(value.until) &&
     Array.isArray(value.traps) &&
     value.traps.every(trapRange) &&
-    sharedLayout(value.layout)
+    sharedLayout(value.layout) &&
+    integer(value.thread) &&
+    Array.isArray(value.imports) &&
+    value.imports.every(gateName) &&
+    typeof value.timeOrigin === "number" &&
+    integer(value.preempt)
   );
 }
 export function isToWorker(value: unknown): value is ToWorker {

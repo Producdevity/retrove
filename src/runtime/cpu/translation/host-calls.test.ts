@@ -38,7 +38,7 @@ test("a completed call continues at its PC with the run's control words intact",
   expect(depths).toEqual([3]);
   expect(calls.baseDepth).toBe(0);
   expect(view.getUint32(layout.depth, true)).toBe(3);
-  expect(view.getInt32(layout.budget, true)).toBe(500);
+  expect(view.getInt32(layout.budget, true)).toBe(7);
   expect(view.getUint32(layout.stopped, true)).toBe(StopState.Running);
 });
 
