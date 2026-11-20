@@ -86,7 +86,7 @@ export class TranslatedTier {
       budget: this.#budget,
       statistics: this.statistics,
       translator: this.#translator,
-      modules: options.modules,
+      options,
     });
     this.#foreign = new ForeignPages(foreign, () => this.pages.view);
     this.layout = {
@@ -165,7 +165,6 @@ export class TranslatedTier {
     this.statistics.pendingFunctions = this.#queued.size;
     this.#schedule();
   }
-
   #startAot(executable: Executable, app: string): void {
     this.#aot = new AheadOfTime(executable, app, {
       job: (functions, key) =>
@@ -192,7 +191,6 @@ export class TranslatedTier {
     };
     setTimeout(() => void run(), urgent ? 0 : Coalesce.DelayMs);
   }
-
   async #foreignBatch(): Promise<void> {
     for (const [page, entries] of this.#foreignQueue.take()) {
       const start = page * PageBytes,

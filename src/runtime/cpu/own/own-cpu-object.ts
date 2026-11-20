@@ -1,6 +1,7 @@
 import type { ExecutionBudget } from "../execution-budget";
 import { OwnCpu, type OwnCpuOptions, type TrapHandler } from "./own-cpu";
 import type { SavedState } from "./guest-state";
+import type { HostHandler } from "../translation/host-calls";
 
 type Saved = { readonly translated: SavedState; readonly threadPointer: number };
 
@@ -32,6 +33,9 @@ export function ownCpuObject(budget: ExecutionBudget, options: OwnCpuOptions) {
     },
     set threadPointer(address: number) {
       own.threadPointer = address;
+    },
+    set hostHandler(handler: HostHandler | undefined) {
+      own.hostHandler = handler;
     },
     get cpsr() {
       return own.cpsr;

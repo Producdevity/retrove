@@ -88,7 +88,7 @@ function translateFunction(
   return { decoded, labelAddress, result };
 }
 
-/** Translates guest functions into one Wasm module whose function 0 dispatches by guest PC. */
+/** Translates guest functions into one Wasm module whose first own function dispatches by guest PC. */
 export function translate(input: TranslationInput): Translation {
   const functions = [...input.functions].sort((a, b) => a.start - b.start);
   const indexOf = new Map(functions.map((f, i) => [f.start, i]));
@@ -123,7 +123,7 @@ export function translate(input: TranslationInput): Translation {
     { params: stateTypes(), results: [] },
     { params: [], results: stateTypes() },
   ];
-  const wasm = module({ types, functions: bodies, shared: input.shared });
+  const wasm = module({ types, functions: bodies, shared: input.shared, host: true });
   return {
     wasm,
     functions: translated,

@@ -47,6 +47,7 @@ async function run(words: readonly number[], thumb: boolean, r0: number, r1: num
       arena: i32Global(0),
       labels: i32Global(0),
       state: i32Global(layout.registers),
+      host: () => 0,
     },
   });
   const view = new DataView(memory.buffer);

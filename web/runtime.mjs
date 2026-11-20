@@ -65,6 +65,9 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
   const memoryTimeline = new MemoryTimeline();
   const graphicsMetrics = new GraphicsMetrics();
   let graphicsMilliseconds = 0, yieldMilliseconds = 0;
+  // Host imports that translated code ran in place are inside the CPU's run time; guest time excludes them.
+  let inPlaceMilliseconds = 0;
+  const guestMilliseconds = () => (cpu?.executedMilliseconds ?? 0) - inPlaceMilliseconds;
   async function yieldToBrowser() {
     const before = performance.now();
     const turn = new Promise(resolve => setTimeout(resolve, 0));
@@ -85,7 +88,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       } catch { /* The last successful CPU reads are still useful. */ }
     }
     // Put fault context before variable-length lists so it survives a shortened mobile export.
-    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(cpu?.executedMilliseconds??0), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), cpuMethod: cpu ? cpu.method ?? (cpu.translation ? 'interpreter with translation' : 'interpreter') : undefined, mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
+    return {phase, elapsedMs: Math.round(performance.now() - started), cpuMs: Math.round(guestMilliseconds()), interpretedMs: Math.round(cpu?.interpretedMilliseconds??0), cpuMethod: cpu ? cpu.method ?? (cpu.translation ? 'interpreter with translation' : 'interpreter') : undefined, mappedBytes: cpu?.mappedBytes, executionBudget: cpu?.budget, compiler: cpu?.compiler, translation: cpu?.translation, calls, cpuSlices, budgetSlices, completedInitializers,
       threadId: threads?.funcs._pthread_self(), registers, activeImports: active.filter(call=>call.thread===threads?.funcs._pthread_self()).slice(-6).map(call=>call.name),
       lastSelector: objc?.lastSelector, render: renderCounts(), frameTimings: frameMetrics.snapshot(), graphicsOperations: graphicsMetrics.snapshot(), heapAllocations: heap?.live.size, exitStatus,
       // Retrove's own memory accounting in MB; reports from phones that iOS closed for memory need it.
@@ -209,7 +212,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         graphicsMilliseconds += duration;
         graphicsMetrics.record(GraphicsMetricOperation.Present,duration);
         if (presented) graphicsMetrics.present();
-        if (presented) frameMetrics.present({at:performance.now(),cpuMs:cpu.executedMilliseconds,graphicsMs:graphicsMilliseconds,yieldMs:yieldMilliseconds,
+        if (presented) frameMetrics.present({at:performance.now(),cpuMs:guestMilliseconds(),graphicsMs:graphicsMilliseconds,yieldMs:yieldMilliseconds,
           ...(remoteGraphics ? {workerGraphicsMs: remoteGraphics.localMs} : {})});
         render.presentAttempts++;
         if (presented && ++render.presentedFrames === 1) {
@@ -386,7 +389,17 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       }
       if (result.reason === 'until') return {done:true, value:cpu.getReg(0)};
       if (result.reason === 'budget') { budgetSlices++; executionMetrics.sample(threads.funcs._pthread_self(),result.pc,image.symbolAt(result.pc)); return {pc:result.pc, budget:true}; }
-      const gate = pending, host = stubs.get(gate);
+      const gate = pending;
+      let started = deferredHost;
+      deferredHost = undefined;
+      if (started?.site.gate !== gate) started = startHost(gate);
+      return finishHost(started);
+    }
+
+    // An import translated code started in place but that did not complete there; the runner finishes it.
+    let deferredHost, hostCallCount = 0;
+    function startHost(gate) {
+      const host = stubs.get(gate);
       if (!host) throw Error('Invalid import gate ' + hex(gate));
       const lr = cpu.getReg(14);
       const lastSymbol = host.symbol ??= label(host.binding.name);
@@ -404,21 +417,38 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
       active.push({name:lastSymbol,thread});
       const site = {host, symbol:lastSymbol, gate, lr,
         graphicsStarted: host.graphics ? performance.now() : 0,
-        graphicsCpuStarted: host.graphics ? cpu.executedMilliseconds : 0};
-      let value;
-      try { value = host.fn(arg); }
-      catch (error) { return settle(site, error, true); }
+        graphicsCpuStarted: host.graphics ? guestMilliseconds() : 0};
+      try { return {site, value: host.fn(arg), failed: false}; }
+      catch (error) { return {site, value: error, failed: true}; }
+    }
+    function finishHost({site, value, failed}) {
+      if (failed) return settle(site, value, true);
       if (typeof value?.then === 'function')
         return Promise.resolve(value).then(resolved => settle(site, resolved, false), error => settle(site, error, true));
       return settle(site, value, false);
     }
+    // Called from translated code at an import gate with its frames still live: plain results
+    // continue there; anything else (a wait, promise, exception or transfer) is finished by the runner.
+    function hostInPlace(gate) {
+      if (!stubs.has(gate)) return undefined;
+      const timed = ++hostCallCount % THREAD_TIMING_STRIDE === 0, begun = timed ? performance.now() : 0;
+      try {
+        const started = startHost(gate), value = started.value;
+        if (started.failed || (value !== null && (typeof value === 'object' || typeof value === 'function'))) {
+          deferredHost = started;
+          return undefined;
+        }
+        return settle(started.site, value, false).pc;
+      } finally { if (timed) inPlaceMilliseconds += (performance.now() - begun) * THREAD_TIMING_STRIDE; }
+    }
+    if (cpu && 'hostHandler' in cpu) cpu.hostHandler = hostInPlace;
 
     function settle({host, symbol:lastSymbol, gate, lr, graphicsStarted, graphicsCpuStarted}, value, failed) {
       try {
         if (failed && !(value instanceof GuestLandingPad)) { captureFault(value); throw value; }
       } finally {
         if (host.graphics) {
-          const duration = Math.max(0, performance.now() - graphicsStarted - (cpu.executedMilliseconds - graphicsCpuStarted));
+          const duration = Math.max(0, performance.now() - graphicsStarted - (guestMilliseconds() - graphicsCpuStarted));
           graphicsMilliseconds += duration;
           graphicsMetrics.record(lastSymbol,duration);
         }

@@ -20,11 +20,13 @@ export function runTranslated(
   start: number,
   until: number,
   budget: number,
+  /** Call depth of the frames already on this stack (a host call running guest code). */
+  baseDepth = 0,
 ): TranslatedRun {
   const view = tier.pages.view,
     layout = tier.layout;
   view.setUint32(layout.stopped, StopState.Running, true);
-  view.setUint32(layout.depth, 0, true);
+  view.setUint32(layout.depth, baseDepth, true);
   view.setInt32(layout.budget, budget, true);
   let pc = start;
   bridge.pc = pc;

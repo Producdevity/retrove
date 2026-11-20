@@ -82,6 +82,7 @@ function machine(shared: boolean) {
       arena: i32Global(Memory.arena),
       labels: i32Global(LabelBase),
       state: i32Global(L.registers),
+      host: () => 0,
     };
     const exports = new WebAssembly.Instance(compiled, { env }).exports;
     const register = (n: number) => view.getUint32(L.registers + 4 * n, true);
@@ -193,6 +194,7 @@ describe("exclusives on unshared memory", () => {
         arena: i32Global(0),
         labels: i32Global(0),
         state: i32Global(0),
+        host: () => 0,
       };
       expect(() => new WebAssembly.Instance(module, { env })).toThrow();
     }

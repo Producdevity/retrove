@@ -37,44 +37,47 @@ function emit(words: readonly number[], start: number, end: number, shared?: boo
     ...(shared === undefined ? {} : { shared }),
   }).wasm;
 }
-/** Sizes and SHA-256 of the modules the translator emitted before shared memory was supported. */
+/**
+ * Sizes and SHA-256 of unshared modules, pinned at module format 4 (the single-threaded translator's
+ * output plus the `env.host` import and its dispatcher check).
+ */
 const Before = [
   [
     "arm plain",
     arm,
     Code,
     Code + 32,
-    1114,
-    "afd707ac226d86f4f401418a9d8096f3f6c829aeee90dafacd8594d0dd2c7108",
+    1137,
+    "3b950eca01c875685e3a188fd846a90e9ff3afb49b4a245e09d49b2698030efe",
   ],
   [
     "arm exclusive",
     arm,
     Code + 32,
     Code + 64,
-    1049,
-    "56307173dc27671890ca6cdcafa33cc2173bdcb6d87209c9735babf0af8218f9",
+    1072,
+    "e40cc6e417bc4b733a235c12ed5d6e7e5c0e73bbb30514c38e3db9ef5a12d77b",
   ],
   [
     "thumb plain",
     thumb,
     Code | 1,
     Code + 16,
-    1098,
-    "46ed9ec6ba1388a745ad01b1dbc8c6f3fce60a48b58c8d16180b0691f3d1eb12",
+    1121,
+    "bb4f0272328ae56cab76159826f33abeb0d68fedb3502b25082490064732c624",
   ],
   [
     "thumb exclusive",
     thumb,
     (Code + 16) | 1,
     Code + 38,
-    1049,
-    "69a2ed3afe4c5fc0aeebcba65719d36cb8c1c08a697f67e17ed6dcc07b498d7e",
+    1072,
+    "1234af8ad05381ec39dd4c75f8415ad990b1646348225a2f863b7038d0ec80de",
   ],
 ] as const;
 
 test.each(Before)(
-  "unshared %s modules are byte-identical to the single-threaded translator",
+  "unshared %s modules keep their pinned bytes",
   async (_, words, start, end, bytes, digest) => {
     for (const shared of [undefined, false]) {
       const wasm = emit(words, start, end, shared);

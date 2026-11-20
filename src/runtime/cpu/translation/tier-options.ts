@@ -19,6 +19,8 @@ export interface ModuleSink {
   flush(): void;
 }
 export interface TierOptions {
+  /** `env.host` of every translated module; see `HostCalls`. */
+  readonly host?: ((pc: number) => number) | undefined;
   /** Functions translated in earlier launches; replayed in large batches when the executable is found. */
   readonly profile?: TranslationProfile | undefined;
   readonly onProfile?: ((profile: TranslationProfile) => void) | undefined;

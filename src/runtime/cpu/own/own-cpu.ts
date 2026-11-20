@@ -1,4 +1,5 @@
 import { ExecutionBudget } from "../execution-budget";
+import { HostCalls, type HostHandler } from "../translation/host-calls";
 import { Gauge, gauges } from "../../diagnostics/gauges";
 import { runTranslated } from "../translation/runner";
 import { arenaReservation } from "../translation/guest-pages";
@@ -68,6 +69,10 @@ export class OwnCpu implements WorkerCpu {
   /** The object handed to the runtime; trap handlers receive it. */
   facade: object | undefined;
   readonly #state: GuestState;
+  readonly #host = new HostCalls(
+    () => this.tier.pages.view,
+    () => this.tier.layout,
+  );
   readonly #memory: GuestMappings;
   readonly #traps: Trap[] = [];
   #executed = 0;
@@ -79,7 +84,12 @@ export class OwnCpu implements WorkerCpu {
     // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
     const heap = new ArenaHeap(arenaReservation(), crossOriginIsolation() && sharedMemoryEnabled()),
       modules = heap.shared && workerThreadsEnabled() ? new ModuleRegistry() : undefined;
-    this.tier = new TranslatedTier(heap, { ...options, ahead: false, modules });
+    this.tier = new TranslatedTier(heap, {
+      ...options,
+      ahead: false,
+      modules,
+      host: this.#host.call,
+    });
     this.workers =
       modules && new WorkerThreads(this, modules, heap.getTciMemory(), this.tier.pages);
     this.tier.excluded = (pc) => this.#trapAt(pc) !== undefined;
@@ -102,6 +112,16 @@ export class OwnCpu implements WorkerCpu {
   }
   get translation() {
     return this.tier.statistics;
+  }
+  /** Runs host imports from inside translated code; see `HostCalls`. */
+  set hostHandler(handler: HostHandler | undefined) {
+    // Host code reads the PC as the gate, as when the runner calls it.
+    this.#host.handler =
+      handler &&
+      ((pc) => {
+        this.#state.pc = pc;
+        return handler(pc);
+      });
   }
   get mappedBytes(): number {
     return this.#memory.mappedBytes;
@@ -210,7 +230,7 @@ export class OwnCpu implements WorkerCpu {
       }
       if (until && (pc & ~1) === (until & ~1)) return { reason: "until", pc };
       if (!tier.entry(pc) || tries > 0) this.#ensure(pc, tries);
-      const result = runTranslated(tier, state, pc, until, budget);
+      const result = runTranslated(tier, state, pc, until, budget, this.#host.baseDepth);
       if (result.reason !== "fallback") return result;
       budget = Math.max(1, tier.pages.view.getInt32(tier.layout.budget, true));
       tries = result.pc === pc ? tries + 1 : 0;

@@ -59,6 +59,8 @@ export class WorkerCode {
       arena: i32Global(L.arena),
       labels: i32Global(0),
       state: i32Global(L.registers),
+      // Host calls go to the main thread through the channel once the slice leaves at the gate.
+      host: () => 0,
     };
     this.#missing = missingFunction(this.#imports, L);
     this.#index = new FunctionIndex(

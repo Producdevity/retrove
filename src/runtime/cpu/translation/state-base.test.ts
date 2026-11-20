@@ -53,6 +53,7 @@ test("one module instantiated with two state bases keeps each thread's registers
       arena: i32Global(Memory.arena),
       labels: i32Global(LabelBase),
       state: i32Global(L.registers),
+      host: () => 0,
     };
     const fn = new WebAssembly.Instance(compiled, { env }).exports[entry.exportName];
     if (!entryPoint(fn)) throw new Error("Missing export");

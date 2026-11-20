@@ -1,4 +1,10 @@
-import { ClearThumb, ForeignProbes, FunctionType, LabelSlotShift } from "./emit-constants";
+import {
+  ClearThumb,
+  ForeignProbes,
+  FunctionType,
+  HostIndex,
+  LabelSlotShift,
+} from "./emit-constants";
 import { EntryParameter } from "./emitter";
 import { PageBits, relative, StopState, stateOffset, type StateLayout } from "./layout";
 import { Code } from "./wasm-code";
@@ -32,7 +38,10 @@ function emitForeign(c: Code, L: StateLayout, foreign: NonNullable<StateLayout["
   c.op(Op.End);
 }
 
-/** Continues at a guest PC through the shared address index; leaves to the interpreter when nothing is translated there. */
+/**
+ * Continues at a guest PC through the shared address index; host import gates run in place; leaves to
+ * the interpreter when nothing is translated there.
+ */
 export function emitDispatch(L: StateLayout): Code {
   const c = new Code(1);
   const entry = c.local(Type.I32);
@@ -46,6 +55,9 @@ export function emitDispatch(L: StateLayout): Code {
   c.callIndirect(FunctionType).op(Op.Return).op(Op.End);
   c.op(Op.End);
   if (L.foreign) emitForeign(c, L, L.foreign);
+  // Host import gates: a call the host completes returns its continuation PC here.
+  c.get(EntryParameter).call(HostIndex).tee(entry).op(Op.If, BlockType.Empty);
+  c.get(entry).op(Op.Return).op(Op.End);
   c.state().i32(StopState.Exit).memory(Op.I32Store, stateOffset(L, L.stopped));
   c.state().get(EntryParameter).memory(Op.I32Store, stateOffset(L, L.exitPC)).get(EntryParameter);
   return c;

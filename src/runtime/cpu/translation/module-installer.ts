@@ -9,7 +9,7 @@ import {
   type TranslationImports,
 } from "./install";
 import type { LabelAreas } from "./label-areas";
-import type { ModuleSink } from "./tier-options";
+import type { TierOptions } from "./tier-options";
 import type { TierStatistics } from "./tier-statistics";
 import { labelBlockBytes, runJob, type TranslationJob } from "./translation-job";
 import type { Translation } from "./translation-types";
@@ -30,8 +30,10 @@ interface InstallerParts {
   readonly budget: CodeBudget;
   readonly statistics: TierStatistics;
   readonly translator: Translator;
-  readonly modules?: ModuleSink | undefined;
+  /** The module sink and `env.host` handler. */
+  readonly options: Pick<TierOptions, "modules" | "host">;
 }
+const noHost = (): number => 0;
 
 /** Turns jobs into installed functions: translation, a label block, compilation and table slots. */
 export class ModuleInstaller {
@@ -46,10 +48,21 @@ export class ModuleInstaller {
     if (block === undefined) throw new Error("Translated label area is full.");
     const { memory, table } = this.parts;
     const labels = i32Global(block);
-    return { block, imports: { memory, table, arena: this.#arena, labels, state: this.#state } };
+    return {
+      block,
+      imports: {
+        memory,
+        table,
+        arena: this.#arena,
+        labels,
+        state: this.#state,
+        host: this.parts.options.host ?? noHost,
+      },
+    };
   }
   #install(translation: Translation, compiled: Instantiated, block: number): InstalledModule {
-    const { table, pages, budget, modules } = this.parts;
+    const { table, pages, budget } = this.parts,
+      modules = this.parts.options.modules;
     budget.add(translation.wasm.length);
     const slots = installTranslation(table, pages.bytes, compiled.exports, translation, block);
     modules?.record({
@@ -62,7 +75,7 @@ export class ModuleInstaller {
   }
   /** Frees every label block; other threads first stop running modules that use them. */
   reset(): void {
-    this.parts.modules?.flush();
+    this.parts.options.modules?.flush();
     this.parts.labels.reset();
   }
   /** Translates on the worker and compiles off the main thread; undefined when `current` turns false. */

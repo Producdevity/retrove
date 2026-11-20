@@ -15,6 +15,8 @@ export type TranslationImports = Readonly<{
   arena: WebAssembly.Global;
   labels: WebAssembly.Global;
   state: WebAssembly.Global;
+  /** The thread's in-place host import handler (`HostCalls.call`); 0 leaves at the gate. */
+  host: (pc: number) => number;
 }>;
 
 /** The compiled module is kept so other threads can instantiate it over their own state block. */

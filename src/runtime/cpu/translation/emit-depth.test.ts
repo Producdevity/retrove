@@ -39,6 +39,7 @@ test("jumps between translated functions unwind at the call depth limit", async 
       arena: i32Global(0),
       labels: i32Global(0),
       state: i32Global(layout.registers),
+      host: () => 0,
     },
   });
   for (const translated of translation.functions)

@@ -36,17 +36,18 @@ export interface ModuleFunction {
  * Version of the import list and of how emitted code addresses the state block. Cached modules
  * from another version are translated again, never instantiated.
  */
-export const ModuleFormat = 3;
+export const ModuleFormat = 4;
 
 /**
- * Module importing `env.memory`, `env.table` and the immutable i32s `env.arena`, `env.labels` and
- * `env.state`. A shared memory import must be declared shared with a maximum, and only matches a
+ * Module importing `env.memory`, `env.table`, the immutable i32s `env.arena`, `env.labels` and
+ * `env.state` and, with `host`, the function `env.host` of type 0 as function 0. A shared memory import must be declared shared with a maximum, and only matches a
  * shared memory, so modules are emitted for one kind of memory.
  */
 export function module(options: {
   readonly types: readonly FunctionType[];
   readonly functions: readonly ModuleFunction[];
   readonly shared?: boolean | undefined;
+  readonly host?: boolean | undefined;
 }): Uint8Array<ArrayBuffer> {
   const out = new Bytes().word(Preamble.Magic).word(Preamble.Version);
   const section = (id: number, content: Bytes) => out.byte(id).sized(content);
@@ -69,12 +70,21 @@ export function module(options: {
   const arena = new Bytes().name("env").name("arena").byte(ExternalKind.Global, I32, Immutable);
   const labels = new Bytes().name("env").name("labels").byte(ExternalKind.Global, I32, Immutable);
   const state = new Bytes().name("env").name("state").byte(ExternalKind.Global, I32, Immutable);
-  section(Section.Import, new Bytes().vector([memory, table.unsigned(0), arena, labels, state]));
+  const imports = [memory, table.unsigned(0), arena, labels, state];
+  if (options.host)
+    imports.push(new Bytes().name("env").name("host").byte(ExternalKind.Function).unsigned(0));
+  section(Section.Import, new Bytes().vector(imports));
+  const imported = options.host ? 1 : 0;
   const declarations = options.functions.map((entry) => new Bytes().unsigned(entry.type));
   section(Section.Function, new Bytes().vector(declarations));
   const exports = options.functions.flatMap((entry, index) =>
     entry.exportName
-      ? [new Bytes().name(entry.exportName).byte(ExternalKind.Function).unsigned(index)]
+      ? [
+          new Bytes()
+            .name(entry.exportName)
+            .byte(ExternalKind.Function)
+            .unsigned(imported + index),
+        ]
       : [],
   );
   section(Section.Export, new Bytes().vector(exports));
