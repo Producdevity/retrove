@@ -366,6 +366,21 @@
           "replacement": 3778019102
         }
       ]
+    },
+    {
+      "name": "Constant iOS 8 version check",
+      "words": [
+        {
+          "offset": 25873184,
+          "original": 3912056960,
+          "replacement": 3818913792
+        },
+        {
+          "offset": 25873188,
+          "original": 3808953064,
+          "replacement": 3778019102
+        }
+      ]
     }
   ]
 }
