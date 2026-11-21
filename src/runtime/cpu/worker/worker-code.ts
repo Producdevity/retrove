@@ -81,6 +81,7 @@ export class WorkerCode {
     if (pc & WORD_ALIGNMENT) return 0;
     return this.#foreign?.entry(pc >>> PageBits) ?? 0;
   }
+  readonly #installed = new Set<WebAssembly.Module>();
   has(slot: number): boolean {
     return this.#filled.has(slot);
   }
@@ -89,6 +90,10 @@ export class WorkerCode {
     if (slots > this.table.length) this.table.grow(slots - this.table.length, this.#missing);
   }
   install(compiled: CompiledModule): void {
+    // Code messages for functions of one module arrive repeatedly; an instance per message holds
+    // engine code that is not freed until the worker collects garbage.
+    if (this.#installed.has(compiled.module)) return;
+    this.#installed.add(compiled.module);
     const exports = new WebAssembly.Instance(compiled.module, {
       env: { ...this.#imports, labels: i32Global(compiled.labels) },
     }).exports;
@@ -104,6 +109,7 @@ export class WorkerCode {
   renew(generation: number): void {
     for (const slot of this.#filled) this.table.set(slot, this.#missing);
     this.#filled.clear();
+    this.#installed.clear();
     this.#generation = generation;
   }
 }
