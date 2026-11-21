@@ -88,7 +88,7 @@ const encoder = new TextEncoder();
 const decoders = { utf8: new TextDecoder() };
 
 export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service = async () => {},
-  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx,
+  {onPresent = () => {}, onLifecycle = () => {}, diagnostic = () => {}, glPresented, mediaHost, needsMovieResume, threads, sys, audio, audioOutput = () => null, hostGate, cxx,
   drawable: makeDrawable = geometry => eaglDrawable(graphics, geometry, diagnostic)} = {}) {
   let quartz;
   const lastDispatch = new Map();
@@ -614,7 +614,7 @@ export function objcImports(cpu, heap, ipa, graphics, callGuest, signal, service
   const profile=appProfile(ipa.info);
   if(profile.entry)diagnostic('info','profile','Applied app manifest entry',{bundleId:profile.bundleId,...profile.entry});
   const statusBar={hidden:!!ipa.info.UIStatusBarHidden,orientation:profile.orientation,style:0};
-  const input = touchUIKit({screen:profile.screen,movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusBar.orientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
+  const input = touchUIKit({glPresented,screen:profile.screen,movieVideo:view=>movies?.videoForView(view),currentThread:threadId,className:p=>classes.get(read(p))?.name??"unknown",getOrientation:()=>statusBar.orientation,getCoreGraphics:()=>quartz,hostClass,method,names,alloc,destroy,autorelease,retain,releaseFromHost,send,lookup,
     selector,selectorName:p=>readString(cpu,p),read,write,readBytes:(p,n)=>cpu.read(p,n),loadNib:(name,owner,bundle)=>nibs.named(name,owner,bundle),readFile:path=>fileObjects.contents(string(path)),graphics,signal,text,string,ipa,mediaHost,diagnostic});
   const isKind = (obj, name) => !!obj && subclass(read(obj), names.get(name));
   const characterSets=installScanners({hostClass,method,alloc,destroy,retain,release:releaseFromHost,autorelease,text,string,write});

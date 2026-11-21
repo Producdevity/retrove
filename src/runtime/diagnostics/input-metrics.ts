@@ -6,6 +6,8 @@ export const DropReason = {
   Missing: "missing-touch",
   Duplicate: "duplicate-down",
   Inactive: "inactive-application",
+  /** A GL view that has not presented a frame: its owner may still be setting up input. */
+  Undrawn: "undrawn-gl-view",
 } as const;
 type DropReason = (typeof DropReason)[keyof typeof DropReason];
 interface Dispatch {

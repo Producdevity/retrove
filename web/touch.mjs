@@ -43,7 +43,7 @@ const phases = {[PointerPhase.Down]: [TouchPhase.Began, 'touchesBegan:withEvent:
   [PointerPhase.Up]: [TouchPhase.Ended, 'touchesEnded:withEvent:'], [PointerPhase.Cancel]: [TouchPhase.Cancelled, 'touchesCancelled:withEvent:']};
 
 export function touchUIKit({screen:phoneScreen=TALL_SCREEN,hostClass, method, names, alloc, destroy, autorelease, retain, releaseFromHost, send, lookup,
-  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread, movieVideo}) {
+  selector, selectorName, className, read, write, readBytes, graphics, signal, text, string, ipa, mediaHost, getCoreGraphics, getOrientation, diagnostic, loadNib, readFile, currentThread, movieVideo, glPresented=()=>true}) {
   for (const [name, parent] of [['UIScreen','NSObject'], ['UIView','UIResponder'], ['UIWindow','UIView'],
     ['UIViewController','UIResponder'], ['UITouch','NSObject'], ['UIEvent','NSObject'], ['NSSet','NSObject'], ['NSArray','NSObject']]) hostClass(name,parent);
   hostClass('NSMutableArray','NSArray'); hostClass('NSMutableSet','NSSet');
@@ -554,6 +554,7 @@ export function touchUIKit({screen:phoneScreen=TALL_SCREEN,hostClass, method, na
       if(e.type===PointerPhase.Down){
         if(t){inputMetrics.drop(DropReason.Duplicate);continue;}
         const target=hit(window,...e.point);if(!target){inputMetrics.drop(DropReason.NoTarget);continue;}
+        if(!glPresented()&&data(target).layer&&className(data(target).layer)==='CAEAGLLayer'){inputMetrics.drop(DropReason.Undrawn);continue;}
         const conflict=touchConflict(data,target,[...active.values()].map(touch=>touch.target));if(conflict){inputMetrics.drop(conflict);continue;}
         const taps=previousTap&&previousTap.target===target&&e.time-previousTap.time<0.35&&Math.hypot(e.point[0]-previousTap.point[0],e.point[1]-previousTap.point[1])<10?previousTap.taps+1:1;
         t={ptr:alloc(names.get('UITouch')),window,target:retain(target),taps,point:e.point,down:e,deferred:await scrollers.interaction.begin(e.id,target,e.point,e.time)};

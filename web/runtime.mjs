@@ -209,7 +209,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     objc = objcImports(cpu, heap, ipa, remoteGraphics ? () => ({canvas: remoteGraphics.canvas}) : graphics, nested, signal, service, {
       threads, sys, audio, audioOutput:audioContext, mediaHost, needsMovieResume, diagnostic, hostGate, cxx,
       drawable: remoteGraphics && (geometry => remoteDrawable(remoteGraphics.command, geometry, diagnostic)),
-      onLifecycle: milestone,
+      onLifecycle: milestone, glPresented: () => renderCounts().presentedFrames > 0,
       onPresent(presented, duration = 0) {
         graphicsMilliseconds += duration;
         graphicsMetrics.record(GraphicsMetricOperation.Present,duration);
