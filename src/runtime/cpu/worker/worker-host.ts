@@ -5,7 +5,13 @@ import { MaxWorkerThreads, ThreadChannel } from "./channel";
 import { startGraphics, type GraphicsOptions } from "./graphics-start";
 import type { ModuleRegistry } from "./module-registry";
 import { Placement, type ThreadCandidate } from "./placement";
-import { ExecutionMessage, isFailedMessage, type ExecutionPort, type TrapRange } from "./protocol";
+import {
+  ExecutionMessage,
+  isFailedMessage,
+  isWakeMessage,
+  type ExecutionPort,
+  type TrapRange,
+} from "./protocol";
 import { RemoteThread, type WorkerCpu } from "./remote-thread";
 
 const Register = { SP: 13, LR: 14 } as const;
@@ -82,6 +88,8 @@ export class WorkerThreads {
   readonly #finished: Totals = WorkerThreads.#empty();
   readonly #graphicsThreads: number[] = [];
   #seen = 0;
+  /** Idle waits that a worker's wake message ends. */
+  readonly #wakers = new Set<() => void>();
   #graphics: { readonly index: number; readonly link: GraphicsLink } | undefined;
   /** The app profile's placement; nothing is placed without one. */
   placement: (thread: ThreadCandidate) => Placement = () => Placement.Cooperative;
@@ -192,6 +200,10 @@ export class WorkerThreads {
   #spawn(index: number): ExecutionWorker {
     const worker: ExecutionWorker = { port: configured.spawn(), thread: undefined, listeners: [] };
     worker.port.listen((message) => {
+      if (isWakeMessage(message)) {
+        for (const woken of this.#wakers) woken();
+        return;
+      }
       if (isFailedMessage(message)) worker.thread?.listen(message);
       for (const listener of worker.listeners) listener(message);
     });
@@ -247,11 +259,24 @@ export class WorkerThreads {
     const done = promise.finally(() => {
       settled = true;
     });
+    const control = this.registry.control;
     while (!settled) {
-      const before = this.registry.control.doorbell;
+      const before = control.doorbell;
       if (before !== this.#seen) await service();
-      if (!settled && this.registry.control.doorbell === before)
-        await Promise.race([done, this.registry.control.changed(before, IDLE_WAIT_MS)]);
+      if (settled || control.doorbell !== before) continue;
+      let woken = (): void => {};
+      const rung = new Promise<void>((resolve) => {
+        woken = resolve;
+      });
+      this.#wakers.add(woken);
+      control.sleep();
+      try {
+        if (control.doorbell === before)
+          await Promise.race([done, rung, control.changed(before, IDLE_WAIT_MS)]);
+      } finally {
+        control.awake();
+        this.#wakers.delete(woken);
+      }
     }
     return done;
   }

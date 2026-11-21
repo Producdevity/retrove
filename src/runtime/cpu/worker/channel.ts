@@ -5,7 +5,7 @@ const FLOAT_BYTES = 8;
 /** The main thread's state block is the first of the state page; workers use the others. */
 export const MaxWorkerThreads = PageBytes / StateBytes - 1;
 
-const Control = { Generation: 0, Doorbell: 1, Slots: 2, Active: 3 } as const;
+const Control = { Generation: 0, Doorbell: 1, Slots: 2, Waiting: 3, Active: 4 } as const;
 const POLL_MS = 1;
 
 declare global {
@@ -63,9 +63,20 @@ export class WorkerControl {
   get doorbell(): number {
     return Atomics.load(this.words, Control.Doorbell);
   }
+  /** Worker side: wakes a waiting main thread by message. */
+  wake: (() => void) | undefined;
   ring(): void {
     Atomics.add(this.words, Control.Doorbell, 1);
     Atomics.notify(this.words, Control.Doorbell);
+    // Safari does not resolve the main thread's Atomics.waitAsync on this notify.
+    if (Atomics.load(this.words, Control.Waiting) > 0) this.wake?.();
+  }
+  /** Main side: brackets a wait during which rings also arrive as messages. */
+  sleep(): void {
+    Atomics.add(this.words, Control.Waiting, 1);
+  }
+  awake(): void {
+    Atomics.sub(this.words, Control.Waiting, 1);
   }
   /** Resolves when the doorbell differs from `seen` or after `timeoutMs`; polls without waitAsync. */
   async changed(seen: number, timeoutMs: number): Promise<void> {

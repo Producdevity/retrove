@@ -33,6 +33,7 @@ export interface GraphicsService {
 /** Instructions per slice; the worker checks for stop requests and code flushes between slices. */
 export const WORKER_SLICE = 65_536;
 const THUMB_BIT = 1;
+const WAKE = { type: ExecutionMessage.Wake } as const;
 const WORD_BYTES = 4;
 const RESULT_REGISTER = 0;
 const Register = { SP: 13, LR: 14 } as const;
@@ -86,8 +87,10 @@ export class ExecutionThread {
   constructor(
     private readonly start: StartMessage,
     private readonly graphics: () => WorkerGraphics | undefined = () => undefined,
+    wake?: () => void,
   ) {
     this.#control = new WorkerControl(start.control);
+    this.#control.wake = wake;
     this.#channel = new ThreadChannel(this.#control, start.channel);
     this.#view = new DataView(start.memory.buffer);
     this.#traps = start.traps;
@@ -266,7 +269,11 @@ export function serveExecution(port: WorkerPort, graphics?: GraphicsService): vo
       thread?.receive(message);
       return;
     }
-    const current = new ExecutionThread(message, () => graphics?.owner);
+    const current = new ExecutionThread(
+      message,
+      () => graphics?.owner,
+      () => port.post(WAKE),
+    );
     thread = current;
     current.run().catch((error: unknown) => {
       port.post({ type: ExecutionMessage.Failed, message: String(error) });

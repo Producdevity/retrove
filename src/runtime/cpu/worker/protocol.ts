@@ -6,7 +6,12 @@ import type {
   GraphicsStartPost,
 } from "../../graphics/remote/protocol";
 
-export const ExecutionMessage = { Start: "start", Code: "code", Failed: "failed" } as const;
+export const ExecutionMessage = {
+  Start: "start",
+  Code: "code",
+  Failed: "failed",
+  Wake: "wake",
+} as const;
 
 export interface TrapRange {
   readonly first: number;
@@ -54,9 +59,14 @@ export interface FailedMessage {
   readonly message: string;
 }
 
+/** A worker rang the doorbell while the main thread waited. */
+export interface WakeMessage {
+  readonly type: typeof ExecutionMessage.Wake;
+}
+
 /** The worker's end of its message port. */
 export interface WorkerPort {
-  post(message: FailedMessage | FromGraphics): void;
+  post(message: FailedMessage | WakeMessage | FromGraphics): void;
   listen(handler: (message: unknown) => void): void;
 }
 /** The main thread's handle on an execution worker. */
@@ -137,6 +147,9 @@ export function isToWorker(value: unknown): value is ToWorker {
     compiledModule(value.compiled) &&
     indexRegion(value.index)
   );
+}
+export function isWakeMessage(value: unknown): value is WakeMessage {
+  return record(value) && value.type === ExecutionMessage.Wake;
 }
 export function isFailedMessage(value: unknown): value is FailedMessage {
   return (
