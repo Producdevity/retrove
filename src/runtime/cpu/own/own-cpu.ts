@@ -238,9 +238,9 @@ export class OwnCpu implements WorkerCpu {
     }
   }
   /** Translates the code at `pc` on this thread, or throws the fault the run loop would. */
-  #ensure(pc: number, tries: number): void {
+  #ensure(pc: number, tries: number, forWorker = false): void {
     if (this.tier.pages.word(pc & ~(FETCH_BYTES - 1)) === undefined) throw new GuestFetchFault(pc);
-    if (tries >= RETRIES || !this.tier.translateNow(pc)) throw new GuestCodeError(pc);
+    if (tries >= RETRIES || !this.tier.translateNow(pc, forWorker)) throw new GuestCodeError(pc);
   }
   get layout(): StateLayout {
     return this.tier.layout;
@@ -251,10 +251,10 @@ export class OwnCpu implements WorkerCpu {
   get traps(): readonly TrapRange[] {
     return this.#traps.map(({ first, last }) => ({ first, last }));
   }
-  /** A worker thread's code miss, handled as this CPU's run loop handles its own. */
+  /** A worker thread's code miss, handled as this CPU's run loop handles its own, minus the instance. */
   prepareCode(pc: number, tries: number, missing: boolean): number {
     if (missing) this.tier.discoveredEntry(pc);
-    if (!this.tier.entry(pc) || tries > 0) this.#ensure(pc, tries);
+    if (!this.tier.entry(pc) || tries > 0) this.#ensure(pc, tries, true);
     const entry = this.tier.entry(pc);
     if (!entry) throw new GuestCodeError(pc);
     return entry - 1;

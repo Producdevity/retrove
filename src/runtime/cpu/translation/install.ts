@@ -51,6 +51,18 @@ export function instantiateTranslationNow(
   countCompiled(translation.wasm.length);
   return { module, exports: instance.exports };
 }
+/** Compiles without instantiating, for code only other threads run. */
+export function compileTranslation(
+  translation: Translation,
+  statistics: TierStatistics,
+): WebAssembly.Module {
+  const compiled = performance.now();
+  const module = new WebAssembly.Module(translation.wasm);
+  statistics.compileMs += performance.now() - compiled;
+  statistics.wasmBytes += translation.wasm.length;
+  countCompiled(translation.wasm.length);
+  return module;
+}
 /** Adds the module's functions to the shared table and writes their label tables; returns table slots. */
 export function installTranslation(
   table: WebAssembly.Table,
@@ -60,12 +72,34 @@ export function installTranslation(
   /** Host address of the module's label block; label addresses are offsets into it. */
   labels: number,
 ): number[] {
-  const first = table.grow(translation.functions.length);
+  const slots = reserveTranslation(table, heap, translation, labels);
+  slots.forEach((slot, offset) =>
+    setExport(table, slot, exports, translation.functions[offset]?.exportName ?? ""),
+  );
+  return slots;
+}
+/** Sets a table slot to the instance's exported function `name`. */
+export function setExport(
+  table: WebAssembly.Table,
+  slot: number,
+  exports: WebAssembly.Exports,
+  name: string,
+): void {
+  const exported = exports[name];
+  if (typeof exported !== "function") throw new Error(`Missing translated export ${name}.`);
+  table.set(slot, exported);
+}
+/** Grows the table with `fill` for the module's functions and writes their label tables; returns slots. */
+export function reserveTranslation(
+  table: WebAssembly.Table,
+  heap: Uint8Array,
+  translation: Translation,
+  labels: number,
+  fill?: WebAssembly.ExportValue,
+): number[] {
+  const count = translation.functions.length,
+    first = fill === undefined ? table.grow(count) : table.grow(count, fill);
   return translation.functions.map((translated, offset) => {
-    const exported = exports[translated.exportName];
-    if (typeof exported !== "function")
-      throw new Error(`Missing translated export ${translated.exportName}.`);
-    table.set(first + offset, exported);
     const labelTable = translated.labels;
     heap.set(
       new Uint8Array(labelTable.buffer, labelTable.byteOffset, labelTable.byteLength),

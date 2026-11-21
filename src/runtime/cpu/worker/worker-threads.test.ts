@@ -9,6 +9,7 @@ const Guest = {
   Code: 0x10000,
   MainLoop: 0x10100,
   CallLoop: 0x10200,
+  Caller: 0x10300,
   Data: 0x20000,
   Gate: 0x30000,
   Return: 0x40000,
@@ -65,6 +66,13 @@ const CallLoop = [
   0xe5805004, // str r5, [r0, #4]
   0xe8bd8030, // pop {r4, r5, pc}
 ];
+/** r0 = counter, r1 = 5, r2 = result address: calls the worker thread's function, as a main-thread caller. */
+const Caller = [
+  0xe92d4010, // push {r4, lr}
+  0xe3a01005, // mov r1, #5
+  0xebffff3c, // bl 0x10000
+  0xe8bd8010, // pop {r4, pc}
+];
 const HOST_FACTOR = 6;
 
 function words(values: readonly number[]): Uint8Array {
@@ -107,6 +115,7 @@ function machine(codeBudget?: number) {
   cpu.write(Guest.Code, words(WorkerThread));
   cpu.write(Guest.MainLoop, words(MainLoop));
   cpu.write(Guest.CallLoop, words(CallLoop));
+  cpu.write(Guest.Caller, words(Caller));
   cpu.trapRange(Guest.Gate, Guest.Gate + Guest.Page - 1, () => {});
   return { cpu, workers };
 }
@@ -206,6 +215,52 @@ test("host calls from a worker thread return their values in r0", async () => {
     const statistics = workers.statistics();
     expect(statistics.hostCalls).toBe(calls);
     expect(cpu.read32(Result)).toBe((HOST_FACTOR * calls * (calls + 1)) / 2);
+  } finally {
+    cpu.close();
+  }
+}, 30_000);
+
+test("code only a worker runs is not instantiated on the main thread until the main thread enters it", async () => {
+  const { cpu, workers } = machine();
+  try {
+    await start(cpu, workers, Guest.Code, [Counter, 10, Result]).finish();
+    const statistics = cpu.translation;
+    expect(statistics.deferredModules).toBeGreaterThan(0);
+    expect(statistics.materializedModules).toBe(0);
+    expect(cpu.tier.entry(Guest.Code)).not.toBe(0);
+    expect(cpu.read32(Counter)).toBe(10);
+
+    cpu.setReg(0, Counter);
+    cpu.setReg(1, 5);
+    cpu.setReg(2, Result);
+    cpu.setReg(14, Guest.Return);
+    const trapped = cpu.run(Guest.Code, { until: Guest.Return });
+    expect(trapped).toMatchObject({ reason: "trap", address: Guest.Gate });
+    expect(statistics.materializedModules).toBe(1);
+    expect(cpu.run(cpu.getReg(14), { until: Guest.Return }).reason).toBe("until");
+    expect(cpu.read32(Counter)).toBe(15);
+  } finally {
+    cpu.close();
+  }
+}, 30_000);
+
+test("main-thread code that calls a worker-only function instantiates it on that call", async () => {
+  const { cpu, workers } = machine();
+  try {
+    await start(cpu, workers, Guest.Code, [Counter, 10, Result]).finish();
+    expect(cpu.translation.materializedModules).toBe(0);
+
+    cpu.setReg(0, Counter);
+    cpu.setReg(2, Result);
+    cpu.setReg(14, Guest.Return);
+    let result = cpu.run(Guest.Caller, { until: Guest.Return });
+    expect(result).toMatchObject({ reason: "trap", address: Guest.Gate });
+    while (result.reason !== "until")
+      result = cpu.run(result.reason === "trap" ? cpu.getReg(14) : result.pc, {
+        until: Guest.Return,
+      });
+    expect(cpu.translation.materializedModules).toBe(1);
+    expect(cpu.read32(Counter)).toBe(15);
   } finally {
     cpu.close();
   }

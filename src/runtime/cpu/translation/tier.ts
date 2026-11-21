@@ -11,8 +11,7 @@ import { collectBatch } from "./collect";
 import { HotFunctions } from "./hot-functions";
 import { CodeBudget } from "./code-budget";
 import { FunctionIndex } from "./function-index";
-import { moduleSlot } from "./translation-store";
-import { ProfileRecorder, profileBatches } from "./translation-profile";
+import { ProfileRecorder } from "./translation-profile";
 import { Batch, Coalesce, PROFILE_SAVE_MS, replayLimits } from "./tier-options";
 import { LabelAreas } from "./label-areas";
 import { AheadOfTime, AOT_HOT_ENTRIES, translationAheadEnabled } from "./aot";
@@ -82,6 +81,7 @@ export class TranslatedTier {
       table: this.table,
       pages: this.pages,
       state: this.pages.mainState,
+      layout: () => this.layout,
       labels: this.#labels,
       budget: this.#budget,
       statistics: this.statistics,
@@ -111,16 +111,13 @@ export class TranslatedTier {
     const cache = this.#options.cache;
     if (cache && this.#options.ahead !== false && translationAheadEnabled())
       this.#startAot(executable, cache);
-    if (!this.#options.profile) return;
-    profileBatches(this.#options.profile, executable, replayLimits(this.#budget.limit)).forEach(
-      (functions, index) => {
-        const slot = cache && moduleSlot(cache, index);
-        this.#replay.push(
-          this.#jobs.build(functions, this.#profile.entriesOf(functions), [], slot),
-        );
-        for (const range of functions) this.#planned.add(range.start);
-      },
-    );
+    const profile = this.#options.profile;
+    if (!profile) return;
+    const limits = replayLimits(this.#budget.limit);
+    for (const job of this.#jobs.replay(profile, this.#profile, executable, limits, cache)) {
+      this.#replay.push(job);
+      for (const range of job.functions) this.#planned.add(range.start);
+    }
     this.statistics.replayModules = this.#replay.length;
     this.#schedule();
   }
@@ -132,6 +129,8 @@ export class TranslatedTier {
     if (pc & (WORD_BYTES - 1)) return 0;
     return this.#foreign.entry(pageOf(pc));
   }
+  /** Like `entry`, for code the main thread is about to run: instantiates a module deferred for workers. */
+  readonly enter = (pc: number): number => this.#modules.materialize(this.entry(pc));
   /** Retranslates the function containing `pc` with `pc` as an extra entry label. */
   discoveredEntry(pc: number): void {
     const range = functionAt(this.#executable, pc);
@@ -264,16 +263,17 @@ export class TranslatedTier {
   }
   /**
    * Translates and installs the code at `pc` on the calling thread, for an engine with no
-   * interpreter to run it meanwhile. False when nothing was installed for `pc`.
+   * interpreter to run it meanwhile. False when nothing was installed for `pc`. With `forWorker`
+   * the main thread keeps no instance of the module until it enters the code itself.
    */
-  translateNow(pc: number): boolean {
+  translateNow(pc: number, forWorker = false): boolean {
     if (!this.#discovered) this.#discover();
     if (this.#budget.exceeded || this.#labels.crowded) this.#flush();
     const demand = demandAt(pc, this.#executable, this.#profile, this.#foreignEntries);
     if (!demand) return false;
     const { range } = demand,
       job = this.#jobs.build([demand.function], demand.entries, demand.pages);
-    const [slot] = this.#modules.now(job).slots;
+    const [slot] = this.#modules.now(job, forWorker).slots;
     if (slot === undefined) return false;
     if (!range) return this.#foreign.set(pageOf(pc), slot);
     this.#index.set(range, slot + 1);

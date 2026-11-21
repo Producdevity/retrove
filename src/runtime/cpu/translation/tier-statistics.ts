@@ -16,6 +16,10 @@ export interface TierStatistics {
   retranslations: number;
   /** Times every module was dropped because live code passed its budget. */
   flushes: number;
+  /** Modules compiled for execution workers without an instance on the main thread. */
+  deferredModules: number;
+  /** Deferred modules the main thread later instantiated because it entered their code. */
+  materializedModules: number;
   /** Ahead-of-time chunks of the executable, and how many are in the module cache. */
   aotChunks: number;
   aotPrepared: number;
@@ -40,6 +44,8 @@ export function emptyStatistics(): TierStatistics {
     invalidations: 0,
     retranslations: 0,
     flushes: 0,
+    deferredModules: 0,
+    materializedModules: 0,
     aotChunks: 0,
     aotPrepared: 0,
     stackUnwinds: 0,

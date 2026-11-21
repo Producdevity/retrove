@@ -1,37 +1,11 @@
-import { EntryParameter } from "../translation/emitter";
 import { FunctionIndex } from "../translation/function-index";
 import { ForeignPages } from "../translation/foreign-pages";
 import { i32Global, type TranslationImports } from "../translation/install";
-import { PageBits, StopState, stateOffset, type StateLayout } from "../translation/layout";
+import { PageBits, type StateLayout } from "../translation/layout";
 import type { CompiledModule } from "../translation/tier-options";
-import { module } from "../translation/wasm-module";
-import { Code } from "../translation/wasm-code";
-import { Op, Type } from "../translation/wasm-opcodes";
+import { missingFunction } from "../translation/missing-function";
 
 const WORD_ALIGNMENT = 3;
-const MISSING_EXPORT = "missing";
-
-/**
- * The function every unfilled slot of a worker's table holds: it leaves translated code at the
- * called PC like the dispatcher does for untranslated code, so the worker fetches that module.
- */
-function missingFunction(imports: TranslationImports, L: StateLayout): WebAssembly.ExportValue {
-  const c = new Code(1);
-  c.state().i32(StopState.Exit).memory(Op.I32Store, stateOffset(L, L.stopped));
-  c.state().get(EntryParameter).memory(Op.I32Store, stateOffset(L, L.exitPC));
-  c.get(EntryParameter);
-  const wasm = module({
-    types: [{ params: [Type.I32], results: [Type.I32] }],
-    functions: [{ type: 0, code: c, exportName: MISSING_EXPORT }],
-    shared: true,
-  });
-  const exported = new WebAssembly.Instance(new WebAssembly.Module(wasm), { env: imports }).exports[
-    MISSING_EXPORT
-  ];
-  if (typeof exported !== "function") throw new Error("Missing-slot function did not compile.");
-  return exported;
-}
-
 /**
  * A worker's own function table. Its slots mirror the main thread's slot numbers, because
  * translated code reaches other functions through the shared address index, which holds main

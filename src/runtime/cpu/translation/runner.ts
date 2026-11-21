@@ -30,7 +30,7 @@ export function runTranslated(
   view.setInt32(layout.budget, budget, true);
   let pc = start;
   bridge.pc = pc;
-  for (let entry = tier.entry(pc); entry; entry = tier.entry(pc)) {
+  for (let entry = tier.enter(pc); entry; entry = tier.enter(pc)) {
     const entered = pc,
       run: unknown = tier.table.get(entry - 1);
     if (!translatedEntry(run)) throw new Error("Translated function table entry is not callable.");
