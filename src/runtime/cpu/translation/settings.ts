@@ -61,6 +61,12 @@ export function sharedMemoryEnabled(): boolean {
   }
 }
 const WORKER_THREADS_KEY = "retrove.workerThreads";
+/** Records the tester's choice for both settings worker threads need; the next launch uses it. */
+export function setWorkerThreadsEnabled(enabled: boolean): void {
+  for (const key of [WORKER_THREADS_KEY, SHARED_MEMORY_KEY])
+    if (enabled) globalThis.localStorage?.setItem(key, "on");
+    else globalThis.localStorage?.removeItem(key);
+}
 /**
  * Guest threads may run on execution workers only when a tester opts in (`retrove.workerThreads=on`);
  * they also need shared guest memory (`retrove.sharedMemory=on` on a cross-origin isolated page).

@@ -3,6 +3,7 @@ import type { StorageManagement } from "../../storage/management/service";
 import { action, element } from "../../ui/dom";
 import { connectAppearance } from "../../ui/appearance";
 import { connectCpuMethod } from "./cpu-method";
+import { connectThreadMode } from "./thread-mode";
 
 function connectPersistence(failure: (error: unknown) => void): () => Promise<void> {
   const persist = element("persist", HTMLButtonElement);
@@ -39,6 +40,7 @@ export function connectSettings(
 ): () => Promise<void> {
   connectAppearance(failure);
   const cpuMethod = connectCpuMethod(failure);
+  connectThreadMode(failure);
   const storage = connectStorageManagement(manager, changed, failure);
   const persistence = connectPersistence(failure);
   return async () => {

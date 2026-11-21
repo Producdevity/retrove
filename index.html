@@ -228,6 +228,18 @@
             </div>
           </div>
           <p id="cpu-method-note" class="group-footer"></p>
+          <div class="group">
+            <fieldset id="thread-mode" class="segmented pair">
+              <legend class="visually-hidden">Game threads</legend>
+              <span class="thumb" aria-hidden="true"></span>
+              <label><input type="radio" name="thread-mode" value="one" />One core</label>
+              <label><input type="radio" name="thread-mode" value="parallel" />Parallel</label>
+            </fieldset>
+          </div>
+          <p class="group-footer">
+            Parallel runs BioShock's game and render threads on their own cores. Experimental; it
+            applies from the next launch.
+          </p>
           <h2 class="section-title">Storage</h2>
           <section id="manage-storage" class="group storage" aria-labelledby="storage">
             <div class="storage-summary">
