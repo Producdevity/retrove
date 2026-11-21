@@ -49,28 +49,26 @@ export function setOwnCpuEnabled(enabled: boolean): void {
   else globalThis.localStorage?.setItem(CPU_KEY, "unicorn");
 }
 const SHARED_MEMORY_KEY = "retrove.sharedMemory";
-/** A tester's `on`/`off` override wins; otherwise the app profile's preference decides. */
-function preference(key: string, preferred: boolean): boolean {
-  try {
-    const stored = globalThis.localStorage?.getItem(key);
-    return stored === "on" || (stored !== "off" && preferred);
-  } catch {
-    return preferred;
-  }
-}
 /**
- * Guest memory is shared when guest threads run on workers: otherwise a shared arena costs atomic
- * code paths and an up-front reservation for nothing.
+ * Guest memory is shared only when a tester opts in (`retrove.sharedMemory=on`): until guest threads
+ * run on workers, a shared arena costs atomic code paths and an up-front reservation for nothing.
  */
-export function sharedMemoryEnabled(preferred = false): boolean {
-  return preference(SHARED_MEMORY_KEY, preferred);
+export function sharedMemoryEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SHARED_MEMORY_KEY) === "on";
+  } catch {
+    return false;
+  }
 }
 const WORKER_THREADS_KEY = "retrove.workerThreads";
 /**
- * Guest threads run on execution workers when the app profile places them there, unless a tester
- * sets `retrove.workerThreads=off`. They also need shared guest memory on a cross-origin isolated
- * page.
+ * Guest threads may run on execution workers only when a tester opts in (`retrove.workerThreads=on`);
+ * they also need shared guest memory (`retrove.sharedMemory=on` on a cross-origin isolated page).
  */
-export function workerThreadsEnabled(preferred = false): boolean {
-  return preference(WORKER_THREADS_KEY, preferred);
+export function workerThreadsEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(WORKER_THREADS_KEY) === "on";
+  } catch {
+    return false;
+  }
 }

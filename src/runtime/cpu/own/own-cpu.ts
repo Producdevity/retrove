@@ -38,8 +38,6 @@ export interface OwnCpuOptions {
   readonly onProfile?: ((profile: TranslationProfile) => void) | undefined;
   readonly cache?: string | undefined;
   readonly codeBudget?: number | undefined;
-  /** The app profile places guest threads on execution workers. */
-  readonly workerThreads?: boolean | undefined;
 }
 /** Thrown for guest code that neither translates nor has an interpreted fallback. */
 export class GuestCodeError extends Error {
@@ -84,12 +82,8 @@ export class OwnCpu implements WorkerCpu {
     options: OwnCpuOptions = {},
   ) {
     // Code is translated on first entry, so background ahead-of-time chunks would only cost memory.
-    const placed = workerThreadsEnabled(options.workerThreads);
-    const heap = new ArenaHeap(
-        arenaReservation(),
-        crossOriginIsolation() && sharedMemoryEnabled(placed),
-      ),
-      modules = heap.shared && placed ? new ModuleRegistry() : undefined;
+    const heap = new ArenaHeap(arenaReservation(), crossOriginIsolation() && sharedMemoryEnabled()),
+      modules = heap.shared && workerThreadsEnabled() ? new ModuleRegistry() : undefined;
     this.tier = new TranslatedTier(heap, {
       ...options,
       ahead: false,

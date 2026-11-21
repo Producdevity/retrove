@@ -182,7 +182,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     link = {entry: image.entry, imports: unique.size, executableBytes: bytes.length,
       segmentCount: image.segments.length, dylibCount: image.dylibs.length};
     milestone('Initialize ARM WebAssembly CPU', {entry: hex(image.entry), imports: unique.size});
-    cpu = await createCPU({budget: ExecutionBudget.Blocks, cpu: ownCpuEnabled() ? 'own' : 'unicorn', workerThreads: Boolean(prepared.threads?.length), translationProfile: await translationAppKey(ipa.info?.CFBundleIdentifier)});
+    cpu = await createCPU({budget: ExecutionBudget.Blocks, cpu: ownCpuEnabled() ? 'own' : 'unicorn', translationProfile: await translationAppKey(ipa.info?.CFBundleIdentifier)});
     signal?.throwIfAborted();
     milestone('Map segments and bind imports');
     const memory = {map: cpu.map, write: cpu.write, read32: p => read32(cpu,p), write32: (p,v) => write32(cpu,p,v)};

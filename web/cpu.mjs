@@ -34,13 +34,13 @@ function range(address, size, aligned = false) {
   }
 }
 
-export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled() && deviceBudget().translation, translationProfile, workerThreads = false, cpu: kind = 'unicorn'} = {}) {
+export async function createCPU({budget = ExecutionBudget.Instructions, compilationThreshold = TciTierLimit.Threshold, translation = translationEnabled() && deviceBudget().translation, translationProfile, cpu: kind = 'unicorn'} = {}) {
   if (!Object.values(ExecutionBudget).includes(budget)) throw new TypeError("Unknown CPU execution budget.");
   // The own CPU needs the translated tier's arena; without it Unicorn runs the guest.
   if (kind === 'own' && translation) {
     const key = translationCacheEnabled() ? translationProfile : undefined;
     return ownCpuObject(budget, {profile: key ? await loadTranslationProfile(key) : undefined, cache: key,
-      codeBudget: deviceBudget().codeBytes, workerThreads, onProfile: key ? p => saveTranslationProfile(key, p) : undefined});
+      codeBudget: deviceBudget().codeBytes, onProfile: key ? p => saveTranslationProfile(key, p) : undefined});
   }
   const profileKey = translation && translationCacheEnabled() ? translationProfile : undefined;
   const profile = profileKey ? await loadTranslationProfile(profileKey) : undefined;
