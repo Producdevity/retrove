@@ -1,10 +1,13 @@
 import { stringImports } from "../../../../web/strings.mjs";
-import { pureMathImports, type Argument } from "../../ios/libc/pure-math";
-import { fill, move, write32, type GuestMemory } from "../../memory/guest-memory";
+import { pureMathImports } from "../../ios/libc/pure-math";
+import type { AtomicGuestMemory } from "../../memory/guest-atomics";
+import { fill, move, write32 } from "../../memory/guest-memory";
+import { ATOMIC_NAMES, atomicImports } from "./local-atomics";
+import { CLOCK_NAMES, clockImports } from "./local-clock";
+import { Forward, type LocalImport } from "./local-import-types";
+import { NUMERIC_NAMES, numericImports } from "./local-numeric";
 
-/** Returned by a local import that cannot answer on this thread; the main thread runs the call. */
-export const Forward = Symbol("forward");
-export type LocalImport = (a: Argument) => number | bigint | undefined | typeof Forward;
+export { Forward, type LocalImport };
 
 const STRING_NAMES = [
   "_strlen",
@@ -21,6 +24,7 @@ const STRING_NAMES = [
   "_strncpy",
   "_wcscpy",
   "_wcsncpy",
+  "_wcspbrk",
 ] as const;
 const MEMORY_NAMES = ["_memcpy", "_memmove", "_memset", "_bzero"] as const;
 const THREAD_NAMES = ["_mach_absolute_time", "_pthread_threadid_np"] as const;
@@ -42,6 +46,9 @@ export const LOCAL_IMPORT_NAMES: ReadonlySet<string> = new Set([
   ...STRING_NAMES,
   ...MEMORY_NAMES,
   ...THREAD_NAMES,
+  ...CLOCK_NAMES,
+  ...ATOMIC_NAMES,
+  ...NUMERIC_NAMES,
 ]);
 
 export interface LocalThread {
@@ -51,7 +58,10 @@ export interface LocalThread {
   readonly timeOrigin: number;
 }
 
-export function localImports(memory: GuestMemory, thread: LocalThread): Map<string, LocalImport> {
+export function localImports(
+  memory: AtomicGuestMemory,
+  thread: LocalThread,
+): Map<string, LocalImport> {
   const strings = stringImports(memory, NO_ERRNO),
     offset = performance.timeOrigin - thread.timeOrigin;
   const copy: LocalImport = (a) => {
@@ -60,6 +70,9 @@ export function localImports(memory: GuestMemory, thread: LocalThread): Map<stri
   };
   const table: Record<string, LocalImport> = {
     ...pureMathImports(),
+    ...clockImports(memory),
+    ...atomicImports(memory),
+    ...Object.fromEntries(numericImports(memory)),
     _memcpy: copy,
     _memmove: copy,
     _memset: (a) => {

@@ -21,7 +21,7 @@ const bits = new DataView(new ArrayBuffer(DOUBLE_BYTES));
 const u64 = (a: Argument, i: number): bigint =>
   BigInt(a(i) >>> 0) | (BigInt(a(i + 1) >>> 0) << HIGH_WORD);
 const i64 = (a: Argument, i: number): bigint => BigInt.asIntN(WIDE_BITS, u64(a, i));
-function f32(a: Argument, i: number): number {
+export function f32(a: Argument, i: number): number {
   bits.setUint32(0, a(i), true);
   return bits.getFloat32(0, true);
 }
