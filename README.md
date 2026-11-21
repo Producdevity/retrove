@@ -1,6 +1,6 @@
 # Retrove
 
-Retrove runs 32-bit iOS games in the browser. You add your own IPA, and everything stays on your device.
+Retrove runs 32-bit iOS games in the browser. You add your own IPA and it stays on your device.
 
 ![BioShock's opening scene running in Retrove in Safari](docs/bioshock.jpg)
 
@@ -8,7 +8,7 @@ Try it at [retrove.emuready.workers.dev](https://retrove.emuready.workers.dev).
 
 ## Status
 
-Early and experimental. These games boot and render: BioShock, Cut the Rope, Angry Birds, Doodle Jump, Gyrotate, Zippo and Rayman 2. BioShock reaches gameplay, but runs too slowly on phones to be playable yet. Performance is the current focus. Android support is planned.
+Early and experimental. BioShock, Cut the Rope, Angry Birds, Doodle Jump, Gyrotate, Zippo and Rayman 2 boot and render in Chrome on macOS. BioShock gets into gameplay, but on an iPhone 13 Pro Max it runs at 18 to 25 FPS with heavy stutter, so it isn't playable yet. Performance is what I'm working on now. Android support is planned.
 
 ## How it works
 
