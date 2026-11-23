@@ -75,8 +75,18 @@ export type ResolvedOptions = Omit<ObjcOptions, "drawable"> &
   Required<Pick<ObjcOptions, "onPresent" | "onLifecycle" | "diagnostic" | "audioOutput">>;
 /** Host frame time the run loop hands back to other guest work, and whether it must yield now. */
 export type ServiceSlice = (milliseconds: number, yieldNow: boolean) => Promise<void>;
-/** The WebGL context of the page canvas UIKit lays out over. */
-export type PageGraphics = GraphicsContext & { readonly canvas: HTMLCanvasElement };
+/** The page canvas UIKit lays out over once a graphics worker owns its WebGL context. */
+export interface WorkerCanvas {
+  readonly canvas: HTMLCanvasElement;
+  readonly worker: true;
+}
+/** The WebGL context of the page canvas UIKit lays out over, or only that canvas. */
+export type PageGraphics = GraphicsContext | WorkerCanvas;
+/** The page's WebGL context; a worker canvas has none here, so its drawables are remote. */
+export function pageContext(graphics: PageGraphics): GraphicsContext {
+  if ("worker" in graphics) throw new Error("The WebGL context belongs to a graphics worker.");
+  return graphics;
+}
 /** The page the runtime draws into and the signal that stops the application. */
 export interface ObjcPlatform {
   readonly graphics: () => PageGraphics;

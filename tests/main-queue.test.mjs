@@ -2,7 +2,7 @@ import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {openIPA} from '../src/runtime/ios/package/ipa.ts';
-import {runGuest} from '../web/runtime.mjs';
+import {runGuest} from '../src/runtime/ios/runtime/runtime.ts';
 
 test('main-queue blocks wait for UIKit even when a constructor or a delegate dispatch_once yields', async()=>{
   const file=await readFile(new URL('./fixtures/main-queue.ipa',import.meta.url));

@@ -1,4 +1,4 @@
-import { touchUIKit, type TouchUIKit } from "../../../../web/touch.mjs";
+import { touchUIKit, type TouchUIKit } from "../uikit/touch/touch";
 import { parsePlist } from "../../formats/plist";
 import { compareExchange32, store32 } from "../../memory/guest-atomics";
 import { encodeBinaryPlist } from "../foundation/archives/plist-writer";

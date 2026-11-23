@@ -4,19 +4,32 @@ import { ownCpuObject } from "./own/own-cpu-object";
 import { TciTierLimit, type TciTierStatistics } from "./tci/tier";
 import { loadTranslationProfile, saveTranslationProfile } from "./translation/profile-storage";
 import { translationCacheEnabled, translationEnabled } from "./translation/settings";
+import type { HostHandler } from "./translation/host-calls";
 import type { TierStatistics } from "./translation/tier-statistics";
 import { loadUnicorn } from "./unicorn/module";
 import { openUnicorn } from "./unicorn/setup";
 import { UnicornCpu } from "./unicorn/unicorn-cpu";
 import { unicornCpuObject } from "./unicorn/unicorn-cpu-object";
+import type { WorkerThreads } from "./worker/worker-host";
 import { deviceBudget } from "../memory/device-budget";
 
 export interface GuestCPU {
   readonly compiler: TciTierStatistics | undefined;
   readonly translation: TierStatistics | undefined;
   readonly budget: ExecutionBudget;
+  /** "translated" on the own CPU; absent on Unicorn. */
+  readonly method?: string;
+  readonly mappedBytes: number;
+  readonly executedMilliseconds: number;
+  readonly interpretedMilliseconds: number;
+  cpsr: number;
+  /** Guest threads on execution workers; only the own CPU over shared memory has them. */
+  readonly workers?: WorkerThreads | undefined;
+  /** Host imports translated code runs in place; only the own CPU takes one. */
+  hostHandler?: HostHandler | undefined;
   set threadPointer(address: number);
   map(address: number, size: number, permissions?: number): void;
+  unmap(address: number, size: number): void;
   protect(address: number, size: number, permissions: number): void;
   write(address: number, bytes: Uint8Array): void;
   read(address: number, size: number): Uint8Array;
@@ -38,6 +51,7 @@ export interface GuestCPU {
   };
   /** Handlers receive the CPU object the runtime holds. */
   trap(address: number, handler: TrapHandler): () => void;
+  trapRange(first: number, last: number, handler: TrapHandler): () => void;
   saveState(): unknown;
   restoreState(state: unknown): void;
   freeState(state: unknown): void;

@@ -9,7 +9,7 @@ const O_TRUNC = 0x400;
 const FILE_MODE = 0o644;
 
 export interface GuestLibc {
-  readonly funcs: Readonly<Record<string, (a: GuestArguments) => number | Promise<number>>>;
+  readonly funcs: Readonly<Record<string, (a: GuestArguments) => unknown>>;
 }
 export interface GuestFiles {
   readonly readFile: (path: string) => Promise<Uint8Array | undefined>;
@@ -25,7 +25,8 @@ export function guestFiles(
   const call = async (name: string, ...args: number[]): Promise<number> => {
     const func = sys.funcs[name];
     if (!func) throw new Error(`Missing guest libc function ${name}`);
-    return func((index) => args[index] ?? 0);
+    const value: unknown = await func((index) => args[index] ?? 0);
+    return Number(value);
   };
   async function withPath<T>(path: string, use: (pointer: number) => Promise<T>): Promise<T> {
     const pointer = heap.string(path);

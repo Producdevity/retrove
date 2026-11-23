@@ -24,6 +24,7 @@ import { installRootObject } from "./root-object";
 import { installRunLoopServices, type RunLoopServices } from "./run-loop-services";
 import { exceptionThrowing, runtimeFunctions, type ExceptionThrowing } from "./runtime-functions";
 import { runtimeApi } from "./runtime-api";
+import { pageContext } from "./runtime-types";
 import type {
   GuestCall,
   ObjcGuest,
@@ -103,7 +104,8 @@ function installGraphics(core: ObjcCore, drawableFactory: ObjcOptions["drawable"
   registry.hostClass("CAEAGLLayer", "CALayer");
   const makeDrawable =
     drawableFactory ??
-    ((geometry) => eaglDrawable(platform.graphics, geometry, options.diagnostic));
+    ((geometry) =>
+      eaglDrawable(() => pageContext(platform.graphics()), geometry, options.diagnostic));
   const drawable = makeDrawable((layer) => late.input().drawableGeometry(layer));
   const pacing = new PresentPacing();
   const contexts = installEAGLContexts(core, {

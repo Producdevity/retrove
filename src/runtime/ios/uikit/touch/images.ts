@@ -1,6 +1,5 @@
 import { drawScrollIndicators } from "../scroll/indicators";
-import { floatBits, floatFromBits } from "../../abi/scalars";
-import { uiImages } from "../../../../../web/uikit-images.mjs";
+import { uiImages } from "../image/uikit-images";
 import type { TouchContext } from "./context";
 
 type DrawContext = CanvasRenderingContext2D;
@@ -69,8 +68,6 @@ export function installImages(ctx: TouchContext): void {
     mediaHost: ctx.mediaHost,
     data: kit.data,
     setFrame: kit.setFrame,
-    bits: floatBits,
-    float: floatFromBits,
     lookup,
     read,
     send: ctx.send,

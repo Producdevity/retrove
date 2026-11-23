@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test,vi} from 'vite-plus/test';
 import {openIPA} from '../src/runtime/ios/package/ipa.ts';
-import {runGuest} from '../web/runtime.mjs';
+import {runGuest} from '../src/runtime/ios/runtime/runtime.ts';
 
 async function fixture(name) {
   const bytes = await readFile(new URL('./fixtures/' + name + '.ipa', import.meta.url));

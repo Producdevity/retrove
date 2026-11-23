@@ -21,7 +21,7 @@ import type { installScrollViews } from "../scroll/bindings";
 import type { installTables } from "../table/bindings";
 import type { installColors } from "../colors";
 import type { installControllerNibs } from "../nib/controllers";
-import type { UiImages } from "../../../../../web/uikit-images.mjs";
+import type { UIImages } from "../image/uikit-images";
 import type { ViewKit } from "./kit";
 import type { Geometry } from "./geometry";
 import type { Collections } from "./collections";
@@ -66,7 +66,7 @@ export interface TouchParams {
   loadNib: (name: string, owner: number, bundle: number) => Promise<number>;
   readFile: (path: string) => Promise<Uint8Array | undefined>;
   currentThread?: (() => number) | undefined;
-  movieVideo?: ((view: number) => unknown) | undefined;
+  movieVideo?: ((view: number) => HTMLElement | null | undefined) | undefined;
   glPresented?: (() => boolean) | undefined;
 }
 
@@ -154,7 +154,7 @@ export interface Services {
   scrollers: Late<ReturnType<typeof installScrollViews>>;
   tables: Late<ReturnType<typeof installTables>>;
   uiColors: Late<ReturnType<typeof installColors>>;
-  imageViews: Late<UiImages>;
+  imageViews: Late<UIImages>;
   controllerNibs: Late<ReturnType<typeof installControllerNibs>>;
 }
 export function createServices(): Services {

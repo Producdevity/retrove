@@ -1,6 +1,6 @@
 import { createCPU } from '../src/runtime/cpu/cpu.ts';
 import { Heap, read32, write32 } from '../src/runtime/memory/guest-memory.ts';
-import { objcImports } from '../web/objc.mjs';
+import { objcImports } from '../src/runtime/ios/objc/objc.ts';
 
 // Exercise the same UIApplication loop and Objective-C dispatch as a loaded app.
 // Each guest IMP saves r0-r3 into guest memory before returning through LR.

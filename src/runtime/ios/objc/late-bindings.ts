@@ -1,4 +1,4 @@
-import type { TouchUIKit } from "../../../../web/touch.mjs";
+import type { TouchUIKit } from "../uikit/touch/touch";
 import type { CoreFoundation } from "../foundation/corefoundation";
 import type { foundation } from "../foundation/foundation";
 import type { FileObjects } from "../foundation/foundation-files";

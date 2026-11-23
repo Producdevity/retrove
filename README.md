@@ -24,7 +24,7 @@ Uses Vite+ with pnpm:
 - `vp test` runs the tests
 - `vp build` creates the static build
 
-`src/` is the TypeScript implementation. `web/` holds the runtime code that still has to be ported to TypeScript. `web/vendor/` contains generated upstream JS/Wasm and their licenses.
+`src/` is the TypeScript implementation. `web/vendor/` contains generated upstream JS/Wasm and their licenses.
 
 To rebuild the guest libc helpers in `src/runtime/ios/libc/`, run `RETROVE_LLVM_BIN=/path/to/llvm/bin vp exec node src/build/compile-guest-libc.ts`.
 

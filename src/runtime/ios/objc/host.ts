@@ -1,3 +1,4 @@
+import type { GuestLandingPad } from "../../cxx/landing-pad";
 export type GuestArguments = (index: number) => number;
 /** Continue at a guest IMP with the registers the host prepared, as a tail call. */
 export interface GuestJump {
@@ -7,7 +8,7 @@ export interface GuestJump {
 export interface HostWait {
   wait(): unknown;
 }
-export type HostResult = number | bigint | void | GuestJump | HostWait;
+export type HostResult = number | bigint | void | GuestJump | HostWait | GuestLandingPad;
 export type HostMethod = (
   self: number,
   arguments_: GuestArguments,

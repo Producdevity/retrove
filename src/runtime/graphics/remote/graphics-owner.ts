@@ -48,7 +48,7 @@ function createContext(canvas: OffscreenCanvas): GraphicsContext {
 }
 
 /**
- * The WebGL context on an execution worker, behind gles.mjs over the worker's view of guest
+ * The WebGL context on an execution worker, behind gles.ts over the worker's view of guest
  * memory. The main thread forwards its GL calls and drawable commands; this worker's own guest
  * thread calls GL directly.
  */

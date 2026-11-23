@@ -1,6 +1,6 @@
 import { createCPU } from '../../src/runtime/cpu/cpu.ts';
 import { Heap, read32, write32 } from '../../src/runtime/memory/guest-memory.ts';
-import { objcImports } from '../../web/objc.mjs';
+import { objcImports } from '../../src/runtime/ios/objc/objc.ts';
 
 export async function fixture(t, call = () => {}, files = new Map(), options = {}) {
   const cpu = await createCPU();

@@ -34,7 +34,7 @@ interface SessionListener {
 type SessionEvent = { interruption: number } | { property: number };
 interface AudioSessionHost {
   audioSessionNotification(name: string, key: string, value: number): Promise<unknown>;
-  audioReasonDictionary(name: string, value: number): Promise<number>;
+  audioReasonDictionary(name: string, value: number): number | Promise<number>;
 }
 
 const SPECS = new Map<number, SessionSpec>(

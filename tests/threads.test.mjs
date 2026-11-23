@@ -2,7 +2,7 @@ import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {openIPA} from '../src/runtime/ios/package/ipa.ts';
-import {runGuest} from '../web/runtime.mjs';
+import {runGuest} from '../src/runtime/ios/runtime/runtime.ts';
 
 test('ARM main joins a guest worker after it sleeps and receives its return value', async () => {
   const b = await readFile(new URL('./fixtures/threads.ipa', import.meta.url));
@@ -14,7 +14,7 @@ test('ARM main joins a guest worker after it sleeps and receives its return valu
 test('ARM SJLJ leaves keep independent context chains across thread preemption', async t => {
   const {createCPU} = await import('../src/runtime/cpu/cpu.ts');
   const {Heap, read32} = await import('../src/runtime/memory/guest-memory.ts');
-  const {threadImports} = await import('../web/threads.mjs');
+  const {threadImports} = await import('../src/runtime/ios/threads/threads.ts');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
   t.onTestFinished(() => cpu.close());
   cpu.map(done, 4096, 5);
@@ -56,7 +56,7 @@ test('Darwin longjmp restores copied ARM state, VFP data and the saved SjLj chai
   const {nonlocalJumps}=await import('../src/runtime/ios/libc/nonlocal-jump.ts');
   const {createCPU}=await import('../src/runtime/cpu/cpu.ts');
   const {Heap,read32,write32}=await import('../src/runtime/memory/guest-memory.ts');
-  const {threadImports}=await import('../web/threads.mjs');
+  const {threadImports}=await import('../src/runtime/ios/threads/threads.ts');
   const cpu=await createCPU();
   try {
     const heap=new Heap(cpu),end=0x1000;
@@ -93,7 +93,7 @@ test('a worker dispatch_once block can wait for a mutex held by its scheduling m
 test('Darwin realtime attributes create workers at FMOD priorities', async () => {
   const {createCPU} = await import('../src/runtime/cpu/cpu.ts');
   const {Heap,read32,write32} = await import('../src/runtime/memory/guest-memory.ts');
-  const {threadImports} = await import('../web/threads.mjs');
+  const {threadImports} = await import('../src/runtime/ios/threads/threads.ts');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
   cpu.map(done,4096);
   const threads = threadImports(cpu,heap,done);
@@ -119,9 +119,9 @@ test('Darwin realtime attributes create workers at FMOD priorities', async () =>
 });
 
 test('with block scheduling a thread keeps running through budget slices until it blocks', async t => {
-  const {createCPU} = await import('../web/cpu.mjs');
+  const {createCPU} = await import('../src/runtime/cpu/cpu.ts');
   const {Heap} = await import('../src/runtime/memory/guest-memory.ts');
-  const {threadImports} = await import('../web/threads.mjs');
+  const {threadImports} = await import('../src/runtime/ios/threads/threads.ts');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
   t.onTestFinished(() => cpu.close());
   cpu.map(done, 4096, 5);

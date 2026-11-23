@@ -9,7 +9,7 @@ import {
   type GraphicsChannel,
 } from "./graphics-channel";
 
-/** A GL import as gles.mjs implements it: `a(n)` reads argument n. */
+/** A GL import as gles.ts implements it: `a(n)` reads argument n. */
 export type GraphicsFunction = (a: (n: number) => number) => unknown;
 /** Runs an Allocate or Present command for the main thread. */
 export type GraphicsCommand = (kind: CallKind, payload: unknown) => number;
@@ -48,7 +48,7 @@ const message = (error: unknown): string =>
 export class GraphicsServer {
   readonly #gates = new Map<number, number>();
   readonly #functions: readonly (GraphicsFunction | undefined)[];
-  /** The thread whose GL call runs now; gles.mjs asks it for the current EAGL context. */
+  /** The thread whose GL call runs now; gles.ts asks it for the current EAGL context. */
   #current: { readonly api: number; readonly context: number } = { api: 0, context: 0 };
   #asynchronous = 0;
   constructor(

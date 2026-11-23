@@ -125,7 +125,7 @@ export interface ImagesHost extends Pick<
   uiColor?(color: number): RGBA | undefined;
   uiPattern?(color: number): number | undefined;
   glLayer?(layer: number): boolean;
-  movieVideo?(view: number): HTMLElement | undefined;
+  movieVideo?: ((view: number) => HTMLElement | null | undefined) | undefined;
 }
 
 export function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {

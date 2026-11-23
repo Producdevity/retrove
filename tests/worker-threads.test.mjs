@@ -2,7 +2,7 @@ import {afterEach, beforeAll, test, vi} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {openIPA} from '../src/runtime/ios/package/ipa.ts';
-import {runGuest} from '../web/runtime.mjs';
+import {runGuest} from '../src/runtime/ios/runtime/runtime.ts';
 import {bundleNodeWorker, nodeExecutionPort} from '../src/runtime/cpu/worker/testing/node-port.ts';
 import {configureWorkerThreads} from '../src/runtime/cpu/worker/worker-host.ts';
 
