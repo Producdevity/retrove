@@ -3,6 +3,7 @@ import {compareExchange32, store32} from '../src/runtime/memory/guest-atomics.ts
 import {Gauge, gauges} from '../src/runtime/diagnostics/gauges.ts';
 import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {GuestMutexes} from '../src/runtime/ios/threads/mutex.ts';
+import {Scheduling} from '../src/runtime/ios/threads/scheduling.ts';
 import {ThreadAttributes, ThreadPolicy, DEFAULT_PRIORITY} from '../src/runtime/ios/threads/attributes.ts';
 
 const PAGE = 4096, MAIN = 1;
@@ -14,7 +15,7 @@ const asWait = poll => {
 };
 
 const MS_PER_SECOND = 1000, NS_PER_MS = 1e6;
-export function threadImports(cpu, heap, returnAddress) {
+export function threadImports(cpu, heap, returnAddress, {scheduling = Scheduling.Slices} = {}) {
   const attrs = new ThreadAttributes(), mutexAttrs = new Map(), conditions = new Map();
   const mutexes = new GuestMutexes({read:p=>read32(cpu,p),write:(p,value)=>write32(cpu,p,value),
     compareExchange:(p,expected,value)=>compareExchange32(cpu,p,expected,value),store:(p,value)=>store32(cpu,p,value)});
@@ -299,6 +300,11 @@ export function threadImports(cpu, heap, returnAddress) {
     }
   }
 
+  // With block scheduling the turn limit only keeps the page responsive when a thread
+  // computes for a long time without blocking.
+  const SLICE_STEPS = 8, TURN_LIMIT_MS = 8, CLOCK_STRIDE = 32;
+  const blockDriven = scheduling === Scheduling.Blocks;
+  const turns = {scheduling, turns: 0, blocked: 0, sliced: 0, limited: 0, exited: 0, budgetSteps: 0, steps: 0};
   async function advance(step, nested, budgetMs = 0) {
     if (remote) await serviceRemote();
     const ready = () => [...workers.values()].filter(t => !t.done && !t.running && !t.remote);
@@ -331,10 +337,14 @@ export function threadImports(cpu, heap, returnAddress) {
             }
             if (t.resume !== undefined) { cpu.setReg(0,t.resume); t.resume = undefined; }
             progressed = true;
-            for (let i = 0; i < 8; i++) {
+            turns.turns++;
+            const turnEnd = blockDriven ? performance.now() + TURN_LIMIT_MS : 0;
+            for (let i = 1; ; i++) {
               let result = step(t.pc);
               if (result instanceof Promise) result = await result;
+              turns.steps++;
               if (result.done) {
+                turns.exited++;
                 await finish(t, result.value, nested);
                 break;
               }
@@ -343,7 +353,11 @@ export function threadImports(cpu, heap, returnAddress) {
               t.wait = result.wait;
               // Worker threads wait on their host calls; answer them between this thread's slices.
               if (remote?.pending()) await serviceRemote();
-              if (result.wait || result.budget) break;
+              if (result.wait) { turns.blocked++; break; }
+              if (result.budget) turns.budgetSteps++;
+              if (!blockDriven) {
+                if (result.budget || i >= SLICE_STEPS) { turns.sliced++; break; }
+              } else if ((result.budget || i % CLOCK_STRIDE === 0) && performance.now() >= turnEnd) { turns.limited++; break; }
             }
             if (!t.done) t.state = cpu.saveState();
           } finally { t.running = false; }
@@ -356,7 +370,7 @@ export function threadImports(cpu, heap, returnAddress) {
       cpu.restoreState(outerState); cpu.freeState(outerState);
     }
   }
-  return {funcs, nativeFunctions, advance, remote, serviceRemote,
+  return {funcs, nativeFunctions, advance, schedulerTurns: () => ({...turns}), remote, serviceRemote,
     connect(step, nested) { connected = {step, nested}; },
     // Waits for an idle promise (a display refresh, a timer) while answering worker threads.
     idle: promise => remote ? remote.idle(promise, serviceRemote) : promise,

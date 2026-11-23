@@ -6,6 +6,7 @@ import {
   isLandscape,
   type ScreenSize,
 } from "../uikit/screen";
+import { Scheduling } from "../threads/scheduling";
 
 /** Per-app overrides for behaviour that cannot be derived from the bundle itself. */
 export interface ManifestEntry {
@@ -13,12 +14,14 @@ export interface ManifestEntry {
   readonly screen?: "legacy";
   /** Keep the interface in this orientation family, whatever Info.plist or the app asks. */
   readonly orientation?: "portrait" | "landscape";
+  /** Thread switching that suits the game; the tester's setting can override it. */
+  readonly scheduling?: Scheduling;
 }
 const MANIFEST: Readonly<Record<string, ManifestEntry>> = {
   // Lays out its GL HUD from UIScreen bounds inside a window fixed at 320×480.
   Gyrotate: { screen: "legacy" },
   // Unreal Engine 3 renders for landscape only.
-  "com.hip.180282": { orientation: "landscape" },
+  "com.hip.180282": { orientation: "landscape", scheduling: Scheduling.Blocks },
 };
 
 export interface AppProfile {

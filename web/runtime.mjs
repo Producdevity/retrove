@@ -39,6 +39,8 @@ import {guestFiles} from './guest-files.mjs';
 import {GuestLandingPad} from './sjlj.mjs';
 import {GuestLayout} from '../src/runtime/memory/guest-layout.ts';
 import {threadImports} from './threads.mjs';
+import {appProfile} from '../src/runtime/ios/profiles/app-manifest.ts';
+import {resolveScheduling} from '../src/runtime/ios/threads/scheduling.ts';
 import {dispatchImports} from './dispatch.mjs';
 import {objcImports} from './objc.mjs';
 
@@ -97,7 +99,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
         Gauge.GpuTextureBytes, Gauge.GpuBufferBytes, Gauge.GpuRenderbufferBytes, Gauge.FileCacheBytes]
         .map(gauge => [gauge, Math.round(gauges.value(gauge) / 1e6)])),
       memoryTimeline: memoryTimeline.rows(),
-      threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])), workerThreads: threads?.remote?.statistics(),
+      threadCpuMs: Object.fromEntries([...threadCpuMs].map(([thread, ms]) => [thread, Math.round(ms)])), workerThreads: threads?.remote?.statistics(), schedulerTurns: threads?.schedulerTurns(),
       execution: executionMetrics.snapshot(), executionWindow: {samples:executionMetrics.sampleCount,limit:ExecutionMetricLimit.Samples}, input: objc?.inputSnapshot(), audio:audio?.snapshot(), openAL:al?.snapshot(), audioPlayers:objc?.audioPlayerSnapshot(), topImports: importMetrics.snapshot(), recentImports: recent.slice(), missingAssetRequests, missingAssets: missingAssets.slice(), recentMissingAssets: recentMissingAssets.slice(), ...link};
   }
   // The graphics worker's own thread draws without passing through settle().
@@ -188,7 +190,7 @@ export async function runGuest(ipa, {audioContext = () => null, graphics = () =>
     const memory = {map: cpu.map, write: cpu.write, read32: p => read32(cpu,p), write32: (p,v) => write32(cpu,p,v)};
     heap = new Heap(cpu);
     const gates = new Map(), stubs = new Map();
-    threads = threadImports(cpu, heap, RETURN);
+    threads = threadImports(cpu, heap, RETURN, {scheduling: resolveScheduling(appProfile(ipa.info ?? {}).entry?.scheduling)});
     threads.connect(step, nested);
     const remote = threads.remote;
     const jumps=nonlocalJumps(cpu,heap,threads);

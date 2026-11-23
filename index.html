@@ -235,10 +235,18 @@
               <label><input type="radio" name="thread-mode" value="one" />One core</label>
               <label><input type="radio" name="thread-mode" value="parallel" />Parallel</label>
             </fieldset>
+            <fieldset id="scheduling-mode" class="segmented">
+              <legend class="visually-hidden">Thread switching</legend>
+              <span class="thumb" aria-hidden="true"></span>
+              <label><input type="radio" name="scheduling-mode" value="game" />Per game</label>
+              <label><input type="radio" name="scheduling-mode" value="slices" />Time slices</label>
+              <label><input type="radio" name="scheduling-mode" value="blocks" />On block</label>
+            </fieldset>
           </div>
           <p class="group-footer">
-            Parallel runs BioShock's game and render threads on their own cores. Experimental; it
-            applies from the next launch.
+            Parallel runs BioShock's game and render threads on their own cores. Thread switching
+            decides when threads on one core take turns: after a time slice, or only when a thread
+            waits. Per game uses each game's preset. Both apply from the next launch.
           </p>
           <h2 class="section-title">Storage</h2>
           <section id="manage-storage" class="group storage" aria-labelledby="storage">

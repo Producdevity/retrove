@@ -3,6 +3,7 @@ import type { StorageManagement } from "../../storage/management/service";
 import { action, element } from "../../ui/dom";
 import { connectAppearance } from "../../ui/appearance";
 import { connectCpuMethod } from "./cpu-method";
+import { connectSchedulingMode } from "./scheduling-mode";
 import { connectThreadMode } from "./thread-mode";
 
 function connectPersistence(failure: (error: unknown) => void): () => Promise<void> {
@@ -41,6 +42,7 @@ export function connectSettings(
   connectAppearance(failure);
   const cpuMethod = connectCpuMethod(failure);
   connectThreadMode(failure);
+  connectSchedulingMode(failure);
   const storage = connectStorageManagement(manager, changed, failure);
   const persistence = connectPersistence(failure);
   return async () => {

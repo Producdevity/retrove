@@ -117,3 +117,20 @@ test('Darwin realtime attributes create workers at FMOD priorities', async () =>
     assert.equal(call('_pthread_create',output,attribute,done,0),22);
   } finally {threads.close();cpu.close();}
 });
+
+test('with block scheduling a thread keeps running through budget slices until it blocks', async t => {
+  const {createCPU} = await import('../web/cpu.mjs');
+  const {Heap} = await import('../src/runtime/memory/guest-memory.ts');
+  const {threadImports} = await import('../web/threads.mjs');
+  const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
+  t.onTestFinished(() => cpu.close());
+  cpu.map(done, 4096, 5);
+  const ts = threadImports(cpu, heap, done, {scheduling: 'blocks'});
+  ts.spawnDetached(0x1240, []);
+  const slicesBeforeBlock = 20;
+  let slices = 0;
+  await ts.advance(async () => ++slices < slicesBeforeBlock ? {budget: true, pc: 0x1244} : {wait: () => undefined, pc: 0x1244});
+  assert.equal(slices, slicesBeforeBlock);
+  assert.deepEqual(ts.schedulerTurns(), {scheduling: 'blocks', turns: 1, blocked: 1, sliced: 0, limited: 0, exited: 0, budgetSteps: slicesBeforeBlock - 1, steps: slicesBeforeBlock});
+  ts.close();
+});
