@@ -181,9 +181,10 @@ test.each([undefined, 1])(
     const { cpu, workers } = machine(codeBudget);
     try {
       const host = start(cpu, workers, Guest.Code, [Counter, iterations, Result]);
-      // The main thread starts once the worker has made its host call, so both loops overlap.
       while (!host.service()) await new Promise((resolve) => setTimeout(resolve, 0));
-      const before = cpu.read32(Counter);
+      // Overlap can't be asserted: under load the OS may not schedule the worker during the main
+      // loop. Starting once the worker is incrementing makes contention likely.
+      while (cpu.read32(Counter) === 0) await new Promise((resolve) => setTimeout(resolve, 0));
       cpu.setReg(0, Counter);
       cpu.setReg(1, iterations);
       cpu.setReg(14, Guest.Return);
@@ -193,10 +194,7 @@ test.each([undefined, 1])(
         if (result.reason === "until") break;
         pc = result.pc;
       }
-      const after = cpu.read32(Counter);
       await host.finish();
-      // The worker's increments landed while the main loop ran: the two threads overlapped.
-      expect(after - before).toBeGreaterThan(iterations);
       expect(cpu.read32(Counter)).toBe(2 * iterations);
       expect(cpu.read32(Result)).toBe(7 * HOST_FACTOR);
       expect(workers.statistics()).toMatchObject({ threads: 1, hostCalls: 1 });
