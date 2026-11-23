@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../../cpu/cpu";
 import profile from "./bioshock.json";
 import { patchExecutable } from "./patches";
 test("executable patching verifies every word before changing a private copy", () => {

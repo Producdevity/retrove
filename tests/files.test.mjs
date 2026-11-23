@@ -1,6 +1,6 @@
 import {test} from "vite-plus/test";
 import assert from "node:assert/strict";
-import { prepareBioShockConfig } from "../web/bioshock-config.mjs";
+import { prepareBioShockConfig } from "../src/runtime/ios/profiles/bioshock/bioshock-config.ts";
 import { homeDirectories } from "../src/runtime/storage/records.ts";
 import { fixture, writeSave, verifySave, isolated } from "./files-cases.mjs";
 

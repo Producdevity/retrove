@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../cpu";
 import { TciTierLimit } from "../tci/tier";
 import { ExecutionBudget } from "../execution-budget";
 

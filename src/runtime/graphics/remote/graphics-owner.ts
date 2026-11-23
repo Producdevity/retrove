@@ -1,9 +1,5 @@
-import {
-  drawableRenderer,
-  FULL_DISPLAY,
-  type DrawableRenderer,
-} from "../../../../web/drawable.mjs";
-import { glesImports } from "../../../../web/gles.mjs";
+import { drawableRenderer, FULL_DISPLAY, type DrawableRenderer } from "../drawable";
+import { glesImports } from "../gles";
 import { Gauge, gauges } from "../../diagnostics/gauges";
 import { WorkerControl } from "../../cpu/worker/channel";
 import { GRAPHICS_CONTEXT_ATTRIBUTES, graphicsContextInfo } from "../context-info";

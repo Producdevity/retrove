@@ -1,4 +1,4 @@
-import {moviePlayers} from '../web/movie.mjs';
+import {moviePlayers} from '../src/runtime/ios/media/movie.ts';
 export async function movieTest(){
   const handlers=new Map(),notes=[],events=[];
   const methods=(cls,meta,sel,fn)=>handlers.set(sel,fn);

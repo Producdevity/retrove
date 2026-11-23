@@ -4,9 +4,9 @@ import { floatFromBits } from "../abi/scalars";
 const COLOR_MAXIMUM = 255;
 const STROKE_CENTER = 0.5;
 interface LayerColors extends ViewState {
-  layerBackgroundColor?: number;
-  borderColor?: number;
-  borderWidth?: number;
+  layerBackgroundColor?: number | undefined;
+  borderColor?: number | undefined;
+  borderWidth?: number | undefined;
 }
 interface LayerColorHost extends Pick<UIKitHost, "method"> {
   view(pointer: number): LayerColors;

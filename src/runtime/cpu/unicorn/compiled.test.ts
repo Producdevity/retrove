@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../cpu";
 import { ExecutionBudget } from "../execution-budget";
 const words = (...values: number[]) => new Uint8Array(Uint32Array.from(values).buffer);
 

@@ -1,7 +1,7 @@
 import { waitForPlayback } from "./media/wait-for-playback";
 import { AudioVisibility } from "./media/audio-visibility";
 import { runGuest } from "../../web/runtime.mjs";
-import type { IpaArchive } from "../../web/ipa.mjs";
+import type { IpaArchive } from "../runtime/ios/package/ipa";
 import type { InstalledApplication } from "../domain/application";
 import { errorMessage } from "../domain/validation";
 import type { ApplicationLibrary } from "../library/service";

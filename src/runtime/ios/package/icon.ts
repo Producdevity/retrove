@@ -1,5 +1,5 @@
-import { decodeCgBI } from "../../../../web/cgbi.mjs";
-import type { IpaArchive } from "../../../../web/ipa.mjs";
+import { decodeCgBI } from "../../formats/cgbi";
+import type { IpaArchive } from "./ipa";
 import { isRecord } from "../../../domain/validation";
 const PNG_MIME = "image/png";
 const ICON_READ_LIMIT = 8_388_608;

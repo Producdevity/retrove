@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../cpu";
 import { compileFloatKernel } from "../wasm/float-kernel";
 import { planFloatProgram } from "./float-program";
 import type { FloatProgram } from "./float-program";

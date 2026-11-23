@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { fixupStream, type FixupImage } from "../../../../web/macho.mjs";
+import { fixupStream, type FixupImage } from "../macho/macho";
 
 const name = [...new TextEncoder().encode("_malloc"), 0];
 // ordinal 1, symbol _malloc, pointer type, segment 0 offset 0, bind once

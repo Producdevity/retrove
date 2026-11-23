@@ -1,4 +1,4 @@
-import type { IpaArchive } from "../../../../../web/ipa.mjs";
+import type { IpaArchive } from "../../package/ipa";
 const RETINA_SCALE = 2;
 interface ImageFiles {
   readonly ipa: Pick<IpaArchive, "bundlePath" | "has" | "read">;

@@ -1,8 +1,17 @@
 export type GuestArguments = (index: number) => number;
-export type HostResult = number | bigint | void;
+/** Continue at a guest IMP with the registers the host prepared, as a tail call. */
+export interface GuestJump {
+  readonly jump: number;
+}
+/** Blocks the calling guest thread until `wait` returns a value. */
+export interface HostWait {
+  wait(): unknown;
+}
+export type HostResult = number | bigint | void | GuestJump | HostWait;
 export type HostMethod = (
   self: number,
   arguments_: GuestArguments,
+  destination?: number,
 ) => HostResult | Promise<HostResult>;
 export interface FoundationHost {
   hostClass(name: string, parent: string, instanceSize?: number): number;

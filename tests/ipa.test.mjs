@@ -1,7 +1,7 @@
 import {test} from "vite-plus/test";
 import assert from "node:assert/strict";
 import { crc32, deflateRawSync } from "node:zlib";
-import { openIPA, openZip, parsePlist } from "../web/ipa.mjs";
+import { openIPA, openZip, parsePlist } from "../src/runtime/ios/package/ipa.ts";
 
 const prefix = "Payload/BioShock.app/";
 const xml = '<?xml version="1.0"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>BioShock</string><key>Example</key><array><true/><integer>12</integer><string>A&amp;B</string></array></dict></plist>';
@@ -157,7 +157,7 @@ test("reads a ZIP64 directory and entry offsets", async () => {
 });
 
 test("startup ZIP preserves both original compressed members and excludes assets and signatures", async () => {
-  const {createStartupZip} = await import("../web/startup-zip.mjs");
+  const {createStartupZip} = await import("../src/runtime/formats/startup-zip.ts");
   const executable = Buffer.alloc(10 * 1024 * 1024, 0x79);
   const bytes = zip([[prefix + "Info.plist", binary, false], [prefix + "BioShock", executable],
     [prefix + "large.asset", Buffer.alloc(1024 * 1024, 37), false], [prefix + "_CodeSignature/CodeResources", "excluded"]]);

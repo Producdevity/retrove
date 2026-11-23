@@ -1,7 +1,7 @@
 import {test} from "vite-plus/test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { openIPA } from "../web/ipa.mjs";
+import { openIPA } from "../src/runtime/ios/package/ipa.ts";
 import { runGuest } from "../web/runtime.mjs";
 
 const fixture = new URL("./fixtures/smoke.ipa", import.meta.url);

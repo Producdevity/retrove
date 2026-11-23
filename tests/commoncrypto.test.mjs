@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {createHash,createHmac} from 'node:crypto';
-import {commonCrypto} from '../web/commoncrypto.mjs';
+import {commonCrypto} from '../src/runtime/ios/crypto/commoncrypto.ts';
 
 test('Darwin SHA-1 and all HMAC variants match native digests, including copied incremental contexts', () => {
   const bytes=new Uint8Array(90000);

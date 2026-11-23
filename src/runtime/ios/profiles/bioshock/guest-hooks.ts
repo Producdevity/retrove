@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../cpu/cpu";
 import artifact from "./guest-hooks.json";
 
 const WORD_BYTES = 4;

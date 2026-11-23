@@ -1,4 +1,4 @@
-import { stringImports } from "../../../../web/strings.mjs";
+import { stringImports } from "../../ios/libc/strings";
 import { pureMathImports } from "../../ios/libc/pure-math";
 import type { AtomicGuestMemory } from "../../memory/guest-atomics";
 import { fill, move, write32 } from "../../memory/guest-memory";

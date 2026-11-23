@@ -1,5 +1,5 @@
-import {coreGraphics} from '../web/coregraphics.mjs';
-import {uiImages} from '../web/uikit-images.mjs';
+import {coreGraphics} from '../src/runtime/graphics/core-graphics/coregraphics.ts';
+import {uiImages} from '../src/runtime/ios/uikit/image/uikit-images.ts';
 
 export async function renderQuartz() {
   const args=(...words)=>i=>words[i]??0;

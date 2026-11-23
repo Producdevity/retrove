@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import { createCPU } from '../web/cpu.mjs';
+import { createCPU } from '../src/runtime/cpu/cpu.ts';
 
 test('ARM execution and bounded instruction slices', async () => {
   const cpu = await createCPU();

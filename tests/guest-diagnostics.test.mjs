@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test,vi} from 'vite-plus/test';
-import {openIPA} from '../web/ipa.mjs';
+import {openIPA} from '../src/runtime/ios/package/ipa.ts';
 import {runGuest} from '../web/runtime.mjs';
 
 async function fixture(name) {

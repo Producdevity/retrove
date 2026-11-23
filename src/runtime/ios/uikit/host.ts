@@ -1,4 +1,4 @@
-import type { IpaArchive } from "../../../../web/ipa.mjs";
+import type { IpaArchive } from "../package/ipa";
 import type { FoundationHost, GuestArguments, HostResult, StructureMethod } from "../objc/host";
 
 export type Rectangle = [number, number, number, number];

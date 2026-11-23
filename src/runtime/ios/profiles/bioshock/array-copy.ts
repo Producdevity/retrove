@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../cpu/cpu";
 const WORD_BYTES = 4;
 const ADDRESS_LIMIT = 0x1_0000_0000;
 const MAXIMUM_SIGNED_COUNT = 0x7fff_ffff;

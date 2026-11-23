@@ -1,6 +1,6 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import {coreGraphics} from '../web/coregraphics.mjs';
+import {coreGraphics} from '../src/runtime/graphics/core-graphics/coregraphics.ts';
 
 const args=(...words)=>i=>words[i]??0;
 function fixture(raw=new Uint8Array(0)) {

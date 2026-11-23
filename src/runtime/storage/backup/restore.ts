@@ -1,4 +1,4 @@
-import { openZip } from "../../../../web/ipa.mjs";
+import { openZip } from "../../ios/package/ipa";
 import { applicationId, type ApplicationMetadata } from "../../../domain/application";
 import { SAVE_CHUNK_BYTES } from "../records";
 import type { SaveStorage } from "../save-storage";

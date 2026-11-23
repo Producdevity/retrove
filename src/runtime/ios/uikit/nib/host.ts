@@ -1,6 +1,6 @@
 import type { FoundationHost, HostResult } from "../../objc/host";
 import type { ArchiveGraph } from "../../foundation/archives/graph";
-import type { IpaArchive } from "../../../../../web/ipa.mjs";
+import type { IpaArchive } from "../../package/ipa";
 export interface NibHost extends FoundationHost {
   send(self: number, selector: string, args?: number[], optional?: boolean): Promise<HostResult>;
   items(pointer: number): number[];

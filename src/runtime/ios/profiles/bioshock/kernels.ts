@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../cpu/cpu";
 import { installBioShockAudioKernel, verifyBioShockAudioKernel } from "./audio/mpeg-kernel";
 import { copyWideArray } from "./array-copy";
 import { requiredBoneBytes, SkinningLayout, skinVertices } from "./skinning";

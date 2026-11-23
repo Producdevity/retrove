@@ -1,6 +1,6 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import {DiagnosticRecorder} from '../web/diagnostics.mjs';
+import {DiagnosticRecorder} from '../src/runtime/diagnostics/diagnostics.ts';
 
 class MemoryStorage {
   data = new Map();

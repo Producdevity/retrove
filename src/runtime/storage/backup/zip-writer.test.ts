@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { openZip } from "../../../../web/ipa.mjs";
+import { openZip } from "../../ios/package/ipa";
 import { writeZip } from "./zip-writer";
 test("backup ZIPs preserve binary data, Unicode names and empty directories", async () => {
   const bytes = Uint8Array.from({ length: 100_000 }, (_, index) => index % 256);

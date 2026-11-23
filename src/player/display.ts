@@ -1,4 +1,4 @@
-import type { Diagnostic } from "../../web/ipa.mjs";
+import type { Diagnostic } from "../runtime/ios/package/ipa";
 import { GRAPHICS_CONTEXT_ATTRIBUTES, graphicsContextInfo } from "../runtime/graphics/context-info";
 import { isLandscape, TALL_SCREEN, type ScreenSize } from "../runtime/ios/uikit/screen";
 import { appProfile } from "../runtime/ios/profiles/app-manifest";

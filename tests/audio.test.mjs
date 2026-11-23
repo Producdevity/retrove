@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import { audioImports } from '../web/audio.mjs';
+import { audioImports } from '../src/runtime/audio/units/audio.ts';
 import { read32, write32 } from '../src/runtime/memory/guest-memory.ts';
 
 function audioFixture() {

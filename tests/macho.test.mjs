@@ -1,6 +1,6 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import { parseMachO, loadMachO, prepareStartup } from '../web/macho.mjs';
+import { parseMachO, loadMachO, prepareStartup } from '../src/runtime/ios/macho/macho.ts';
 
 function makeFixture({ bind = [], lazy = [], weak = [], rebase = [], exports = [],
   initializer = 0x4300, cryptid = 0, thread = false } = {}) {

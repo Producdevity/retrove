@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import {createCPU} from '../web/cpu.mjs';
+import {createCPU} from '../src/runtime/cpu/cpu.ts';
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
-import {virtualMemoryImports} from '../web/vm.mjs';
+import {virtualMemoryImports} from '../src/runtime/ios/libc/vm.ts';
 
 test('Darwin page mappings support partial unmap, first-fit reuse, and MAP_FIXED replacement', async t => {
   const cpu = await createCPU();

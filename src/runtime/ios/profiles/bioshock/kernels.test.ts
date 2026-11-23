@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../../web/cpu.mjs";
+import { createCPU } from "../../../cpu/cpu";
 import { ArrayCopyEntry, installBioShockKernels, SkinningEntry } from "./kernels";
 import { MpegEntry } from "./audio/mpeg-kernel";
 import type { KernelHost } from "./kernels";

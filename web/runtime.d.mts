@@ -1,4 +1,4 @@
-import type { Diagnostic, IpaArchive } from "./ipa.mjs";
+import type { Diagnostic, IpaArchive } from "../src/runtime/ios/package/ipa";
 import type { OffscreenDisplay } from "../src/player/display";
 export interface RuntimeOptions {
   audioContext: () => AudioContext | null;

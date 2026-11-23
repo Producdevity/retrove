@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
 import {deflateSync, inflateSync} from 'node:zlib';
-import {createCPU} from '../web/cpu.mjs';
-import {guestZlibStreams} from '../web/guest-zlib.mjs';
+import {createCPU} from '../src/runtime/cpu/cpu.ts';
+import {guestZlibStreams} from '../src/runtime/ios/libc/guest-zlib.ts';
 import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 async function fixture(t) {

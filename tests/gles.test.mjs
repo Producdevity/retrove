@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import { glesImports } from '../web/gles.mjs';
+import { glesImports } from '../src/runtime/graphics/gles.ts';
 import { write32 } from '../src/runtime/memory/guest-memory.ts';
 
 function setup(gl) {

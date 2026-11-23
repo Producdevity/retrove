@@ -1,6 +1,6 @@
 import { DiagnosticOperation, observed } from "../../../diagnostics/operations";
-import { openIPA } from "../../../../web/ipa.mjs";
-import { parseMachO } from "../../../../web/macho.mjs";
+import { openIPA } from "./ipa";
+import { parseMachO } from "../macho/macho";
 import { Platform, type ApplicationMetadata } from "../../../domain/application";
 import { requiredString } from "../../../domain/validation";
 import { extractIcon } from "./icon";

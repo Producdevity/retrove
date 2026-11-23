@@ -1,5 +1,5 @@
-import { bufferImports } from "../../../../web/format.mjs";
-import { stringImports } from "../../../../web/strings.mjs";
+import { bufferImports } from "../../ios/libc/format-imports";
+import { stringImports } from "../../ios/libc/strings";
 import { f32, floatWord } from "../../ios/libc/pure-math";
 import { write32, type GuestMemory } from "../../memory/guest-memory";
 import { Forward, type LocalImport } from "./local-import-types";

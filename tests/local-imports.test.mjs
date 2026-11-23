@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test, vi} from 'vite-plus/test';
-import {systemImports} from '../web/libsystem.mjs';
-import {cxxImports} from '../web/cxx.mjs';
-import {bufferImports} from '../web/format.mjs';
+import {systemImports} from '../src/runtime/ios/libc/libsystem.ts';
+import {cxxImports} from '../src/runtime/cxx/cxx.ts';
+import {bufferImports} from '../src/runtime/ios/libc/format-imports.ts';
 import {GuestView} from '../src/runtime/graphics/remote/guest-view.ts';
 import {Forward, LOCAL_IMPORT_NAMES, localImports} from '../src/runtime/cpu/worker/local-imports.ts';
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';

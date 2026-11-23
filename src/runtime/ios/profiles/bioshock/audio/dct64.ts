@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../../cpu/cpu";
 import type { FloatRegion } from "../../../../cpu/thumb/float-state";
 import type { KernelHost } from "../kernels";
 import { prepareCompiledTransform, readWord } from "./compiled-transform";

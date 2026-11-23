@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../web/cpu.mjs";
+import { createCPU } from "../cpu/cpu";
 import { write32 } from "../memory/guest-memory";
 import { BindingShadow, guestBindings } from "./guest-bindings";
 

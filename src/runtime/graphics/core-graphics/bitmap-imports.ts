@@ -4,7 +4,7 @@ import type { GuestArguments } from "../../ios/objc/host";
 import { BitmapContext, drawRasterImage } from "./bitmap-context";
 import type { BitmapMemory, RasterContext, RasterImage } from "./bitmap-context";
 import { BITMAP_COMPONENT_BITS, bitmapLayout } from "./bitmap-format";
-import { ImageComponents } from "./image-metadata";
+import { ImageComponents, type ImageMetadata } from "./image-metadata";
 const BITS_PER_BYTE = 8;
 const BitmapArgument = {
   Data: 0,
@@ -133,7 +133,7 @@ export function bitmapImports(
     },
   };
 }
-export function bitmapImageMetadata(bitmap: BitmapContext): Record<string, number | boolean> {
+export function bitmapImageMetadata(bitmap: BitmapContext): ImageMetadata & { components: number } {
   const layout = bitmap.layout;
   return {
     ...layout,

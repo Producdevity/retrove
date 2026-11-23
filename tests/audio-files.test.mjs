@@ -1,8 +1,8 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import {tag,audioFiles} from '../web/audio-file.mjs';
-import {audioQueues} from '../web/audio-queue.mjs';
-import {systemSounds} from '../web/system-sound.mjs';
+import {tag,audioFiles} from '../src/runtime/audio/files/audio-file.ts';
+import {audioQueues} from '../src/runtime/audio/queue/audio-queue.ts';
+import {systemSounds} from '../src/runtime/audio/system-sound.ts';
 import {read32,write32} from '../src/runtime/memory/guest-memory.ts';
 
 function memory(){

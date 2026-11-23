@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../../web/cpu.mjs";
+import { createCPU } from "../../../cpu/cpu";
 import { copyWideArray } from "./array-copy";
 async function fixture() {
   const cpu = await createCPU(),

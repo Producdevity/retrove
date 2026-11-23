@@ -1,5 +1,5 @@
-import type { Diagnostic, IpaArchive } from "../../../../web/ipa.mjs";
-import { prepareBioShockConfig } from "../../../../web/bioshock-config.mjs";
+import type { Diagnostic, IpaArchive } from "../package/ipa";
+import { prepareBioShockConfig } from "./bioshock/bioshock-config";
 import profile from "./bioshock.json";
 import { patchExecutable } from "./patches";
 import { installBioShockKernels } from "./bioshock/kernels";

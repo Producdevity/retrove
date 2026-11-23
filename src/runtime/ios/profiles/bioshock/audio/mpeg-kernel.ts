@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../../cpu/cpu";
 import type { KernelHost } from "../kernels";
 import { MpegSynthesisLayout, synthesizeMpeg } from "./mpeg-synthesis";
 

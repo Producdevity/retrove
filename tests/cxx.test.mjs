@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import { cxxImports } from '../web/cxx.mjs';
+import { cxxImports } from '../src/runtime/cxx/cxx.ts';
 const bits=new DataView(new ArrayBuffer(8));
 function words(n) { bits.setFloat64(0,n,true);return [bits.getUint32(0,true),bits.getUint32(4,true)]; }
 function dbl(n) {bits.setBigUint64(0,n,true);return bits.getFloat64(0,true);}
@@ -53,7 +53,7 @@ test('default libc++ Mersenne Twister shares its sequence and mutex across guest
 
 test('Darwin ARMv7 catches an Objective-C object and standard C++ base class, unwinds a qsort callback, and rethrows', async () => {
   const {readFile} = await import('node:fs/promises');
-  const {openIPA} = await import('../web/ipa.mjs');
+  const {openIPA} = await import('../src/runtime/ios/package/ipa.ts');
   const {runGuest} = await import('../web/runtime.mjs');
   const ipa = await openIPA(new Blob([await readFile(new URL('./fixtures/sjlj.ipa', import.meta.url))]));
   const result = await runGuest(ipa, {signal:AbortSignal.timeout(2000)});

@@ -2,7 +2,7 @@ import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {deflateRawSync} from 'node:zlib';
 import {crc32} from '../src/runtime/formats/crc32.ts';
-import {decodeCgBI} from '../web/cgbi.mjs';
+import {decodeCgBI} from '../src/runtime/formats/cgbi.ts';
 
 function chunk(type,data) {
   const body=Buffer.concat([Buffer.from(type),Buffer.from(data)]),b=Buffer.alloc(body.length+8);

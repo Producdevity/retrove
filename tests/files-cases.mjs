@@ -1,4 +1,4 @@
-import { fileImports } from "../web/files.mjs";
+import { fileImports } from "../src/runtime/ios/libc/files/index.ts";
 
 function same(a, b) {
   if (a !== b) throw Error("File operation returned " + String(a) + ", expected " + String(b));

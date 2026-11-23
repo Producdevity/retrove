@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {fixture} from './fixture.mjs';
-import {coreGraphics} from '../../web/coregraphics.mjs';
+import {coreGraphics} from '../../src/runtime/graphics/core-graphics/coregraphics.ts';
 import {floatBits} from '../../src/runtime/ios/abi/scalars.ts';
 
 async function setup(t,call,options) {

@@ -1,9 +1,10 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
-import {darwinSystem,TASK} from '../web/darwin-system.mjs';
-import {darwinAlgorithms} from '../web/darwin-algorithms.mjs';
-import {formatImports,formatDarwin} from '../web/format.mjs';
-import {dispatchImports} from '../web/dispatch.mjs';
+import {darwinSystem,TASK} from '../src/runtime/ios/libc/darwin-system.ts';
+import {darwinAlgorithms} from '../src/runtime/ios/libc/darwin-algorithms.ts';
+import {formatImports} from '../src/runtime/ios/libc/format-imports.ts';
+import {formatDarwin} from '../src/runtime/ios/libc/format.ts';
+import {dispatchImports} from '../src/runtime/ios/threads/dispatch.ts';
 import {read32,write32,readString} from '../src/runtime/memory/guest-memory.ts';
 
 function memory() {
@@ -81,7 +82,7 @@ test('async main queue uses a copied stack block, invokes guest helpers and drai
 });
 
 test('guest BSD sockets exchange bytes over loopback and report unreachable external addresses',async()=>{
-  const {networkImports}=await import('../web/network.mjs');
+  const {networkImports}=await import('../src/runtime/ios/libc/network.ts');
   const {cpu,heap}=memory(),states=new Map(),errno=heap.zero(4),sa=heap.zero(16);
   const table={get:fd=>states.get(fd),exists:fd=>states.has(fd),
     install:device=>{const fd=3+states.size;states.set(fd,{device});return fd;}};
@@ -104,7 +105,7 @@ test('guest BSD sockets exchange bytes over loopback and report unreachable exte
 });
 
 test('narrow and wide scanf return assignment counts and packed ARM fields',async()=>{
-  const {scanDarwin,scanImports}=await import('../web/scan.mjs');
+  const {scanDarwin,scanImports}=await import('../src/runtime/ios/libc/scan.ts');
   const {cpu,heap}=memory(),n=heap.zero(2),name=heap.zero(10),len=heap.zero(4),num=heap.zero(8);
   const r=scanDarwin(cpu,'0xff tag=Bob; 1.5','%hi tag=%3[a-zA-Z]; %lf%n',args(n,name,num,len));
   assert.equal(r.count,3);assert.equal(read32(cpu,len),17);assert.deepEqual([...cpu.read(n,2)],[255,0]);
@@ -117,7 +118,7 @@ test('narrow and wide scanf return assignment counts and packed ARM fields',asyn
 });
 
 test('Darwin calendar exposes time_t32 and tm offsets plus C-locale strftime',async()=>{
-  const {calendarImports}=await import('../web/calendar.mjs');
+  const {calendarImports}=await import('../src/runtime/ios/libc/calendar.ts');
   const {cpu,heap}=memory(),err=heap.zero(4),p=heap.zero(4),out=heap.zero(100);
   const f=calendarImports(cpu,heap,err,()=>1);
   write32(cpu,p,946684800);const time=f._gmtime(args(p));
@@ -127,7 +128,7 @@ test('Darwin calendar exposes time_t32 and tm offsets plus C-locale strftime',as
 });
 
 test('ARMv7 backtrace walks the r7 chain and returns one freeable symbol buffer',async()=>{
-  const {backtraceImports}=await import('../web/backtrace.mjs');
+  const {backtraceImports}=await import('../src/runtime/ios/libc/backtrace.ts');
   const {cpu,heap}=memory();
   cpu.getReg=r=>({7:2000,13:1900,14:0x1005})[r];
   write32(cpu,2000,2016);write32(cpu,2004,0x1021);

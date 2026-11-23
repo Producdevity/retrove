@@ -1,4 +1,4 @@
-import type { GuestCPU } from "../../../../../../web/cpu.mjs";
+import type { GuestCPU } from "../../../../cpu/cpu";
 import { planFloatProgram } from "../../../../cpu/thumb/float-program";
 import type { FloatProgram } from "../../../../cpu/thumb/float-program";
 import { compileFloatKernel } from "../../../../cpu/wasm/float-kernel";

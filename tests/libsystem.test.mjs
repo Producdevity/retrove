@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'vite-plus/test';
-import {systemImports} from '../web/libsystem.mjs';
+import {systemImports} from '../src/runtime/ios/libc/libsystem.ts';
 import {Heap, read32, write32} from '../src/runtime/memory/guest-memory.ts';
-import {stringImports} from '../web/strings.mjs';
+import {stringImports} from '../src/runtime/ios/libc/strings.ts';
 
 function pageFixture() {
   const bytes = new Uint8Array(4096), base = 0x10000000;

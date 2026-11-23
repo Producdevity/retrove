@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../../cpu/cpu";
 import { ExecutionBudget } from "../../cpu/execution-budget";
 import { ownCpuObject } from "../../cpu/own/own-cpu-object";
 import { compareExchange32, store32 } from "../../memory/guest-atomics";

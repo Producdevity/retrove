@@ -1,5 +1,5 @@
-import {glesImports} from '../web/gles.mjs';
-import {eaglDrawable} from '../web/drawable.mjs';
+import {glesImports} from '../src/runtime/graphics/gles.ts';
+import {eaglDrawable} from '../src/runtime/graphics/drawable.ts';
 import {read32, write32} from '../src/runtime/memory/guest-memory.ts';
 
 export async function render(kind) {

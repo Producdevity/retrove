@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../web/cpu.mjs";
+import { createCPU } from "../cpu/cpu";
 import { guestErrorCheck } from "./guest-error-check";
 
 test("glGetError stays in guest code until the flag asks the host", async () => {

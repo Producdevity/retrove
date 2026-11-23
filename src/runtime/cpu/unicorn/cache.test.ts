@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../web/cpu.mjs";
+import { createCPU } from "../cpu";
 import { ExecutionBudget } from "../execution-budget";
 
 test.each([1, 2, 64])(

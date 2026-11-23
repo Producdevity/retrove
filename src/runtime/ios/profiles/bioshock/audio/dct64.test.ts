@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../../../web/cpu.mjs";
+import { createCPU } from "../../../../cpu/cpu";
 import { Dct64Entry, prepareBioShockDct64 } from "./dct64";
 async function fixture() {
   const cpu = await createCPU({ budget: "blocks" });

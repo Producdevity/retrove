@@ -1,6 +1,6 @@
 import { connectCopy } from "../diagnostics/clipboard";
-import { DiagnosticRecorder } from "../../web/diagnostics.mjs";
-import type { Diagnostic } from "../../web/ipa.mjs";
+import { DiagnosticRecorder } from "../runtime/diagnostics/diagnostics";
+import type { Diagnostic } from "../runtime/ios/package/ipa";
 import { isRecord } from "../domain/validation";
 import { saveLastReport } from "../diagnostics/activity";
 import { archiveLastReport } from "../diagnostics/session-store";

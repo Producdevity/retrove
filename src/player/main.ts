@@ -3,7 +3,7 @@ import "./player.css";
 import { MOTION_ACCESS_REQUESTED, requestMotionAccess } from "../runtime/ios/uikit/motion/access";
 import { initializeAppearance } from "../ui/appearance";
 import "../runtime/ios/uikit/alerts/dialog.css";
-import { openIPA } from "../../web/ipa.mjs";
+import { openIPA } from "../runtime/ios/package/ipa";
 import { Platform, type ApplicationId } from "../domain/application";
 import { errorMessage } from "../domain/validation";
 import { browserLibrary } from "../library/browser";

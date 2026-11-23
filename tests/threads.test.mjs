@@ -1,7 +1,7 @@
 import {test} from 'vite-plus/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {openIPA} from '../web/ipa.mjs';
+import {openIPA} from '../src/runtime/ios/package/ipa.ts';
 import {runGuest} from '../web/runtime.mjs';
 
 test('ARM main joins a guest worker after it sleeps and receives its return value', async () => {
@@ -12,7 +12,7 @@ test('ARM main joins a guest worker after it sleeps and receives its return valu
 });
 
 test('ARM SJLJ leaves keep independent context chains across thread preemption', async t => {
-  const {createCPU} = await import('../web/cpu.mjs');
+  const {createCPU} = await import('../src/runtime/cpu/cpu.ts');
   const {Heap, read32} = await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports} = await import('../web/threads.mjs');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;
@@ -53,8 +53,8 @@ test('ARM SJLJ leaves keep independent context chains across thread preemption',
 });
 
 test('Darwin longjmp restores copied ARM state, VFP data and the saved SjLj chain', async () => {
-  const {nonlocalJumps}=await import('../web/nonlocal-jump.mjs');
-  const {createCPU}=await import('../web/cpu.mjs');
+  const {nonlocalJumps}=await import('../src/runtime/ios/libc/nonlocal-jump.ts');
+  const {createCPU}=await import('../src/runtime/cpu/cpu.ts');
   const {Heap,read32,write32}=await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports}=await import('../web/threads.mjs');
   const cpu=await createCPU();
@@ -91,7 +91,7 @@ test('a worker dispatch_once block can wait for a mutex held by its scheduling m
 
 
 test('Darwin realtime attributes create workers at FMOD priorities', async () => {
-  const {createCPU} = await import('../web/cpu.mjs');
+  const {createCPU} = await import('../src/runtime/cpu/cpu.ts');
   const {Heap,read32,write32} = await import('../src/runtime/memory/guest-memory.ts');
   const {threadImports} = await import('../web/threads.mjs');
   const cpu = await createCPU(), heap = new Heap(cpu), done = 0x1000;

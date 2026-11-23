@@ -1,4 +1,4 @@
-import { createCPU } from '../../web/cpu.mjs';
+import { createCPU } from '../../src/runtime/cpu/cpu.ts';
 import { Heap, read32, write32 } from '../../src/runtime/memory/guest-memory.ts';
 import { objcImports } from '../../web/objc.mjs';
 

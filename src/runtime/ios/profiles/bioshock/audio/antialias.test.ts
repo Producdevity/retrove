@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createCPU } from "../../../../../../web/cpu.mjs";
+import { createCPU } from "../../../../cpu/cpu";
 import { AntialiasEntry, prepareBioShockAntialias } from "./antialias";
 async function fixture() {
   const cpu = await createCPU({ budget: "blocks" });
